@@ -17,14 +17,7 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 ## AutoResearch workspace
 
-Write research controllers and reusable skills in [autoresearch/](autoresearch/). Start with the [research instructions](autoresearch/AGENTS.md), [public task brief](autoresearch/TASKS.md), and [World API](autoresearch/API.md).
-
-```sh
-cd autoresearch
-codex
-```
-
-Start a fresh Codex session in the trusted workspace and ask it to call `evaluate_controller()`. The project-scoped `worldsmith` MCP server runs the current controller on the development split and saves results under `autoresearch/runs/`. Use `get_episode_trace(seed)` to inspect an episode from the latest successful run in that session. The workspace rules define what the research agent may inspect and edit.
+Write research controllers and reusable skills in [autoresearch/](autoresearch/). The [research run guide](autoresearch/RESEARCH.md) explains how to launch an interactive or noninteractive Codex session, run three candidate iterations through the project-scoped MCP tools, and record results in the [journal](autoresearch/JOURNAL.md).
 
 ## Task and simulator boundary
 
