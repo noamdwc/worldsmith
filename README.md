@@ -19,7 +19,24 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 ## AutoResearch workspace
 
-Run `make autoresearch` from the repo root to start the noninteractive Codex session. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow. Results are recorded in the [journal](autoresearch/JOURNAL.md).
+Run `make autoresearch` from the repo root or invoke [scripts/run-autoresearch.sh](scripts/run-autoresearch.sh) directly. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
+
+### Session lifecycle
+
+For a manually launched session, run these lifecycle commands from the repo root:
+
+```sh
+uv run --locked python -m worldsmith.research_lifecycle start
+# Launch Codex as described in the research run guide, then wait for it to exit.
+archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
+uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
+```
+
+`start` prepares the original Chase controller and a fresh journal. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
+
+Each MCP evaluation saves its source under `runs/<run-id>/code/`, status in `evaluation.json`, and metrics and traces in `results/` when available. A record left in `preparing` or `running` indicates an interrupted evaluation. Inspect archived journals, final code, and evaluations directly in `research-history/<archive-id>/workspace/`. The archive's `metadata.json` records the Git commit and UTC timestamp at archive time.
+
+Reset checks that every current research file is present and unchanged in a completed archive before restoring the original controller and journal. If there are edits after archiving, archive again. Close the research session and wait for any evaluation to finish before running lifecycle commands.
 
 ## Task and simulator boundary
 
