@@ -6,8 +6,8 @@ import os
 from importlib import import_module
 from pathlib import Path
 
-from worldsmith.benchmark.baselines import Chase, Lead
-from worldsmith.benchmark.evaluate import BENCHMARK, SPLITS, evaluate
+from worldsmith.benchmark.evaluate import evaluate
+from worldsmith.benchmark.tasks.interception import BENCHMARK, SPLITS, Chase, Interception, Lead
 
 BASELINES = {"chase": Chase, "lead": Lead}
 
@@ -39,14 +39,21 @@ def main():
     else:
         split = None
         seeds = [args.seed]
-    config = {"benchmark": BENCHMARK, "controller": args.controller, "split": split, "seeds": seeds}
+    task = Interception()
+    config = {
+        "benchmark": BENCHMARK,
+        "goal": task.goal,
+        "controller": args.controller,
+        "split": split,
+        "seeds": seeds,
+    }
 
     try:
         args.output.mkdir(parents=True)
     except FileExistsError:
         evaluation.error(f"Output path already exists: {args.output}")
     with (args.output / "episodes.jsonl").open("w", encoding="utf-8") as trace:
-        metrics = evaluate(factory, seeds, trace)
+        metrics = evaluate(task, factory, seeds, trace)
 
     summary = json.dumps({**config, **metrics})
     (args.output / "summary.json").write_text(summary + "\n", encoding="utf-8")

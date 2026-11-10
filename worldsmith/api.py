@@ -15,8 +15,8 @@ class PositionMeasurement:
 @dataclass(frozen=True, slots=True)
 class Observation:
     time: float
-    robot: PositionMeasurement
-    target: PositionMeasurement
+    robot_id: str
+    entities: dict[str, PositionMeasurement]
     robot_max_speed: float
 
 

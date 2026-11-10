@@ -17,7 +17,7 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 ## Try a candidate
 
-Put candidate code in `worldsmith/world/`. The entry point is a zero-argument factory that creates a fresh controller for each episode. The controller takes an `Observation` and returns an `Action` from `worldsmith.api`. Observations contain time, the robot's maximum speed, and noisy robot and target positions with 2×2 measurement noise covariances. A controller can retain observations to build its own representation, estimator, model, or skill.
+Put candidate code in `worldsmith/world/`. The entry point is a zero-argument factory that creates a fresh controller for each episode. The controller takes an `Observation` and returns an `Action` from `worldsmith.api`. Observations contain time, the controlled robot ID, its maximum speed, and a map of entity IDs to noisy positions with 2×2 measurement noise covariances. Interception uses the entity IDs `robot` and `target`. A controller can retain observations to build its own representation, estimator, model, or skill.
 
 ```sh
 # After adding worldsmith/world/candidate.py with a make_controller factory
@@ -26,6 +26,12 @@ uv run --locked python -m worldsmith evaluate \
 ```
 
 For AutoResearch comparisons, allow edits under `worldsmith/world/` and keep the API, CLI, simulator, references, and scorer fixed. The CLI imports trusted local Python code in-process.
+
+## Task and simulator boundary
+
+`benchmark/simulation.py` advances the bodies and produces observations. `benchmark/tasks/` defines the `Task` interface. Its `interception.py` defines the scene, goal, time budget, scoring, and the two task-specific reference controllers. The evaluator runs the episode and records the measurements and scores provided by the task. Interception is the single task exposed by the CLI.
+
+The benchmark ID is `interception-v2`. In v2 traces, positions are under `observation.entities`, and the summary includes the task goal.
 
 ## Track a run
 
