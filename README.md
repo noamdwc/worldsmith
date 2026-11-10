@@ -17,12 +17,11 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 ## AutoResearch workspace
 
-Write research controllers and reusable skills in [autoresearch/](autoresearch/). Start with the [research instructions](autoresearch/AGENTS.md) and [public task brief](autoresearch/TASKS.md). The evaluator creates a fresh controller per episode and passes it noisy observations through [the World API](worldsmith/api.py).
+Write research controllers and reusable skills in [autoresearch/](autoresearch/). Start with the [research instructions](autoresearch/AGENTS.md), [public task brief](autoresearch/TASKS.md), and [World API](autoresearch/API.md).
 
 ```sh
-uv run --locked python -m worldsmith evaluate \
-  --controller autoresearch.controller:make_controller \
-  --split dev --output autoresearch/runs/starter-dev
+cd autoresearch
+./worldsmith-eval starter-dev
 ```
 
 The CLI imports controller code in-process. The workspace rules define what the research agent may inspect and edit.
