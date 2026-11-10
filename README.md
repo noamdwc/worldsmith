@@ -15,17 +15,16 @@ Each run writes `summary.json` and `episodes.jsonl` to a new output directory an
 
 The robot and target move in an obstacle-free plane. The robot commands heading and throttle. The target moves at constant velocity sampled for each episode. Capture means coming within 0.3 simulation units of the target within 45 steps. `chase` aims at the latest measurement. `lead` estimates motion from recent measurements and aims ahead.
 
-## Try a candidate
+## AutoResearch workspace
 
-Put candidate code in `worldsmith/world/`. The entry point is a zero-argument factory that creates a fresh controller for each episode. The controller takes an `Observation` and returns an `Action` from `worldsmith.api`. Observations contain time, the controlled robot ID, its maximum speed, and a map of entity IDs to noisy positions with 2×2 measurement noise covariances. Interception uses the entity IDs `robot` and `target`. A controller can retain observations to build its own representation, estimator, model, or skill.
+Write research controllers and reusable skills in [autoresearch/](autoresearch/). Start with the [research instructions](autoresearch/AGENTS.md), [public task brief](autoresearch/TASKS.md), and [World API](autoresearch/API.md).
 
 ```sh
-# After adding worldsmith/world/candidate.py with a make_controller factory
-uv run --locked python -m worldsmith evaluate \
-  --controller worldsmith.world.candidate:make_controller --output runs/candidate-dev
+cd autoresearch
+codex
 ```
 
-For AutoResearch comparisons, allow edits under `worldsmith/world/` and keep the API, CLI, simulator, references, and scorer fixed. The CLI imports trusted local Python code in-process.
+Start a fresh Codex session in the trusted workspace and ask it to call `evaluate_controller()`. The project-scoped `worldsmith` MCP server runs the current controller on the development split and saves results under `autoresearch/runs/`. Use `get_episode_trace(seed)` to inspect an episode from the latest successful run in that session. The workspace rules define what the research agent may inspect and edit.
 
 ## Task and simulator boundary
 

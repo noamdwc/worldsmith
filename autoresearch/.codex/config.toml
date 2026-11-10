@@ -1,0 +1,3 @@
+[mcp_servers.worldsmith]
+command = "uv"
+args = ["run", "--locked", "--directory", "..", "python", "-m", "worldsmith.research_mcp"]
