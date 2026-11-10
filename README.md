@@ -6,10 +6,12 @@ See [project.md](project.md) for the research idea. The first benchmark tests wh
 
 ```sh
 uv sync --locked
-uv run --locked python -m worldsmith evaluate --controller chase --output runs/chase-dev
-uv run --locked python -m worldsmith evaluate --controller lead --output runs/lead-dev
+make chase
+make lead
 uv run --locked python -m pytest
 ```
+
+Each Make target evaluates one controller on the development split and uses a timestamped directory under `runs/`. To choose the directory, run `make chase OUTPUT=runs/chase-dev` with a path that does not yet exist.
 
 Each run writes `summary.json` and `episodes.jsonl` to a new output directory and prints the summary as JSON on stdout. Each trace contains the initial observation and the sequence of actions, resulting observations, and distances used by the scorer. Use `--split heldout` for comparisons after development, or `--seed 12` to replay a single scenario. Both splits have 32 fixed seeds.
 
@@ -17,14 +19,7 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 ## AutoResearch workspace
 
-Write research controllers and reusable skills in [autoresearch/](autoresearch/). Start with the [research instructions](autoresearch/AGENTS.md), [public task brief](autoresearch/TASKS.md), and [World API](autoresearch/API.md).
-
-```sh
-cd autoresearch
-codex
-```
-
-Start a fresh Codex session in the trusted workspace and ask it to call `evaluate_controller()`. The project-scoped `worldsmith` MCP server runs the current controller on the development split and saves results under `autoresearch/runs/`. Use `get_episode_trace(seed)` to inspect an episode from the latest successful run in that session. The workspace rules define what the research agent may inspect and edit.
+Run `make autoresearch` from the repo root to start the noninteractive Codex session. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow. Results are recorded in the [journal](autoresearch/JOURNAL.md).
 
 ## Task and simulator boundary
 

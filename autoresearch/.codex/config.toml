@@ -1,3 +1,10 @@
 [mcp_servers.worldsmith]
 command = "uv"
+required = true
 args = ["run", "--locked", "--directory", "..", "python", "-m", "worldsmith.research_mcp"]
+
+[mcp_servers.worldsmith.tools.evaluate_controller]
+approval_mode = "approve"
+
+[mcp_servers.worldsmith.tools.get_episode_trace]
+approval_mode = "approve"

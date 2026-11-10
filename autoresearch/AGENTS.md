@@ -13,10 +13,4 @@ Improve the controller through simulation experiments. Look for reusable represe
 
 In V0, write a Python controller in [controller.py](controller.py) that runs for the entire episode. There is no runtime LLM.
 
-Start Codex from inside `autoresearch/` so it loads the workspace MCP config.
-
-1. Call `evaluate_controller()` and record the starter metrics. The tool returns the run directory, which contains `summary.json` and `episodes.jsonl`. Find a failed seed in the run file and call `get_episode_trace(seed)` to inspect its observations, actions, and distance feedback.
-2. Pick a concrete failure mode and write down a hypothesis. Make a small code change, extracting a reusable function when the logic applies beyond this controller.
-3. Call `evaluate_controller()` again. Compare captures and mean closest distance, check which seeds improved or regressed, and record the result before iterating.
-
-`get_episode_trace(seed)` reads the latest successful evaluation in the current MCP session. Earlier runs remain in `runs/`.
+Follow [RESEARCH.md](RESEARCH.md) for the evaluation budget and keep-or-reject rules. Record every candidate and the final findings in [JOURNAL.md](JOURNAL.md). `evaluate_controller()` saves `summary.json` and `episodes.jsonl`. `get_episode_trace(seed)` reads the latest successful run in the current MCP session.
