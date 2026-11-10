@@ -32,11 +32,18 @@ def test_invalid_action_is_rejected(action):
         Interception().start(12).step(action)
 
 
-def test_leading_improves_development_capture_rate():
+def test_reference_development_benchmarks_are_unchanged():
     seeds = list(SPLITS["dev"])
     chase = evaluate(Interception(), Chase, seeds, StringIO())
     lead = evaluate(Interception(), Lead, seeds, StringIO())
-    assert lead["captures"] > chase["captures"]
+    assert chase == {
+        "episodes": 32, "captures": 24, "capture_rate": 0.75,
+        "mean_closest_distance": pytest.approx(0.440274733137007),
+    }
+    assert lead == {
+        "episodes": 32, "captures": 27, "capture_rate": 0.84375,
+        "mean_closest_distance": pytest.approx(0.3012441981496445),
+    }
 
 
 def test_evaluator_passes_goal_to_controller_and_trace():

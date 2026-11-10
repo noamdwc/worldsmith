@@ -40,7 +40,7 @@ def snapshot_code(destination: Path):
 
 @mcp.tool(structured_output=True)
 def evaluate_controller() -> dict[str, object]:
-    """Evaluate the current controller on development episodes and save the run."""
+    """Evaluate the shared controller on all three development tasks and save the run."""
     global latest_run
     run_id = f"mcp-{uuid4().hex}"
     output = WORKSPACE / "runs" / run_id
@@ -62,7 +62,7 @@ def evaluate_controller() -> dict[str, object]:
             [
                 sys.executable, "-B", "-m", "worldsmith", "evaluate",
                 "--controller", "autoresearch.controller:make_controller",
-                "--split", "dev", "--output", str(output / "results"),
+                "--task", "all", "--split", "dev", "--output", str(output / "results"),
             ],
             cwd=code,
             env={**os.environ, "PYTHONPATH": str(ROOT)},
@@ -89,23 +89,22 @@ def evaluate_controller() -> dict[str, object]:
         "run_dir": (output / "results").relative_to(WORKSPACE).as_posix(),
         "benchmark": summary["benchmark"],
         "episodes": summary["episodes"],
-        "captures": summary["captures"],
-        "capture_rate": summary["capture_rate"],
-        "mean_closest_distance": summary["mean_closest_distance"],
+        "aggregate_score": summary["aggregate_score"],
+        "tasks": summary["tasks"],
     }
 
 
 @mcp.tool(structured_output=True)
-def get_episode_trace(seed: int) -> dict[str, object]:
-    """Return an episode from the latest successful development run in this session."""
+def get_episode_trace(seed: int, task: str = "interception") -> dict[str, object]:
+    """Return a task/seed episode from the latest successful development run in this session."""
     if latest_run is None:
         raise ValueError("Run evaluate_controller() first.")
     with (latest_run / "results" / "episodes.jsonl").open(encoding="utf-8") as trace:
         for line in trace:
             episode = json.loads(line)
-            if episode["seed"] == seed:
+            if episode["seed"] == seed and episode["initial_observation"]["goal"] == task:
                 return episode
-    raise ValueError(f"Seed {seed} was not in the latest development run.")
+    raise ValueError(f"Seed {seed} was not in the latest development run for task {task!r}.")
 
 
 if __name__ == "__main__":

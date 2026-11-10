@@ -1,4 +1,4 @@
-# Worldsmith V0 AutoResearch
+# Worldsmith V1 AutoResearch
 
 Improve the controller through simulation experiments. Look for reusable representations, estimators, models, or skills that explain a failure and help across development episodes.
 
@@ -11,6 +11,6 @@ Improve the controller through simulation experiments. Look for reusable represe
 
 ## Evaluation workflow
 
-In V0, write a Python controller in [controller.py](controller.py) that runs for the entire episode. There is no runtime LLM.
+In V1, write one shared goal-aware Python controller in [controller.py](controller.py) that runs for the entire episode. There is no runtime LLM.
 
-Follow [RESEARCH.md](RESEARCH.md) for the evaluation budget and keep-or-reject rules. Record every candidate and the final findings in [JOURNAL.md](JOURNAL.md). `evaluate_controller()` snapshots the current code and saves `summary.json` and `episodes.jsonl` in the returned results directory. Failed evaluations report a run ID and keep their snapshot and status under `runs/`. `get_episode_trace(seed)` reads the latest successful run in the current MCP session. Leave session metadata and saved evaluations intact for the owner to archive.
+Follow [RESEARCH.md](RESEARCH.md) for the evaluation budget and keep-or-reject rules. Record every candidate and the final findings in [JOURNAL.md](JOURNAL.md). `evaluate_controller()` snapshots the current code and saves `summary.json` and `episodes.jsonl` in the returned results directory. Failed evaluations report a run ID and keep their snapshot and status under `runs/`. `evaluate_controller()` runs the combined three-task development benchmark and returns per-task metrics plus an aggregate score. `get_episode_trace(seed, task="interception")` reads a task episode from the latest successful run in the current MCP session; use `task="navigation"` or `task="rendezvous"` for the other tasks. Leave session metadata and saved evaluations intact for the owner to archive.

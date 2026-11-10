@@ -10,7 +10,7 @@ Import `Action`, `Observation`, and `Controller` from `worldsmith.api`. See [con
 | `robot_id` | `str` | Entity ID of the robot you control |
 | `entities` | `dict[str, PositionMeasurement]` | Noisy position measurements keyed by entity ID |
 | `robot_max_speed` | `float` | Maximum commanded speed in simulation units per second |
-| `goal` | `str` | Task name for the episode. V1 supplies `"interception"` |
+| `goal` | `str` | Task name for the episode. V1 supplies `"interception"`, `"navigation"`, or `"rendezvous"` |
 
 The simulator supplies the same goal in the initial observation and every subsequent observation. Existing four-argument calls to `Observation(...)` default to `"interception"`.
 

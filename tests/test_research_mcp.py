@@ -25,22 +25,32 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
         "def make_controller(): return lambda observation: Action(0, throttle())\n"
     )
     with pytest.raises(ValueError, match="Run evaluate_controller"):
-        research_mcp.get_episode_trace(12)
+        research_mcp.get_episode_trace(0)
 
     metrics = research_mcp.evaluate_controller()
     run = workspace / metrics["run_dir"]
     summary = json.loads((run / "summary.json").read_text())
-    assert metrics["episodes"] == summary["episodes"] == 32
-    assert metrics["captures"] == summary["captures"] == 0
-    assert metrics["capture_rate"] == summary["capture_rate"]
+    assert metrics["episodes"] == summary["episodes"] == 24
+    assert metrics["aggregate_score"] == summary["aggregate_score"] == 0
+    assert metrics["tasks"] == summary["tasks"]
+    assert set(metrics["tasks"]) == {"interception", "navigation", "rendezvous"}
+    assert metrics["tasks"]["interception"]["captures"] == 0
     assert (run.parent / "code/autoresearch/skill.py").read_bytes() == (workspace / "skill.py").read_bytes()
     record = json.loads((run.parent / "evaluation.json").read_text())
     assert record["status"] == "succeeded"
     assert record["run_id"] == metrics["run_id"]
 
-    episode = research_mcp.get_episode_trace(12)
+    episode = research_mcp.get_episode_trace(0)
     saved_episodes = [json.loads(line) for line in (run / "episodes.jsonl").read_text().splitlines()]
-    assert episode == next(item for item in saved_episodes if item["seed"] == 12)
+    assert episode == saved_episodes[0]
+    for task in metrics["tasks"]:
+        episode = research_mcp.get_episode_trace(0, task)
+        assert episode == next(
+            item for item in saved_episodes
+            if item["seed"] == 0 and item["initial_observation"]["goal"] == task
+        )
+    with pytest.raises(ValueError, match="task 'unknown'"):
+        research_mcp.get_episode_trace(0, "unknown")
     with pytest.raises(ValueError, match="Seed 1000 was not in the latest development run"):
         research_mcp.get_episode_trace(1000)
 
