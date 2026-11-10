@@ -21,6 +21,24 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 Run `make autoresearch` from the repo root to start the noninteractive Codex session. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow. Results are recorded in the [journal](autoresearch/JOURNAL.md).
 
+### Session lifecycle
+
+From the repo root, the workspace owner runs:
+
+```sh
+uv run --locked python -m worldsmith.research_lifecycle start
+make autoresearch
+# End the Codex session before archiving or resetting.
+archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
+uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
+```
+
+`start` defaults to the original Chase controller. Use `start --from ARCHIVE_ID` to start from an archived final controller, or `start --from ARCHIVE_ID/RUN_ID` to use a particular evaluation snapshot. Both restore the associated skills. If the workspace already contains a journal or results from earlier work, archive and reset it before starting.
+
+Each MCP evaluation saves its source under `runs/<run-id>/code/`, status in `evaluation.json`, and metrics and traces in `results/` when available. A record left in `preparing` or `running` indicates an interrupted evaluation. The read-only ZIP in `research-history/` preserves the complete workspace, a checksum manifest, the dependency lockfile, and Git and session metadata. Inspect it with `unzip -l research-history/<archive-id>.zip`.
+
+Reset verifies the archive and checks that the workspace still matches it before restoring the session's selected starting controller. If there are edits after archiving, archive again. If a hard interruption leaves `autoresearch/` missing, restore it from the corresponding `research-history/.reset-backup-*` directory before retrying. Keep that backup if you need to inspect or recover anything.
+
 ## Task and simulator boundary
 
 `benchmark/simulation.py` advances the bodies and produces observations. `benchmark/tasks/` defines the `Task` interface. Its `interception.py` defines the scene, goal, time budget, scoring, and the two task-specific reference controllers. The evaluator runs the episode and records the measurements and scores provided by the task. Interception is the single task exposed by the CLI.

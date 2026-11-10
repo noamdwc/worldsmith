@@ -13,4 +13,4 @@ Improve the controller through simulation experiments. Look for reusable represe
 
 In V0, write a Python controller in [controller.py](controller.py) that runs for the entire episode. There is no runtime LLM.
 
-Follow [RESEARCH.md](RESEARCH.md) for the evaluation budget and keep-or-reject rules. Record every candidate and the final findings in [JOURNAL.md](JOURNAL.md). `evaluate_controller()` saves `summary.json` and `episodes.jsonl`. `get_episode_trace(seed)` reads the latest successful run in the current MCP session.
+Follow [RESEARCH.md](RESEARCH.md) for the evaluation budget and keep-or-reject rules. Record every candidate and the final findings in [JOURNAL.md](JOURNAL.md). `evaluate_controller()` snapshots the current code and saves `summary.json` and `episodes.jsonl` in the returned results directory. Failed evaluations report a run ID and keep their snapshot and status under `runs/`. `get_episode_trace(seed)` reads the latest successful run in the current MCP session. Leave session metadata and saved evaluations intact for the owner to archive.
