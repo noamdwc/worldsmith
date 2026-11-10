@@ -54,6 +54,8 @@ def is_archived(current: Path, saved: Path) -> bool:
 
 def start_session(workspace: Path):
     for entry in research_entries(workspace):
+        if entry.name == "__pycache__" and entry.is_dir() and not entry.is_symlink():
+            continue
         if entry.name not in BASELINE_FILES or not is_archived(entry, BASELINE / entry.name):
             raise RuntimeError("Workspace contains research work. Archive and reset it before starting.")
     for name in BASELINE_FILES:

@@ -1,6 +1,6 @@
 # Worldsmith
 
-See [project.md](project.md) for the research idea. The first benchmark tests whether a simulated robot can intercept a moving target using noisy position measurements.
+See [project.md](project.md) for the research idea. In V1, one shared Python controller receives the task name and sensor measurements at runtime. The interception benchmark tests whether a simulated robot can intercept a moving target using noisy position measurements.
 
 ## Run the benchmark
 
@@ -42,7 +42,7 @@ Reset checks that every current research file is present and unchanged in a comp
 
 `benchmark/simulation.py` advances the bodies and produces observations. `benchmark/tasks/` defines the `Task` interface. Its `interception.py` defines the scene, goal, time budget, scoring, and the two task-specific reference controllers. The evaluator runs the episode and records the measurements and scores provided by the task. Interception is the single task exposed by the CLI.
 
-The benchmark ID is `interception-v2`. In v2 traces, positions are under `observation.entities`, and the summary includes the task goal.
+The benchmark ID is `interception-v2`. In traces, positions are under `observation.entities` and the task name is under `observation.goal`. The summary's `goal` field contains the human-readable objective. See the [World API](autoresearch/API.md) for the controller contract.
 
 ## Track a run
 

@@ -7,7 +7,7 @@ from statistics import mean
 
 import pymunk
 
-from worldsmith.api import Action, Observation
+from worldsmith.api import INTERCEPTION_GOAL, Action, Observation
 from worldsmith.benchmark.simulation import Entity, Simulation
 
 BENCHMARK = "interception-v2"
@@ -37,6 +37,7 @@ class Interception:
             robot_id="robot",
             robot_max_speed=2.4,
             rng=rng,
+            goal=INTERCEPTION_GOAL,
         )
 
     def measure(self, world: Simulation) -> dict[str, float]:

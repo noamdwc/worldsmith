@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 type Vec2 = tuple[float, float]
 
+INTERCEPTION_GOAL = "interception"
+
 
 @dataclass(frozen=True, slots=True)
 class PositionMeasurement:
@@ -18,6 +20,7 @@ class Observation:
     robot_id: str
     entities: dict[str, PositionMeasurement]
     robot_max_speed: float
+    goal: str = INTERCEPTION_GOAL
 
 
 @dataclass(frozen=True, slots=True)

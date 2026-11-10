@@ -1,13 +1,16 @@
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from io import StringIO
+from random import Random
 
 import pytest
 
-from worldsmith.api import Action
+from autoresearch.controller import make_controller
+from worldsmith.api import Action, Observation
 from worldsmith.benchmark.evaluate import evaluate
-from worldsmith.benchmark.simulation import TIME_STEP
+from worldsmith.benchmark.simulation import TIME_STEP, Entity, Simulation
 from worldsmith.benchmark.tasks.interception import SPLITS, TARGET_NOISE, Chase, Interception, Lead
 
 
@@ -34,6 +37,52 @@ def test_leading_improves_development_capture_rate():
     chase = evaluate(Interception(), Chase, seeds, StringIO())
     lead = evaluate(Interception(), Lead, seeds, StringIO())
     assert lead["captures"] > chase["captures"]
+
+
+def test_evaluator_passes_goal_to_controller_and_trace():
+    observations = []
+
+    def controller(observation):
+        observations.append(observation)
+        return Action(0.0, throttle=0.0)
+
+    trace = StringIO()
+    task = Interception()
+    evaluate(task, lambda: controller, [12], trace)
+    assert [observation.goal for observation in observations] == ["interception"] * task.step_limit
+
+    episode = json.loads(trace.getvalue())
+    assert episode["initial_observation"]["goal"] == "interception"
+    assert all(frame["observation"]["goal"] == "interception" for frame in episode["frames"])
+
+
+def test_simulation_preserves_the_supplied_goal():
+    world = Simulation(
+        {"robot": Entity((0.0, 0.0), (0.0, 0.0), 0.0)},
+        "robot", 1.0, Random(0), goal="example",
+    )
+    assert world.initial_observation.goal == "example"
+    assert world.step(Action(0.0)).goal == "example"
+
+
+def test_legacy_observation_constructor_and_chase_behavior():
+    initial = Interception().start(12).initial_observation
+    legacy = Observation(initial.time, initial.robot_id, initial.entities, initial.robot_max_speed)
+    assert legacy == initial
+
+    seeds = list(SPLITS["dev"])
+    chase_trace = StringIO()
+    shared_trace = StringIO()
+    chase = evaluate(Interception(), Chase, seeds, chase_trace)
+    shared = evaluate(Interception(), make_controller, seeds, shared_trace)
+    assert shared == chase
+    assert shared_trace.getvalue() == chase_trace.getvalue()
+
+
+def test_shared_controller_rejects_unsupported_goal():
+    observation = replace(Interception().start(12).initial_observation, goal="unknown")
+    with pytest.raises(ValueError, match="Unsupported goal: 'unknown'"):
+        make_controller()(observation)
 
 
 def test_cli_loads_factory_and_writes_run_files(tmp_path):

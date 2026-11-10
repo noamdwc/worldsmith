@@ -72,6 +72,20 @@ def test_start_and_reset_refuse_unarchived_changes(workspace):
     assert (research / "controller.py").is_file()
 
 
+def test_start_ignores_python_cache_but_preserves_research_checks(workspace):
+    research, _ = workspace
+    lifecycle.start_session(research)
+    cache = research / "__pycache__"
+    cache.mkdir()
+    (cache / "controller.cpython-312.pyc").write_bytes(b"cached bytecode")
+
+    lifecycle.start_session(research)
+
+    (research / "controller.py").write_text("research changes")
+    with pytest.raises(RuntimeError, match="contains research work"):
+        lifecycle.start_session(research)
+
+
 def test_reset_refuses_missing_archive_file(workspace):
     research, history = workspace
     lifecycle.start_session(research)
