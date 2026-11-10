@@ -23,4 +23,4 @@ For a noninteractive session from the same directory:
 codex exec --sandbox workspace-write "Run the three-iteration AutoResearch session in RESEARCH.md and summarize your findings."
 ```
 
-Use a fresh session for the run. The local config requires the `worldsmith` MCP server to start successfully. See the [official Codex noninteractive guide](https://learn.chatgpt.com/docs/non-interactive-mode) for launch options.
+Use a fresh session for the run. The trusted workspace config requires the `worldsmith` MCP server to start successfully and preapproves its two tools so they can run without an interactive approval prompt. See the [official Codex noninteractive guide](https://learn.chatgpt.com/docs/non-interactive-mode) for launch options.
