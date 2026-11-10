@@ -19,16 +19,15 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 ## AutoResearch workspace
 
-Run `make autoresearch` from the repo root to start the noninteractive Codex session. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow. Results are recorded in the [journal](autoresearch/JOURNAL.md).
+Run `make autoresearch` from the repo root to start a clean workspace, run the noninteractive Codex session, archive its results, and reset to the original controller. If Codex exits with an error, the target archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
 
 ### Session lifecycle
 
-From the repo root, the workspace owner runs:
+For a manually launched session, run these lifecycle commands from the repo root:
 
 ```sh
 uv run --locked python -m worldsmith.research_lifecycle start
-make autoresearch
-# End the Codex session before archiving or resetting.
+# Launch Codex as described in the research run guide, then wait for it to exit.
 archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
 uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 ```
