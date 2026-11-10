@@ -1,7 +1,9 @@
 """Owner commands for starting, archiving, and resetting AutoResearch."""
 
 import argparse
+import json
 import shutil
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -60,7 +62,9 @@ def start_session(workspace: Path):
 
 
 def archive_session(workspace: Path, history: Path) -> str:
-    archive_id = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:12]}"
+    archived_at = datetime.now(UTC)
+    git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    archive_id = f"{archived_at:%Y%m%dT%H%M%SZ}-{uuid4().hex[:12]}"
     archive = history / archive_id
     archive.mkdir(parents=True)
     saved_workspace = archive / "workspace"
@@ -69,6 +73,8 @@ def archive_session(workspace: Path, history: Path) -> str:
         copy_entry(entry, saved_workspace / entry.name)
     if not all(is_archived(entry, saved_workspace / entry.name) for entry in research_entries(workspace)):
         raise RuntimeError("Workspace changed during archiving. Stop the researcher and retry.")
+    metadata = {"git_commit": git_commit, "archived_at": archived_at.isoformat()}
+    (archive / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     # An interrupted copy leaves an inspectable folder that reset will refuse.
     (archive / ".complete").touch()
     return archive_id
@@ -111,7 +117,7 @@ def main():
             print(archive_session(WORKSPACE, HISTORY))
         else:
             reset_workspace(WORKSPACE, HISTORY, args.archive_id)
-    except (OSError, ValueError, RuntimeError) as exc:
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
         parser.exit(1, f"{exc}\n")
 
 

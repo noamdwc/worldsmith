@@ -1,3 +1,6 @@
+import json
+import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -33,6 +36,13 @@ def test_start_archive_and_reset(workspace):
 
     archive_id = lifecycle.archive_session(research, history)
     archive = history / archive_id / "workspace"
+    metadata = json.loads((archive.parent / "metadata.json").read_text())
+    assert metadata["git_commit"] == subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=lifecycle.ROOT, text=True,
+    ).strip()
+    archived_at = datetime.fromisoformat(metadata["archived_at"])
+    assert archived_at.tzinfo == UTC
+    assert archive_id.startswith(f"{archived_at:%Y%m%dT%H%M%SZ}-")
     assert lifecycle.archive_session(research, history) != archive_id
 
     lifecycle.reset_workspace(research, history, archive_id)
