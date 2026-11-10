@@ -21,10 +21,10 @@ Write research controllers and reusable skills in [autoresearch/](autoresearch/)
 
 ```sh
 cd autoresearch
-./worldsmith-eval starter-dev
+codex
 ```
 
-The CLI imports controller code in-process. The workspace rules define what the research agent may inspect and edit.
+Start a fresh Codex session in the trusted workspace and ask it to call `evaluate_controller()`. The project-scoped `worldsmith` MCP server runs the current controller on the development split and saves results under `autoresearch/runs/`. Use `get_episode_trace(seed)` to inspect an episode from the latest successful run in that session. The workspace rules define what the research agent may inspect and edit.
 
 ## Task and simulator boundary
 
