@@ -1,6 +1,4 @@
-import shutil
 from pathlib import Path
-from zipfile import BadZipFile, ZipFile
 
 import pytest
 
@@ -9,116 +7,105 @@ from worldsmith import research_lifecycle as lifecycle
 
 @pytest.fixture
 def workspace(tmp_path):
-    workspace = tmp_path / "autoresearch"
-    workspace.mkdir()
-    for name in ("controller.py", "JOURNAL.md"):
-        shutil.copyfile(lifecycle.BASELINE / name, workspace / name)
-    (workspace / "API.md").write_text("public API")
-    return workspace, tmp_path / "research-history"
+    research = tmp_path / "autoresearch"
+    research.mkdir()
+    (research / "API.md").write_text("public API")
+    return research, tmp_path / "research-history"
 
 
-def test_start_archive_reset_and_start_from_candidate(workspace):
+def test_start_archive_and_reset(workspace):
     research, history = workspace
-    session_id = lifecycle.start_session(research, history)
-    assert lifecycle.state(research)["session_id"] == session_id
-    (research / "JOURNAL.md").write_text("session results")
-    candidate = research / "runs/mcp-first/code/autoresearch"
-    candidate.mkdir(parents=True)
-    (candidate / "controller.py").write_text("candidate")
-    (candidate / "skill.py").write_text("candidate skill")
-    (research / "controller.py").write_text("final controller")
-    (research / "skill.py").write_text("final skill")
-    (research / "notes.txt").write_text("temporary research notes")
+    lifecycle.start_session(research)
+    assert (research / "controller.py").read_bytes() == (lifecycle.BASELINE / "controller.py").read_bytes()
+    files = {
+        "JOURNAL.md": "session notes",
+        "controller.py": "final controller",
+        "skill.py": "final skill",
+        "runs/mcp-first/code/autoresearch/controller.py": "candidate",
+        "runs/mcp-first/evaluation.json": "status",
+        "runs/mcp-first/results/summary.json": "metrics",
+        "runs/mcp-first/results/episodes.jsonl": "traces",
+    }
+    for name, content in files.items():
+        path = research / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
 
     archive_id = lifecycle.archive_session(research, history)
-    archive_path = history / f"{archive_id}.zip"
-    assert not archive_path.stat().st_mode & 0o222
-    with ZipFile(archive_path) as archive:
-        assert archive.read("workspace/JOURNAL.md") == b"session results"
-        assert archive.read("workspace/controller.py") == b"final controller"
-        assert archive.read("workspace/skill.py") == b"final skill"
-        assert archive.read("workspace/notes.txt") == b"temporary research notes"
+    archive = history / archive_id / "workspace"
+    assert lifecycle.archive_session(research, history) != archive_id
 
     lifecycle.reset_workspace(research, history, archive_id)
-    assert (research / "controller.py").read_bytes() == (lifecycle.BASELINE / "controller.py").read_bytes()
-    assert not (research / "runs").exists()
-    assert not (research / "notes.txt").exists()
-    assert (research / "API.md").read_text() == "public API"
-    assert archive_path.is_file()
 
-    source = f"{archive_id}/mcp-first"
-    assert lifecycle.start_session(research, history, source) != session_id
-    assert (research / "controller.py").read_text() == "candidate"
-    assert (research / "skill.py").read_text() == "candidate skill"
-    (research / "skill.py").write_text("new skill")
-    second_archive = lifecycle.archive_session(research, history)
-    lifecycle.reset_workspace(research, history, second_archive)
-    assert (research / "skill.py").read_text() == "candidate skill"
+    for name, content in files.items():
+        assert (archive / name).read_text() == content
+    for name in lifecycle.BASELINE_FILES:
+        assert (research / name).read_bytes() == (lifecycle.BASELINE / name).read_bytes()
+    assert not (research / "runs").exists()
+    assert not (research / "skill.py").exists()
+    assert (research / "API.md").read_text() == "public API"
 
 
 def test_start_and_reset_refuse_unarchived_changes(workspace):
     research, history = workspace
-    (research / "JOURNAL.md").write_text("old session notes")
+    lifecycle.start_session(research)
+    journal = research / "JOURNAL.md"
+    journal.write_text("old session notes")
     with pytest.raises(RuntimeError, match="contains research work"):
-        lifecycle.start_session(research, history)
+        lifecycle.start_session(research)
     archive_id = lifecycle.archive_session(research, history)
+    journal.write_text("new session notes")
 
-    notes = research / "new-notes.txt"
-    notes.write_text("written after archiving")
     with pytest.raises(RuntimeError, match="differs from the archive"):
         lifecycle.reset_workspace(research, history, archive_id)
-    assert notes.read_text() == "written after archiving"
-    assert (research / "JOURNAL.md").read_text() == "old session notes"
+    assert journal.read_text() == "new session notes"
+    assert (research / "controller.py").is_file()
 
 
-def test_reset_refuses_corrupted_archive(workspace):
+def test_reset_refuses_missing_archive_file(workspace):
     research, history = workspace
-    (research / "JOURNAL.md").write_text("keep this")
+    lifecycle.start_session(research)
     archive_id = lifecycle.archive_session(research, history)
-    archive = history / f"{archive_id}.zip"
-    archive.chmod(0o644)
-    archive.write_bytes(b"not a zip")
+    (history / archive_id / "workspace/JOURNAL.md").unlink()
 
-    with pytest.raises(BadZipFile):
+    with pytest.raises(RuntimeError, match="differs from the archive"):
         lifecycle.reset_workspace(research, history, archive_id)
-    assert (research / "JOURNAL.md").read_text() == "keep this"
+    assert (research / "JOURNAL.md").is_file()
 
 
-def test_interrupted_reset_restores_workspace(workspace, monkeypatch):
+def test_interrupted_archive_cannot_be_used_to_reset(workspace, monkeypatch):
     research, history = workspace
-    (research / "JOURNAL.md").write_text("keep this")
-    archive_id = lifecycle.archive_session(research, history)
-    rename = Path.rename
-
-    def interrupt(source, destination):
-        if destination == research and source.name.startswith("tmp"):
-            raise KeyboardInterrupt
-        return rename(source, destination)
-
-    monkeypatch.setattr(Path, "rename", interrupt)
-    with pytest.raises(KeyboardInterrupt):
-        lifecycle.reset_workspace(research, history, archive_id)
-    assert (research / "JOURNAL.md").read_text() == "keep this"
-    assert (history / f"{archive_id}.zip").is_file()
-
-
-def test_interrupted_archive_is_not_published(workspace, monkeypatch):
-    research, history = workspace
-    (research / "JOURNAL.md").write_text("keep this")
+    lifecycle.start_session(research)
 
     def interrupt(*args, **kwargs):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(ZipFile, "write", interrupt)
+    monkeypatch.setattr(lifecycle, "copy_entry", interrupt)
     with pytest.raises(KeyboardInterrupt):
         lifecycle.archive_session(research, history)
-    assert not list(history.glob("*.zip"))
-    assert (research / "JOURNAL.md").read_text() == "keep this"
+    [archive] = history.iterdir()
+    with pytest.raises(RuntimeError, match="completed archive"):
+        lifecycle.reset_workspace(research, history, archive.name)
+    assert (research / "JOURNAL.md").is_file()
 
 
-def test_lifecycle_refuses_to_archive_during_evaluation(workspace):
+def test_interrupted_reset_can_retry_from_same_archive(workspace, monkeypatch):
     research, history = workspace
-    with lifecycle.workspace_lock(history):
-        with pytest.raises(RuntimeError, match="Another evaluation or lifecycle command is active"):
-            lifecycle.archive_session(research, history)
-    assert (research / "controller.py").is_file()
+    lifecycle.start_session(research)
+    (research / "JOURNAL.md").write_text("keep this")
+    archive_id = lifecycle.archive_session(research, history)
+    unlink = Path.unlink
+
+    def interrupt(path, *args, **kwargs):
+        if path == research / "controller.py":
+            raise KeyboardInterrupt
+        return unlink(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            lifecycle.reset_workspace(research, history, archive_id)
+    assert not (research / "JOURNAL.md").exists()
+    lifecycle.reset_workspace(research, history, archive_id)
+    assert (history / archive_id / "workspace/JOURNAL.md").read_text() == "keep this"
+    assert (research / "JOURNAL.md").read_bytes() == (lifecycle.BASELINE / "JOURNAL.md").read_bytes()

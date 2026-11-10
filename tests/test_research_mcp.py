@@ -13,7 +13,6 @@ def workspace(tmp_path, monkeypatch):
     workspace.mkdir()
     shutil.copyfile(research_lifecycle.BASELINE / "controller.py", workspace / "controller.py")
     monkeypatch.setattr(research_mcp, "WORKSPACE", workspace)
-    monkeypatch.setattr(research_mcp, "HISTORY", tmp_path / "history")
     monkeypatch.setattr(research_mcp, "latest_run", None)
     return workspace
 

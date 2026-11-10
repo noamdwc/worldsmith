@@ -33,11 +33,11 @@ archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
 uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 ```
 
-`start` defaults to the original Chase controller. Use `start --from ARCHIVE_ID` to start from an archived final controller, or `start --from ARCHIVE_ID/RUN_ID` to use a particular evaluation snapshot. Both restore the associated skills. If the workspace already contains a journal or results from earlier work, archive and reset it before starting.
+`start` prepares the original Chase controller and a fresh journal. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
 
-Each MCP evaluation saves its source under `runs/<run-id>/code/`, status in `evaluation.json`, and metrics and traces in `results/` when available. A record left in `preparing` or `running` indicates an interrupted evaluation. The read-only ZIP in `research-history/` preserves the complete workspace, a checksum manifest, the dependency lockfile, and Git and session metadata. Inspect it with `unzip -l research-history/<archive-id>.zip`.
+Each MCP evaluation saves its source under `runs/<run-id>/code/`, status in `evaluation.json`, and metrics and traces in `results/` when available. A record left in `preparing` or `running` indicates an interrupted evaluation. Inspect archived journals, final code, and evaluations directly in `research-history/<archive-id>/workspace/`.
 
-Reset verifies the archive and checks that the workspace still matches it before restoring the session's selected starting controller. If there are edits after archiving, archive again. If a hard interruption leaves `autoresearch/` missing, restore it from the corresponding `research-history/.reset-backup-*` directory before retrying. Keep that backup if you need to inspect or recover anything.
+Reset checks that every current research file is present and unchanged in a completed archive before restoring the original controller and journal. If there are edits after archiving, archive again. Close the research session and wait for any evaluation to finish before running lifecycle commands.
 
 ## Task and simulator boundary
 
