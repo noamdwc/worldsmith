@@ -39,6 +39,8 @@ uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 
 `start` prepares the shared starter controller and a fresh journal. Its interception behavior remains Chase; navigation predicts obstacle crossings and rendezvous estimates target velocity and adjusts speed. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
 
+Run `make clear-autoresearch` to archive the current research work and reset the workspace to the shared starter controller and fresh journal. The command prints the archive location. Close the research session and wait for evaluations to finish before clearing.
+
 `evaluate_controller()` runs all three tasks together by default. `get_episode_trace(seed, task="interception")` selects a task and seed from the latest successful evaluation; the task can also be `"navigation"` or `"rendezvous"`. Each MCP evaluation saves its source under `runs/<run-id>/code/`, status in `evaluation.json`, and metrics and traces in `results/` when available. A record left in `preparing` or `running` indicates an interrupted evaluation. Inspect archived journals, final code, and evaluations directly in `research-history/<archive-id>/workspace/`. The archive's `metadata.json` records the Git commit and UTC timestamp at archive time.
 
 Reset checks that every current research file is present and unchanged in a completed archive before restoring the original controller and journal. If there are edits after archiving, archive again. Close the research session and wait for any evaluation to finish before running lifecycle commands.
