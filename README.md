@@ -19,7 +19,7 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 ## AutoResearch workspace
 
-Run `make autoresearch` from the repo root to start a clean workspace, run the noninteractive Codex session, archive its results, and reset to the original controller. If Codex exits with an error, the target archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
+Run `make autoresearch` from the repo root or invoke [scripts/run-autoresearch.sh](scripts/run-autoresearch.sh) directly. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
 
 ### Session lifecycle
 
