@@ -37,7 +37,7 @@ archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
 uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 ```
 
-`start` prepares the shared starter controller and a fresh journal. Its interception behavior remains Chase; navigation predicts obstacle crossings and rendezvous estimates target velocity and adjusts speed. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
+`start` prepares the shared reactive starter controller and a fresh journal. Its interception behavior remains Chase; navigation aims at the destination and turns away from nearby obstacles, while rendezvous approaches the current target position and slows down nearby. It uses no observation history, motion estimation, or prediction. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
 
 Run `make clear-autoresearch` to archive the current research work and reset the workspace to the shared starter controller and fresh journal. The command prints the archive location. Close the research session and wait for evaluations to finish before clearing.
 

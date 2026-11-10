@@ -17,17 +17,19 @@ class Navigation:
 
     def start(self, seed: int) -> Simulation:
         rng = Random(seed)
+        # Vary crossing timing and speed so local steering can react too late.
+        # The open plane and 8-second budget still allow detours or waiting.
         return Simulation(
             entities={
                 "robot": Entity((0.0, 0.0), (0.0, 0.0), 0.02),
-                "destination": Entity((8.0, rng.uniform(-1.0, 1.0)), (0.0, 0.0), 0.0),
+                "destination": Entity((rng.uniform(8.0, 10.0), rng.uniform(-1.0, 1.0)), (0.0, 0.0), 0.0),
                 "obstacle_0": Entity(
-                    (rng.uniform(2.5, 3.5), rng.uniform(-2.0, -1.0)),
-                    (0.0, rng.uniform(0.7, 1.1)), 0.04,
+                    (rng.uniform(2.5, 4.0), rng.uniform(-2.5, -1.0)),
+                    (0.0, rng.uniform(0.9, 1.7)), 0.04,
                 ),
                 "obstacle_1": Entity(
-                    (rng.uniform(4.5, 5.5), rng.uniform(1.0, 2.5)),
-                    (0.0, -rng.uniform(0.5, 0.9)), 0.04,
+                    (rng.uniform(5.0, 6.5), rng.uniform(1.0, 3.0)),
+                    (0.0, -rng.uniform(0.8, 1.6)), 0.04,
                 ),
             },
             robot_id="robot", robot_max_speed=2.4, rng=rng, goal=NAVIGATION_GOAL,

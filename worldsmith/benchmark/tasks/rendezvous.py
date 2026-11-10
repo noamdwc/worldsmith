@@ -29,7 +29,10 @@ class Rendezvous:
         bearing = rng.uniform(-math.pi, math.pi)
         radius = rng.uniform(3.0, 5.0)
         heading = bearing + rng.uniform(-math.pi, math.pi)
-        speed = rng.uniform(0.7, 1.3)
+        # Faster targets expose steady tracking lag in proportional pursuit.
+        # Even the fastest outbound target can be caught within the budget:
+        # 5 / (2.4 - 1.7) + 2 seconds holding is less than 10 seconds.
+        speed = rng.uniform(0.8, 1.7)
         return Simulation(
             entities={
                 "robot": Entity((0.0, 0.0), (0.0, 0.0), 0.02),

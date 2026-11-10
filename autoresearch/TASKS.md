@@ -16,11 +16,15 @@ Metrics: success rate (also called capture rate), captures, and mean closest dis
 
 Contact is scored at the initial state and each simulation step; bodies do not bounce or block each other. There are no walls. Predicting crossing traffic, choosing a route, and waiting can help.
 
+Destinations are 8–10 units ahead with a small lateral offset. Obstacle crossing speeds vary from 0.9–1.7 and 0.8–1.6 units/second, with independently sampled starting positions. Turning away only when an obstacle is nearby can be too late for faster crossings.
+
 Metrics: success rate, collision rate, mean final destination distance, and mean minimum obstacle clearance (center distance minus 0.7). Traces include destination distance and obstacle clearance at each step.
 
 ## Rendezvous / tracking
 
 `observation.goal == "rendezvous"`. Approach `target` and remain within 0.6 units for 20 consecutive control steps (2 seconds) within a 100-step episode. Leaving the radius resets the consecutive-step count. The initial observation does not count as a control step. Success requires sustained proximity, so controlling speed and matching motion matter.
+
+Targets start 3–5 units away and move at 0.8–1.7 units/second in a sampled direction. The robot is always faster, with enough time to catch even an outbound target and sustain proximity. Slowing down based only on current distance can leave a persistent tracking lag; estimating motion can help match speed while remaining close.
 
 Metrics: success rate, mean longest tracking duration, mean distance over control steps, and mean final distance. Traces include per-step true distance.
 

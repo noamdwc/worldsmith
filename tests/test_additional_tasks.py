@@ -46,6 +46,16 @@ def test_deterministic_episodes_and_goal_propagation(goal):
         assert episode["steps"] <= task.step_limit
 
 
+@pytest.mark.parametrize("goal", TASKS)
+def test_starter_uses_only_the_current_observation(goal):
+    world = TASKS[goal]().start(0)
+    controller = make_controller()
+    observation = world.initial_observation
+    for _ in range(25):
+        assert controller(observation) == make_controller()(observation)
+        observation = world.step(Action(0.0))
+
+
 def test_navigation_measures_distance_and_moving_obstacle_contact():
     task = Navigation()
     world = Simulation(
@@ -118,7 +128,7 @@ def test_combined_evaluation_matches_independent_results_and_resets_controller()
         (goal, seed) for goal in TASKS for seed in seeds
     }
     # The starter must make progress on each task, while leaving room for research.
-    assert all(rate > 0 for rate in rates)
+    assert all(0 < rate < 1 for rate in rates)
 
 
 def test_development_and_heldout_seeds_are_disjoint():
