@@ -3,4 +3,12 @@ name = "worldsmith"
 version = "0.1.0"
 description = "A small robotics experimentation harness"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pymunk>=7.3.1",
+    "wandb>=0.31.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

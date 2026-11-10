@@ -1,0 +1,30 @@
+"""The observation and action contract shared by controllers and the benchmark."""
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+type Vec2 = tuple[float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class PositionMeasurement:
+    position: Vec2
+    covariance: tuple[Vec2, Vec2]
+
+
+@dataclass(frozen=True, slots=True)
+class Observation:
+    time: float
+    robot: PositionMeasurement
+    target: PositionMeasurement
+    robot_max_speed: float
+
+
+@dataclass(frozen=True, slots=True)
+class Action:
+    heading: float  # Radians from the positive x axis.
+    throttle: float = 1.0  # Fraction of robot_max_speed, in [0, 1].
+
+
+type Controller = Callable[[Observation], Action]
+type ControllerFactory = Callable[[], Controller]
