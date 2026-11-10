@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = ROOT / "autoresearch"
+EVALUATION_TIMEOUT_SECONDS = 30
 mcp = FastMCP("worldsmith")
 latest_run: Path | None = None
 
@@ -20,16 +21,20 @@ def evaluate_controller() -> dict[str, object]:
     global latest_run
     output = WORKSPACE / "runs" / f"mcp-{uuid4().hex}"
     # A fresh process loads the current controller and keeps its stdout off MCP's wire.
-    result = subprocess.run(
-        [
-            sys.executable, "-m", "worldsmith", "evaluate",
-            "--controller", "autoresearch.controller:make_controller",
-            "--split", "dev", "--output", str(output),
-        ],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "worldsmith", "evaluate",
+                "--controller", "autoresearch.controller:make_controller",
+                "--split", "dev", "--output", str(output),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=EVALUATION_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"Evaluation timed out after {EVALUATION_TIMEOUT_SECONDS} seconds.") from None
     if result.returncode:
         lines = result.stderr.strip().splitlines()
         detail = lines[-1] if lines else f"exit status {result.returncode}"
