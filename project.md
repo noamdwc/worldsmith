@@ -10,6 +10,10 @@ Rather than manually implementing every algorithm needed to understand and inter
 
 ## Core Concept
 
+Worldsmith V1 runs one shared Python controller. It receives the task name and observations at runtime, with no runtime LLM. Interception is the current benchmark. As tasks are added, AutoResearch will improve representations and skills that the shared controller can reuse across tasks.
+
+### Long-term vision
+
 The project separates two complementary agents:
 
 **1. Runtime Agent**

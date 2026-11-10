@@ -21,6 +21,7 @@ class Entity:
 class Simulation:
     def __init__(
         self, entities: dict[str, Entity], robot_id: str, robot_max_speed: float, rng: Random,
+        *, goal: str,
     ):
         self._space = pymunk.Space()
         self._bodies = {}
@@ -35,6 +36,7 @@ class Simulation:
 
         self._robot_id = robot_id
         self._robot_max_speed = robot_max_speed
+        self._goal = goal
         self._steps = 0
         self._rng = rng
         self.initial_observation = self._observe()
@@ -63,4 +65,10 @@ class Simulation:
                 position=(self._rng.gauss(x, sigma), self._rng.gauss(y, sigma)),
                 covariance=((sigma**2, 0.0), (0.0, sigma**2)),
             )
-        return Observation(self._steps * TIME_STEP, self._robot_id, measurements, self._robot_max_speed)
+        return Observation(
+            time=self._steps * TIME_STEP,
+            robot_id=self._robot_id,
+            entities=measurements,
+            robot_max_speed=self._robot_max_speed,
+            goal=self._goal,
+        )
