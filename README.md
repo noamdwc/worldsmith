@@ -6,10 +6,12 @@ See [project.md](project.md) for the research idea. The first benchmark tests wh
 
 ```sh
 uv sync --locked
-uv run --locked python -m worldsmith evaluate --controller chase --output runs/chase-dev
-uv run --locked python -m worldsmith evaluate --controller lead --output runs/lead-dev
+make chase
+make lead
 uv run --locked python -m pytest
 ```
+
+Each Make target evaluates one controller on the development split and uses a timestamped directory under `runs/`. To choose the directory, run `make chase OUTPUT=runs/chase-dev` with a path that does not yet exist.
 
 Each run writes `summary.json` and `episodes.jsonl` to a new output directory and prints the summary as JSON on stdout. Each trace contains the initial observation and the sequence of actions, resulting observations, and distances used by the scorer. Use `--split heldout` for comparisons after development, or `--seed 12` to replay a single scenario. Both splits have 32 fixed seeds.
 
@@ -17,7 +19,7 @@ The robot and target move in an obstacle-free plane. The robot commands heading 
 
 ## AutoResearch workspace
 
-Write research controllers and reusable skills in [autoresearch/](autoresearch/). The [research run guide](autoresearch/RESEARCH.md) explains how to launch an interactive or noninteractive Codex session, run three candidate iterations through the project-scoped MCP tools, and record results in the [journal](autoresearch/JOURNAL.md).
+Run `make autoresearch` from the repo root to start the noninteractive Codex session. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow. Results are recorded in the [journal](autoresearch/JOURNAL.md).
 
 ## Task and simulator boundary
 
