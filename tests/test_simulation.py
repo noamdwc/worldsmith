@@ -106,6 +106,46 @@ def test_kinematic_robot_pushes_dynamic_body_at_commanded_speed():
     assert robot.body.velocity == pytest.approx((2, 0))
 
 
+@pytest.mark.parametrize("layout", ["one_wall", "two_walls", "two_shapes_on_one_wall"])
+def test_pairwise_contact_impulse(layout):
+    target = pymunk.Body(MASS, MOMENT)
+    target.position = (0.65, 0.65)
+    target.velocity = (1, 1)
+    circle = pymunk.Circle(target, RADIUS)
+    side = pymunk.Body(body_type=pymunk.Body.STATIC)
+    vertical = pymunk.Segment(side, (1, -2), (1, 2), 0.05)
+    circle.elasticity = vertical.elasticity = 1
+    entities = {"target": PhysicalEntity(target), "side": PhysicalEntity(side)}
+    expected = {"side": 2 * MASS}
+
+    if layout != "one_wall":
+        top = side
+        if layout == "two_walls":
+            top = pymunk.Body(body_type=pymunk.Body.STATIC)
+            entities["top"] = PhysicalEntity(top)
+            expected["top"] = 2 * MASS
+        else:
+            expected["side"] += 2 * MASS
+        horizontal = pymunk.Segment(top, (-2, 1), (2, 1), 0.05)
+        horizontal.elasticity = 1
+
+    world = scene(**entities)
+    assert world.contact_impulse("target", "side") == 0
+    world.step(COAST)
+    for wall_id, expected_impulse in expected.items():
+        impulse = world.contact_impulse("target", wall_id)
+        assert impulse == pytest.approx(expected_impulse)
+        assert world.contact_impulse(wall_id, "target") == impulse
+    assert world.contact_impulse("target") == pytest.approx(sum(expected.values()))
+    assert world.contact_impulse("target", "robot") == 0
+    assert world.contact_impulse("target", "target") == 0
+
+    world.step(COAST)
+    for wall_id in expected:
+        assert world.contact_impulse("target", wall_id) == 0
+    assert world.contact_impulse("target") == 0
+
+
 def test_shape_free_bodies_can_be_hidden_or_observed_with_or_without_noise():
     exact_body = pymunk.Body(MASS, MOMENT)
     exact_body.velocity = (1, 0)

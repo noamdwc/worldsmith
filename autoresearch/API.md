@@ -10,13 +10,13 @@ Import `Action`, `Observation`, and `Controller` from `worldsmith.api`. See [con
 | `robot_id` | `str` | Entity ID of the robot you control |
 | `entities` | `dict[str, PositionMeasurement]` | Noisy position measurements keyed by entity ID |
 | `robot_max_speed` | `float` | Maximum commanded speed in simulation units per second |
-| `goal` | `str` | Machine-readable task identifier for the controller. One of `"interception"`, `"navigation"`, `"rendezvous"`, or `"bouncing_interception"` |
+| `goal` | `str` | Machine-readable task identifier for the controller. One of `"interception"`, `"navigation"`, `"rendezvous"`, `"bouncing_interception"`, or `"object_pushing"` |
 
 The simulator supplies the same goal in the initial observation and every subsequent observation. Existing four-argument calls to `Observation(...)` default to `"interception"`.
 
 Evaluation summaries use the `objective` key for the human-readable `task.objective`. Combined summaries map task identifiers to their objective descriptions under that key.
 
-Each `PositionMeasurement` has a `position` tuple `(x, y)` in simulation units and a `covariance` tuple `((xx, xy), (yx, yy))` describing position measurement noise. The diagonal entries are variances in squared simulation units. Treat measurements as read-only. Entity positions are measurements, and velocity is unobserved. In bouncing interception, the four `wall_*` entities give exact wall midpoint positions with zero covariance. See [TASKS.md](TASKS.md) for how these points describe the arena.
+Each `PositionMeasurement` has a `position` tuple `(x, y)` in simulation units and a `covariance` tuple `((xx, xy), (yx, yy))` describing position measurement noise. The diagonal entries are variances in squared simulation units. Treat measurements as read-only. Entity positions are measurements, and velocity is unobserved. In bouncing interception, the four `wall_*` entities give exact wall midpoint positions with zero covariance. Object pushing provides noisy positions for `robot` and `object` and an exact position for `destination`. See [TASKS.md](TASKS.md) for task-specific entities and scoring.
 
 ## Action
 

@@ -12,12 +12,17 @@ TASK_METRICS = {
     "bouncing_interception": ("captures", "capture_rate", "mean_closest_distance"),
     "navigation": ("collision_rate", "mean_final_destination_distance", "mean_minimum_obstacle_clearance"),
     "rendezvous": ("mean_longest_tracking_seconds", "mean_distance", "mean_final_distance"),
+    "object_pushing": (
+        "mean_final_object_distance", "mean_minimum_object_distance", "mean_final_object_speed",
+        "mean_contact_seconds",
+    ),
 }
 EPISODE_OUTCOMES = {
     "interception": ("captured",),
     "bouncing_interception": ("captured",),
     "navigation": ("success", "collided"),
     "rendezvous": ("success",),
+    "object_pushing": ("success",),
 }
 
 

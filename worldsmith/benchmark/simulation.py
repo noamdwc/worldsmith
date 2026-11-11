@@ -40,7 +40,7 @@ class PhysicalEntity:
 class Simulation:
     def __init__(
         self, entities: Mapping[str, Entity | PhysicalEntity], robot_id: str,
-        robot_max_speed: float, rng: Random, *, goal: str,
+        robot_max_speed: float, rng: Random, *, goal: str, damping: float = 1.0,
     ):
         robot = entities[robot_id]
         if isinstance(robot, PhysicalEntity) and (
@@ -49,6 +49,7 @@ class Simulation:
             raise ValueError("The Action-controlled robot must be kinematic and observable")
 
         self._space = pymunk.Space()
+        self._space.damping = damping
         self._bodies = {}
         self._physical_bodies = {}
         self._sensors = {}
@@ -79,6 +80,32 @@ class Simulation:
         x, y = self._bodies[entity_id].position
         return x, y
 
+    def speed(self, entity_id: str) -> float:
+        return self._bodies[entity_id].velocity.length
+
+    def contact_impulse(self, entity_id: str, other_id: str | None = None) -> float:
+        """Sum this step's collision impulse magnitudes, optionally for one body pair."""
+        # Traverse the same arbiters in the same order regardless of argument order.
+        if other_id is not None and other_id < entity_id:
+            entity_id, other_id = other_id, entity_id
+        body = self._bodies[entity_id]
+        other = self._bodies[other_id] if other_id is not None else None
+        if other is body:
+            return 0.0
+
+        impulse = 0.0
+
+        def add_impulse(arbiter: pymunk.Arbiter) -> None:
+            nonlocal impulse
+            if other is not None:
+                first, second = arbiter.shapes
+                if first.body is not other and second.body is not other:
+                    return
+            impulse += arbiter.total_impulse.length
+
+        body.each_arbiter(add_impulse)
+        return impulse
+
     def ground_truth(self) -> dict[str, dict[str, object]]:
         state: dict[str, dict[str, object]] = {
             name: {"position": tuple(body.position), "velocity": tuple(body.velocity)}
@@ -102,6 +129,8 @@ class Simulation:
                 # Pymunk uses an infinite moment to lock rotation. Use JSON null in traces.
                 moment = body.moment
                 state[name].update(mass=body.mass, moment=None if math.isinf(moment) else moment)
+                if self._space.damping != 1.0:
+                    state[name]["velocity_retention_per_second"] = self._space.damping
         return state
 
     def step(self, action: Action) -> Observation:

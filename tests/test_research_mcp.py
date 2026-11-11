@@ -42,10 +42,12 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
     owner_summary = json.loads((owner / "results/summary.json").read_text())
     assert summary == owner_summary
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
-    assert metrics["episodes"] == summary["episodes"] == 32
+    assert metrics["episodes"] == summary["episodes"] == 40
     assert metrics["aggregate_score"] == summary["aggregate_score"] == 0
     assert metrics["tasks"] == summary["tasks"]
-    assert set(metrics["tasks"]) == {"interception", "navigation", "rendezvous", "bouncing_interception"}
+    assert set(metrics["tasks"]) == {
+        "interception", "navigation", "rendezvous", "bouncing_interception", "object_pushing",
+    }
     assert metrics["tasks"]["interception"]["captures"] == 0
     assert (run.parent / "code/autoresearch/skill.py").read_bytes() == (workspace / "skill.py").read_bytes()
     controller_snapshot = "code/autoresearch/controller.py"
@@ -66,8 +68,9 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
         "bouncing_interception": ("captured",),
         "navigation": ("success", "collided"),
         "rendezvous": ("success",),
+        "object_pushing": ("success",),
     }
-    assert len(saved_episodes) == len(private_episodes) == 32
+    assert len(saved_episodes) == len(private_episodes) == 40
     for public, private in zip(saved_episodes, private_episodes, strict=True):
         task = private["initial_observation"]["goal"]
         assert public["task"] == task and public["seed"] == private["seed"]
@@ -75,9 +78,16 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
         assert all(public[key] == private[key] for key in outcomes[task])
         assert public["steps"] == private["steps"] == len(public["frames"])
         assert public["initial_observation"] == private["initial_observation"]
-        assert private["initial_state"]["robot"] == {"position": [0, 0], "velocity": [0, 0]}
-        assert public["initial_observation"]["entities"]["robot"]["position"] != [0, 0]
+        robot = private["initial_state"]["robot"]
+        assert robot["velocity"] == [0, 0]
         observation = public["initial_observation"]
+        assert observation["entities"]["robot"]["position"] != robot["position"]
+        if task == "object_pushing":
+            assert robot["body_type"] == "kinematic"
+            assert "contact_impulse" in private["initial_measurements"]
+            assert "velocity_retention_per_second" in private["initial_state"]["object"]
+        else:
+            assert robot == {"position": [0, 0], "velocity": [0, 0]}
         if task == "bouncing_interception":
             assert set(observation["entities"]) == {
                 "robot", "target", "wall_left", "wall_right", "wall_bottom", "wall_top",
@@ -102,8 +112,8 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
                 set(entity) == {"position", "covariance"}
                 for entity in frame["observation"]["entities"].values()
             )
-            assert set(private_frame["state"]["robot"]) == {"position", "velocity"}
-            assert {"distance", "obstacle_clearance"} & private_frame.keys()
+            assert set(private_frame["state"]["robot"]) == set(robot)
+            assert {"distance", "obstacle_clearance", "object_distance"} & private_frame.keys()
             observation = frame["observation"]
     assert next(received, None) is None
     assert episode == saved_episodes[0]
