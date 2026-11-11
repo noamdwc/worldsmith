@@ -6,7 +6,7 @@ from pathlib import Path
 
 from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS
 
-SUMMARY_FIELDS = ("benchmark", "goal", "controller", "split", "seeds", "episodes", "aggregate_score")
+SUMMARY_FIELDS = ("benchmark", "objective", "controller", "split", "seeds", "episodes", "aggregate_score")
 TASK_METRICS = {
     "interception": ("captures", "capture_rate", "mean_closest_distance"),
     "bouncing_interception": ("captures", "capture_rate", "mean_closest_distance"),

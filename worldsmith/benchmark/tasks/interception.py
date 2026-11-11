@@ -17,7 +17,7 @@ TARGET_NOISE = 0.12
 
 
 class Interception:
-    goal = "Get within 0.3 simulation units of the moving target within 45 steps."
+    objective = "Get within 0.3 simulation units of the moving target within 45 steps."
     step_limit = 45
 
     def start(self, seed: int) -> Simulation:

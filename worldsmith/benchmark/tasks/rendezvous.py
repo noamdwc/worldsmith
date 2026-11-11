@@ -21,7 +21,7 @@ def longest_tracking_streak(measurements: list[dict[str, float]]) -> int:
 
 
 class Rendezvous:
-    goal = "Stay within 0.6 units of target for 20 consecutive steps within 100 steps."
+    objective = "Stay within 0.6 units of target for 20 consecutive steps within 100 steps."
     step_limit = 100
 
     def start(self, seed: int) -> Simulation:
