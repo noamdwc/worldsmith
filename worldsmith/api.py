@@ -6,6 +6,8 @@ from dataclasses import dataclass
 type Vec2 = tuple[float, float]
 
 INTERCEPTION_GOAL = "interception"
+NAVIGATION_GOAL = "navigation"
+RENDEZVOUS_GOAL = "rendezvous"
 
 
 @dataclass(frozen=True, slots=True)
