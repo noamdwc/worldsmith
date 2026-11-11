@@ -3,15 +3,15 @@
 from math import atan2, hypot
 
 from worldsmith.api import (
-    INTERCEPTION_GOAL, NAVIGATION_GOAL, RENDEZVOUS_GOAL, Action, Controller, Observation,
+    BOUNCING_INTERCEPTION_GOAL, INTERCEPTION_GOAL, NAVIGATION_GOAL, RENDEZVOUS_GOAL,
+    Action, Controller, Observation,
 )
 
 
 def make_controller() -> Controller:
     def control(observation: Observation) -> Action:
         robot_x, robot_y = observation.entities[observation.robot_id].position
-        if observation.goal == INTERCEPTION_GOAL:
-            # Preserve the original Chase baseline exactly for interception.
+        if observation.goal in (INTERCEPTION_GOAL, BOUNCING_INTERCEPTION_GOAL):
             target_x, target_y = observation.entities["target"].position
             return Action(heading=atan2(target_y - robot_y, target_x - robot_x))
 

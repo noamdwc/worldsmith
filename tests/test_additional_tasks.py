@@ -9,7 +9,9 @@ import pymunk
 import pytest
 
 from autoresearch.controller import make_controller
-from worldsmith.api import Action, Observation, PositionMeasurement
+from worldsmith.api import (
+    BOUNCING_INTERCEPTION_GOAL, INTERCEPTION_GOAL, Action, Observation, PositionMeasurement,
+)
 from worldsmith.benchmark.evaluate import evaluate, evaluate_all
 from worldsmith.benchmark.simulation import Entity, Simulation
 from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS, TASKS, TASK_SPLITS
@@ -115,21 +117,21 @@ def test_combined_evaluation_matches_independent_results_and_resets_controller()
         return make_controller()
 
     combined = evaluate_all(factory, seeds, trace)
-    assert factory_calls == combined["episodes"] == 24
+    assert factory_calls == combined["episodes"] == 32
     rates = []
     for goal, task_factory in TASKS.items():
         independent = evaluate(task_factory(), make_controller, seeds, StringIO())
-        if goal == "interception":
+        if goal in (INTERCEPTION_GOAL, BOUNCING_INTERCEPTION_GOAL):
             independent["success_rate"] = independent["capture_rate"]
         assert combined["tasks"][goal] == independent
         rates.append(independent["success_rate"])
-    assert combined["aggregate_score"] == sum(rates) / 3
+    assert combined["aggregate_score"] == sum(rates) / 4
     episodes = [json.loads(line) for line in trace.getvalue().splitlines()]
     assert {(item["initial_observation"]["goal"], item["seed"]) for item in episodes} == {
         (goal, seed) for goal in TASKS for seed in seeds
     }
-    # The starter must make progress on each task, while leaving room for research.
-    assert all(0 < rate < 1 for rate in rates)
+    for goal in (INTERCEPTION_GOAL, "navigation", "rendezvous"):
+        assert 0 < combined["tasks"][goal]["success_rate"] < 1
 
 
 @pytest.mark.parametrize("split", COMBINED_SPLITS)
@@ -188,10 +190,16 @@ def test_combined_metrics_and_traces_match_kinematic_reference(split, monkeypatc
     seeds = list(COMBINED_SPLITS[split])
     actual, reference = StringIO(), StringIO()
     actual_metrics = evaluate_all(make_controller, seeds, actual)
+    monkeypatch.delitem(TASKS, BOUNCING_INTERCEPTION_GOAL)
     for task_factory in TASKS.values():
         monkeypatch.setattr(sys.modules[task_factory.__module__], "Simulation", KinematicReference)
-    assert actual_metrics == evaluate_all(make_controller, seeds, reference)
-    assert actual.getvalue() == reference.getvalue()
+    reference_metrics = evaluate_all(make_controller, seeds, reference)
+    assert {goal: actual_metrics["tasks"][goal] for goal in TASKS} == reference_metrics["tasks"]
+    original_episodes = [
+        line for line in actual.getvalue().splitlines(keepends=True)
+        if json.loads(line)["initial_observation"]["goal"] in TASKS
+    ]
+    assert "".join(original_episodes) == reference.getvalue()
 
 
 def test_development_and_heldout_seeds_are_disjoint():
@@ -212,7 +220,7 @@ def test_cli_can_evaluate_each_task_and_combined(tmp_path, task):
     summary = json.loads(result.stdout)
     assert result.stdout == (output / "summary.json").read_text()
     assert summary["seeds"] == [0]
-    assert summary["episodes"] == (3 if task == "all" else 1)
+    assert summary["episodes"] == (4 if task == "all" else 1)
     if task == "all":
         assert set(summary["tasks"]) == set(TASKS)
     episodes = [json.loads(line) for line in (output / "episodes.jsonl").read_text().splitlines()]

@@ -43,7 +43,7 @@ def snapshot_code(destination: Path):
 
 @mcp.tool(structured_output=True)
 def evaluate_controller() -> dict[str, object]:
-    """Evaluate the shared controller on all three development tasks and save the run."""
+    """Evaluate the shared controller on all development tasks and save the run."""
     global latest_feedback
     run_id = f"mcp-{uuid4().hex}"
     output = WORKSPACE / "runs" / run_id
