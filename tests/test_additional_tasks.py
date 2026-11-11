@@ -5,10 +5,11 @@ import sys
 from io import StringIO
 from random import Random
 
+import pymunk
 import pytest
 
 from autoresearch.controller import make_controller
-from worldsmith.api import Action
+from worldsmith.api import Action, Observation, PositionMeasurement
 from worldsmith.benchmark.evaluate import evaluate, evaluate_all
 from worldsmith.benchmark.simulation import Entity, Simulation
 from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS, TASKS, TASK_SPLITS
@@ -129,6 +130,68 @@ def test_combined_evaluation_matches_independent_results_and_resets_controller()
     }
     # The starter must make progress on each task, while leaving room for research.
     assert all(0 < rate < 1 for rate in rates)
+
+
+@pytest.mark.parametrize("split", COMBINED_SPLITS)
+def test_combined_metrics_and_traces_match_kinematic_reference(split, monkeypatch):
+    # Keep the pre-physics integration and sensing as a reference so exact trace
+    # equality can be checked on the current platform without large fixtures.
+    class KinematicReference:
+        def __init__(self, entities, robot_id, robot_max_speed, rng, *, goal):
+            self.space = pymunk.Space()
+            self.bodies = {}
+            for name, entity in entities.items():
+                body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+                body.position = entity.position
+                body.velocity = entity.velocity
+                self.space.add(body)
+                self.bodies[name] = body
+            self.entities = entities
+            self.robot_id = robot_id
+            self.robot_max_speed = robot_max_speed
+            self.goal = goal
+            self.rng = rng
+            self.steps = 0
+            self.initial_observation = self.observe()
+
+        def position(self, name):
+            return tuple(self.bodies[name].position)
+
+        def ground_truth(self):
+            return {
+                name: {"position": tuple(body.position), "velocity": tuple(body.velocity)}
+                for name, body in self.bodies.items()
+            }
+
+        def step(self, action):
+            self.bodies[self.robot_id].velocity = pymunk.Vec2d(
+                self.robot_max_speed * action.throttle, 0
+            ).rotated(action.heading)
+            self.space.step(0.1)
+            self.steps += 1
+            return self.observe()
+
+        def observe(self):
+            measurements = {}
+            for name, entity in self.entities.items():
+                x, y = self.position(name)
+                sigma = entity.position_noise
+                measurements[name] = PositionMeasurement(
+                    (self.rng.gauss(x, sigma), self.rng.gauss(y, sigma)),
+                    ((sigma**2, 0.0), (0.0, sigma**2)),
+                )
+            return Observation(
+                time=self.steps * 0.1, robot_id=self.robot_id, entities=measurements,
+                robot_max_speed=self.robot_max_speed, goal=self.goal,
+            )
+
+    seeds = list(COMBINED_SPLITS[split])
+    actual, reference = StringIO(), StringIO()
+    actual_metrics = evaluate_all(make_controller, seeds, actual)
+    for task_factory in TASKS.values():
+        monkeypatch.setattr(sys.modules[task_factory.__module__], "Simulation", KinematicReference)
+    assert actual_metrics == evaluate_all(make_controller, seeds, reference)
+    assert actual.getvalue() == reference.getvalue()
 
 
 def test_development_and_heldout_seeds_are_disjoint():

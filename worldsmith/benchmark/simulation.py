@@ -1,6 +1,7 @@
-"""Top-down kinematic simulation and noisy position sensing."""
+"""Top-down Pymunk simulation and noisy position sensing."""
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from random import Random
 
@@ -9,6 +10,11 @@ import pymunk
 from worldsmith.api import Action, Observation, PositionMeasurement, Vec2
 
 TIME_STEP = 0.1
+_BODY_TYPES = {
+    pymunk.Body.KINEMATIC: "kinematic",
+    pymunk.Body.DYNAMIC: "dynamic",
+    pymunk.Body.STATIC: "static",
+}
 
 
 class InvalidAction(ValueError):
@@ -22,21 +28,45 @@ class Entity:
     position_noise: float
 
 
+@dataclass(frozen=True, slots=True)
+class PhysicalEntity:
+    """A Pymunk body outside any space, with optional collision shapes attached."""
+
+    body: pymunk.Body
+    observable: bool = False
+    position_noise: float = 0.0
+
+
 class Simulation:
     def __init__(
-        self, entities: dict[str, Entity], robot_id: str, robot_max_speed: float, rng: Random,
-        *, goal: str,
+        self, entities: Mapping[str, Entity | PhysicalEntity], robot_id: str,
+        robot_max_speed: float, rng: Random, *, goal: str,
     ):
+        robot = entities[robot_id]
+        if isinstance(robot, PhysicalEntity) and (
+            robot.body.body_type != pymunk.Body.KINEMATIC or not robot.observable
+        ):
+            raise ValueError("The Action-controlled robot must be kinematic and observable")
+
         self._space = pymunk.Space()
         self._bodies = {}
-        self._noise = {}
+        self._physical_bodies = {}
+        self._sensors = {}
         for entity_id, entity in entities.items():
-            body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-            body.position = entity.position
-            body.velocity = entity.velocity
-            self._space.add(body)
+            if isinstance(entity, PhysicalEntity):
+                body = entity.body
+                self._space.add(body, *body.shapes)
+                self._physical_bodies[entity_id] = body
+                observable = entity.observable
+            else:
+                body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+                body.position = entity.position
+                body.velocity = entity.velocity
+                self._space.add(body)
+                observable = True
             self._bodies[entity_id] = body
-            self._noise[entity_id] = entity.position_noise
+            if observable:
+                self._sensors[entity_id] = (body, entity.position_noise)
 
         self._robot_id = robot_id
         self._robot_max_speed = robot_max_speed
@@ -49,11 +79,30 @@ class Simulation:
         x, y = self._bodies[entity_id].position
         return x, y
 
-    def ground_truth(self) -> dict[str, dict[str, Vec2]]:
-        return {
+    def ground_truth(self) -> dict[str, dict[str, object]]:
+        state: dict[str, dict[str, object]] = {
             name: {"position": tuple(body.position), "velocity": tuple(body.velocity)}
             for name, body in self._bodies.items()
         }
+        for name, body in self._physical_bodies.items():
+            state[name].update(
+                body_type=_BODY_TYPES[body.body_type],
+                angle=body.angle,
+                angular_velocity=body.angular_velocity,
+                shapes=[
+                    {
+                        "type": type(shape).__name__,
+                        "friction": shape.friction,
+                        "elasticity": shape.elasticity,
+                    }
+                    for shape in body.shapes
+                ],
+            )
+            if body.body_type == pymunk.Body.DYNAMIC:
+                # Pymunk uses an infinite moment to lock rotation. Use JSON null in traces.
+                moment = body.moment
+                state[name].update(mass=body.mass, moment=None if math.isinf(moment) else moment)
+        return state
 
     def step(self, action: Action) -> Observation:
         if not math.isfinite(action.heading) or not 0 <= action.throttle <= 1:
@@ -68,9 +117,8 @@ class Simulation:
 
     def _observe(self) -> Observation:
         measurements = {}
-        for entity_id, body in self._bodies.items():
+        for entity_id, (body, sigma) in self._sensors.items():
             x, y = body.position
-            sigma = self._noise[entity_id]
             measurements[entity_id] = PositionMeasurement(
                 position=(self._rng.gauss(x, sigma), self._rng.gauss(y, sigma)),
                 covariance=((sigma**2, 0.0), (0.0, sigma**2)),
