@@ -11,7 +11,7 @@ from autoresearch.controller import make_controller
 from worldsmith.api import Action
 from worldsmith.benchmark.evaluate import evaluate, evaluate_all
 from worldsmith.benchmark.simulation import Entity, Simulation
-from worldsmith.benchmark.tasks import COMBINED_SPLITS, TASKS, TASK_SPLITS
+from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS, TASKS, TASK_SPLITS
 from worldsmith.benchmark.tasks.navigation import COLLISION_DISTANCE, Navigation
 from worldsmith.benchmark.tasks.rendezvous import HOLD_STEPS, TRACKING_RADIUS, Rendezvous
 

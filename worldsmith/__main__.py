@@ -7,7 +7,7 @@ from importlib import import_module
 from pathlib import Path
 
 from worldsmith.benchmark.evaluate import evaluate, evaluate_all
-from worldsmith.benchmark.tasks import (
+from worldsmith.benchmark.tasks.constants import (
     BENCHMARKS, COMBINED_BENCHMARK, COMBINED_SPLITS, TASKS, TASK_SPLITS,
 )
 from worldsmith.benchmark.tasks.interception import Chase, Lead
