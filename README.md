@@ -2,6 +2,8 @@
 
 See [project.md](project.md) for the research idea. One shared Python controller receives the task name and sensor measurements at runtime. The combined benchmark tests interception, moving-obstacle navigation, rendezvous / tracking, bouncing-object interception, and object pushing using noisy position measurements.
 
+[Worldsmith V2](v2/README.md) runs a standalone 3D robotic manipulation task using ManiSkill.
+
 ## Run the benchmark
 
 ```sh
