@@ -8,7 +8,7 @@ All tasks use an open 2D plane and 0.1-second steps. The [World API](API.md) sup
 
 `observation.goal == "interception"`. Get within 0.3 units of `target` within 45 steps. Touching the capture region once is enough; matching the target's motion is unnecessary.
 
-Metrics: success rate (also called capture rate), captures, and mean closest distance. Traces include per-step true distance.
+Metrics: success rate (also called capture rate), captures, and mean closest distance.
 
 ## Moving-obstacle navigation
 
@@ -18,7 +18,7 @@ Contact is scored at the initial state and each simulation step; bodies do not b
 
 Destinations are 8–10 units ahead with a small lateral offset. Obstacle crossing speeds vary from 0.9–1.7 and 0.8–1.6 units/second, with independently sampled starting positions. Turning away only when an obstacle is nearby can be too late for faster crossings.
 
-Metrics: success rate, collision rate, mean final destination distance, and mean minimum obstacle clearance (center distance minus 0.7). Traces include destination distance and obstacle clearance at each step.
+Metrics: success rate, collision rate, mean final destination distance, and mean minimum obstacle clearance (center distance minus 0.7).
 
 ## Rendezvous / tracking
 
@@ -26,11 +26,13 @@ Metrics: success rate, collision rate, mean final destination distance, and mean
 
 Targets start 3–5 units away and move at 0.8–1.7 units/second in a sampled direction. The robot is always faster, with enough time to catch even an outbound target and sustain proximity. Slowing down based only on current distance can leave a persistent tracking lag; estimating motion can help match speed while remaining close.
 
-Metrics: success rate, mean longest tracking duration, mean distance over control steps, and mean final distance. Traces include per-step true distance.
+Metrics: success rate, mean longest tracking duration, mean distance over control steps, and mean final distance.
 
 ## Evaluation and splits
 
 `evaluate_controller()` evaluates all three tasks together on 8 fixed development seeds per task (0–7), for 24 episodes total. Scenarios and noisy measurements are deterministic for a given task, seed, and action sequence. Every episode starts with a fresh controller from the same factory.
+
+Each development trace contains the initial observation, every action and resulting observation, and the episode outcome. Use the positions in the observations to reconstruct what the controller could infer at each step. The summary reports task-level performance metrics.
 
 The aggregate score is the equally weighted average of the three task success rates. Compare per-task results to see improvements and regressions; a higher aggregate can hide a regression on one task. Secondary metrics are diagnostic and are not normalized or included in the score.
 

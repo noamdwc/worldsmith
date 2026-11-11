@@ -5,29 +5,49 @@ from dataclasses import asdict
 from typing import TextIO
 
 from worldsmith.api import INTERCEPTION_GOAL, ControllerFactory
+from worldsmith.benchmark.simulation import InvalidAction
 from worldsmith.benchmark.tasks.constants import TASKS
 from worldsmith.benchmark.tasks.task import Task
+
+
+class ControllerError(RuntimeError):
+    """An error at the controller boundary that can be reported to the researcher."""
 
 
 def evaluate(task: Task, factory: ControllerFactory, seeds: list[int], trace: TextIO) -> dict:
     episodes = []
     for seed in seeds:
         world = task.start(seed)
-        controller = factory()
+        try:
+            controller = factory()
+        except Exception as exc:
+            raise ControllerError(f"Controller setup: {type(exc).__name__}: {exc}") from exc
         observation = world.initial_observation
         initial_observation = asdict(observation)
+        initial_state = world.ground_truth()
         measurements = [task.measure(world)]
         frames = []
         success = False
 
-        for _ in range(task.step_limit):
-            action = controller(observation)
-            observation = world.step(action)
+        for step in range(task.step_limit):
+            try:
+                action = controller(observation)
+            except Exception as exc:
+                raise ControllerError(
+                    f"{observation.goal}, seed {seed}, step {step + 1}: {type(exc).__name__}: {exc}"
+                ) from exc
+            try:
+                observation = world.step(action)
+            except InvalidAction as exc:
+                raise ControllerError(
+                    f"{observation.goal}, seed {seed}, step {step + 1}: {exc}"
+                ) from exc
             measurement = task.measure(world)
             measurements.append(measurement)
             frames.append({
-                "action": asdict(action),
+                "action": {"heading": action.heading, "throttle": action.throttle},
                 "observation": asdict(observation),
+                "state": world.ground_truth(),
                 **measurement,
             })
             success = task.succeeded(measurements)
@@ -41,6 +61,8 @@ def evaluate(task: Task, factory: ControllerFactory, seeds: list[int], trace: Te
             **metrics,
             "steps": len(frames),
             "initial_observation": initial_observation,
+            "initial_state": initial_state,
+            "initial_measurements": measurements[0],
             "frames": frames,
         }) + "\n")
 

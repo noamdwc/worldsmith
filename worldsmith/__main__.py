@@ -6,7 +6,7 @@ import os
 from importlib import import_module
 from pathlib import Path
 
-from worldsmith.benchmark.evaluate import evaluate, evaluate_all
+from worldsmith.benchmark.evaluate import ControllerError, evaluate, evaluate_all
 from worldsmith.benchmark.tasks.constants import (
     BENCHMARKS, COMBINED_BENCHMARK, COMBINED_SPLITS, TASKS, TASK_SPLITS,
 )
@@ -40,9 +40,6 @@ def main():
         module, _, name = args.controller.partition(":")
         if not module or not name:
             evaluation.error("--controller must be chase, lead, or module:factory")
-        factory = getattr(import_module(module), name, None)
-        if not callable(factory):
-            evaluation.error(f"{args.controller} is not a callable controller factory")
 
     if args.seed is None:
         split = args.split or "dev"
@@ -70,11 +67,23 @@ def main():
         args.output.mkdir(parents=True)
     except FileExistsError:
         evaluation.error(f"Output path already exists: {args.output}")
-    with (args.output / "episodes.jsonl").open("w", encoding="utf-8") as trace:
-        if task is None:
-            metrics = evaluate_all(factory, seeds, trace)
-        else:
-            metrics = evaluate(task, factory, seeds, trace)
+    try:
+        if factory is None:
+            try:
+                factory = getattr(import_module(module), name, None)
+            except Exception as exc:
+                raise ControllerError(f"{type(exc).__name__}: {exc}") from exc
+            if not callable(factory):
+                raise ControllerError(f"{args.controller} is not a callable controller factory")
+        with (args.output / "episodes.jsonl").open("w", encoding="utf-8") as trace:
+            if task is None:
+                metrics = evaluate_all(factory, seeds, trace)
+            else:
+                metrics = evaluate(task, factory, seeds, trace)
+    except ControllerError as exc:
+        # Keep the controller diagnostic separate from the private traceback.
+        (args.output / "controller_error.txt").write_text(str(exc) + "\n", encoding="utf-8")
+        raise
 
     summary = json.dumps({**config, **metrics})
     (args.output / "summary.json").write_text(summary + "\n", encoding="utf-8")

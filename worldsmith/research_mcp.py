@@ -6,15 +6,18 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from traceback import format_exc
 from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
 
+from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, WORKSPACE, copy_entry, research_entries
 
 EVALUATION_TIMEOUT_SECONDS = 30
+OWNER_RUNS = ROOT / "runs" / "owner"
 mcp = FastMCP("worldsmith")
-latest_run: Path | None = None
+latest_feedback: ResearchFeedback | None = None
 
 
 def now() -> str:
@@ -41,28 +44,38 @@ def snapshot_code(destination: Path):
 @mcp.tool(structured_output=True)
 def evaluate_controller() -> dict[str, object]:
     """Evaluate the shared controller on all three development tasks and save the run."""
-    global latest_run
+    global latest_feedback
     run_id = f"mcp-{uuid4().hex}"
     output = WORKSPACE / "runs" / run_id
-    output.mkdir(parents=True)
+    owner_run = OWNER_RUNS / run_id
+    try:
+        owner_run.mkdir(parents=True)
+        output.mkdir(parents=True)
+    except OSError:
+        raise RuntimeError(f"Could not create evaluation directories. Run: {run_id}") from None
+
     record = {
         "run_id": run_id,
         "started_at": now(),
-        "status": "preparing",
     }
-    metadata = output / "evaluation.json"
-    write_json(metadata, record)
-    code = output / "code"
+
+    def save_status(status: str, **details):
+        for directory in (owner_run, output):
+            write_json(directory / "evaluation.json", {**record, "status": status, **details})
+
+    code = owner_run / "code"
+    owner_results = owner_run / "results"
     try:
+        save_status("preparing")
         snapshot_code(code / "autoresearch")
-        record["status"] = "running"
-        write_json(metadata, record)
+        copy_entry(code, output / "code", skip_cache=True)
+        save_status("running")
         # Run the exact snapshot in a fresh process and keep its stdout off MCP's wire.
         result = subprocess.run(
             [
                 sys.executable, "-B", "-m", "worldsmith", "evaluate",
                 "--controller", "autoresearch.controller:make_controller",
-                "--task", "all", "--split", "dev", "--output", str(output / "results"),
+                "--task", "all", "--split", "dev", "--output", str(owner_results),
             ],
             cwd=code,
             env={**os.environ, "PYTHONPATH": str(ROOT)},
@@ -70,20 +83,29 @@ def evaluate_controller() -> dict[str, object]:
             text=True,
             timeout=EVALUATION_TIMEOUT_SECONDS,
         )
+        if result.stderr:
+            (owner_run / "stderr.txt").write_text(result.stderr, encoding="utf-8")
         if result.returncode:
-            lines = result.stderr.strip().splitlines()
-            detail = lines[-1] if lines else f"exit status {result.returncode}"
-            raise RuntimeError(f"Evaluation failed: {detail}")
-        summary = json.loads((output / "results" / "summary.json").read_text(encoding="utf-8"))
+            diagnostic = owner_results / "controller_error.txt"
+            detail = diagnostic.read_text(encoding="utf-8").strip() if diagnostic.is_file() else (
+                f"evaluator exited with status {result.returncode}"
+            )
+            message = f"Evaluation failed: {detail}"
+            save_status("failed", error=message, ended_at=now())
+            raise RuntimeError(f"{message}. Run: {run_id}")
+        feedback = publish_feedback(owner_results, output / "results")
     except subprocess.TimeoutExpired:
         message = f"Evaluation timed out after {EVALUATION_TIMEOUT_SECONDS} seconds."
-        write_json(metadata, {**record, "status": "timed_out", "error": message, "ended_at": now()})
+        save_status("timed_out", error=message, ended_at=now())
         raise RuntimeError(f"{message} Run: {run_id}") from None
-    except (OSError, RuntimeError, ValueError) as exc:
-        write_json(metadata, {**record, "status": "failed", "error": str(exc), "ended_at": now()})
-        raise RuntimeError(f"{exc}. Run: {run_id}") from None
-    write_json(metadata, {**record, "status": "succeeded", "ended_at": now()})
-    latest_run = output
+    except (OSError, KeyError, ValueError):
+        (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
+        message = "Evaluation could not prepare the snapshot or publish feedback."
+        save_status("failed", error=message, ended_at=now())
+        raise RuntimeError(f"{message} Run: {run_id}") from None
+    save_status("succeeded", ended_at=now())
+    latest_feedback = feedback
+    summary = feedback.summary
     return {
         "run_id": run_id,
         "run_dir": (output / "results").relative_to(WORKSPACE).as_posix(),
@@ -97,14 +119,9 @@ def evaluate_controller() -> dict[str, object]:
 @mcp.tool(structured_output=True)
 def get_episode_trace(seed: int, task: str = "interception") -> dict[str, object]:
     """Return a task/seed episode from the latest successful development run in this session."""
-    if latest_run is None:
+    if latest_feedback is None:
         raise ValueError("Run evaluate_controller() first.")
-    with (latest_run / "results" / "episodes.jsonl").open(encoding="utf-8") as trace:
-        for line in trace:
-            episode = json.loads(line)
-            if episode["seed"] == seed and episode["initial_observation"]["goal"] == task:
-                return episode
-    raise ValueError(f"Seed {seed} was not in the latest development run for task {task!r}.")
+    return latest_feedback.episode(seed, task)
 
 
 if __name__ == "__main__":
