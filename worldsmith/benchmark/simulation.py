@@ -83,15 +83,27 @@ class Simulation:
     def speed(self, entity_id: str) -> float:
         return self._bodies[entity_id].velocity.length
 
-    def contact_impulse(self, entity_id: str) -> float:
-        """Sum the magnitudes of the collision impulses applied this step."""
+    def contact_impulse(self, entity_id: str, other_id: str | None = None) -> float:
+        """Sum this step's collision impulse magnitudes, optionally for one body pair."""
+        # Traverse the same arbiters in the same order regardless of argument order.
+        if other_id is not None and other_id < entity_id:
+            entity_id, other_id = other_id, entity_id
+        body = self._bodies[entity_id]
+        other = self._bodies[other_id] if other_id is not None else None
+        if other is body:
+            return 0.0
+
         impulse = 0.0
 
         def add_impulse(arbiter: pymunk.Arbiter) -> None:
             nonlocal impulse
+            if other is not None:
+                first, second = arbiter.shapes
+                if first.body is not other and second.body is not other:
+                    return
             impulse += arbiter.total_impulse.length
 
-        self._bodies[entity_id].each_arbiter(add_impulse)
+        body.each_arbiter(add_impulse)
         return impulse
 
     def ground_truth(self) -> dict[str, dict[str, object]]:

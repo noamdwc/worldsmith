@@ -59,7 +59,7 @@ class ObjectPushing:
         return {
             "object_distance": math.dist(world.position("object"), world.position("destination")),
             "object_speed": world.speed("object"),
-            "contact_impulse": world.contact_impulse("object"),
+            "contact_impulse": world.contact_impulse("robot", "object"),
         }
 
     def succeeded(self, measurements: Measurements) -> bool:
