@@ -223,6 +223,9 @@ def test_cli_can_evaluate_each_task_and_combined(tmp_path, task):
     assert summary["episodes"] == (4 if task == "all" else 1)
     if task == "all":
         assert set(summary["tasks"]) == set(TASKS)
+        assert summary["goal"] == {name: task_class.objective for name, task_class in TASKS.items()}
+    else:
+        assert summary["goal"] == TASKS[task].objective
     episodes = [json.loads(line) for line in (output / "episodes.jsonl").read_text().splitlines()]
     expected_goals = set(TASKS) if task == "all" else {task}
     assert {episode["initial_observation"]["goal"] for episode in episodes} == expected_goals

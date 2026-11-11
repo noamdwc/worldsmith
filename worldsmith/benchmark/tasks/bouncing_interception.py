@@ -14,7 +14,7 @@ WALL_RADIUS = 0.25
 
 
 class BouncingInterception(Interception):
-    goal = "Get within 0.3 simulation units of the bouncing target within 45 steps."
+    objective = "Get within 0.3 simulation units of the bouncing target within 45 steps."
 
     def start(self, seed: int) -> Simulation:
         rng = Random(seed)

@@ -8,6 +8,7 @@ type Measurements = list[dict[str, float]]
 
 
 class Task(Protocol):
+    objective: str
     step_limit: int
 
     def start(self, seed: int) -> Simulation: ...

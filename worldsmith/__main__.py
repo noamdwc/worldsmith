@@ -51,13 +51,13 @@ def main():
     task = None if args.task == "all" else TASKS[args.task]()
     if task is None:
         benchmark = COMBINED_BENCHMARK
-        goal = {name: task_factory().goal for name, task_factory in TASKS.items()}
+        objective = {name: task_class.objective for name, task_class in TASKS.items()}
     else:
         benchmark = BENCHMARKS[args.task]
-        goal = task.goal
+        objective = task.objective
     config = {
         "benchmark": benchmark,
-        "goal": goal,
+        "goal": objective,
         "controller": args.controller,
         "split": split,
         "seeds": seeds,

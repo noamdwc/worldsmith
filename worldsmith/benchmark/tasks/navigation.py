@@ -12,7 +12,7 @@ COLLISION_DISTANCE = 0.7  # Robot radius 0.15 plus obstacle radius 0.55.
 
 
 class Navigation:
-    goal = "Reach destination within 0.35 units in 80 steps without touching an obstacle."
+    objective = "Reach destination within 0.35 units in 80 steps without touching an obstacle."
     step_limit = 80
 
     def start(self, seed: int) -> Simulation:
