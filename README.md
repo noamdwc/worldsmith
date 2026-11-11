@@ -62,6 +62,10 @@ The directories and MCP tools separate the two views in the normal workflow. The
 
 In traces, positions are under `observation.entities` and the task name is under `observation.goal`. The summary's `goal` field contains the human-readable objective (a mapping of task names to objectives for combined runs). Read the [public task brief](autoresearch/TASKS.md) for success criteria, limits, and metrics. See the [World API](autoresearch/API.md) for the controller contract.
 
+Existing scenes use `Entity` for shape-free kinematic motion. To build a scene with contacts, attach a `pymunk.Circle` or `pymunk.Segment` to a fresh body before passing it in a `PhysicalEntity`. A dynamic body responds to forces, impulses, and collisions according to its mass and moment of inertia. Static bodies provide fixed collision geometry. A shaped kinematic body can move dynamic objects while keeping its prescribed velocity. Set elasticity and contact friction on both shapes in a collision pair. Scene code can keep a body reference to apply Pymunk forces each step or apply an impulse once.
+
+Set `PhysicalEntity.position_noise` to include a noisy position measurement. The default `None` keeps the body out of observations. Owner traces include the physical body's type, pose, velocities, dynamic mass and moment, and shape materials. An infinite moment for locked rotation is recorded as `null`. `Action(heading, throttle)` still sets the velocity of the observed kinematic robot. The simulator takes one discrete physics step every 0.1 seconds, so scene authors should choose speeds and shape sizes that keep bodies from tunneling through contacts.
+
 ## Track a run
 
 Add `--wandb offline` to record the seed selection and metrics locally with W&B. Use `--wandb online` with an authenticated W&B account to send metrics to the `worldsmith` project. W&B is disabled by default. Summary and trace files are written locally in every mode and can be uploaded once the existing R2 utilities are integrated.
