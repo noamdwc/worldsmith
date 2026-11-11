@@ -57,7 +57,7 @@ def main():
         objective = task.objective
     config = {
         "benchmark": benchmark,
-        "goal": objective,
+        "objective": objective,
         "controller": args.controller,
         "split": split,
         "seeds": seeds,
