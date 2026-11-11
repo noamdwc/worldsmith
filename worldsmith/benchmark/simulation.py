@@ -30,10 +30,11 @@ class Entity:
 
 @dataclass(frozen=True, slots=True)
 class PhysicalEntity:
-    """A fresh Pymunk body with its collision shapes already attached."""
+    """A Pymunk body outside any space, with optional collision shapes attached."""
 
     body: pymunk.Body
-    position_noise: float | None = None  # None omits the body from observations.
+    observable: bool = False
+    position_noise: float = 0.0
 
 
 class Simulation:
@@ -43,7 +44,7 @@ class Simulation:
     ):
         robot = entities[robot_id]
         if isinstance(robot, PhysicalEntity) and (
-            robot.body.body_type != pymunk.Body.KINEMATIC or robot.position_noise is None
+            robot.body.body_type != pymunk.Body.KINEMATIC or not robot.observable
         ):
             raise ValueError("The Action-controlled robot must be kinematic and observable")
 
@@ -56,15 +57,16 @@ class Simulation:
                 body = entity.body
                 self._space.add(body, *body.shapes)
                 self._physical_bodies[entity_id] = body
+                observable = entity.observable
             else:
                 body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
                 body.position = entity.position
                 body.velocity = entity.velocity
                 self._space.add(body)
+                observable = True
             self._bodies[entity_id] = body
-            sigma = entity.position_noise
-            if sigma is not None:
-                self._sensors[entity_id] = (body, sigma)
+            if observable:
+                self._sensors[entity_id] = (body, entity.position_noise)
 
         self._robot_id = robot_id
         self._robot_max_speed = robot_max_speed

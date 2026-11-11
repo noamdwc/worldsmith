@@ -96,7 +96,7 @@ def test_dynamic_circles_exchange_momentum_after_impulse():
 def test_kinematic_robot_pushes_dynamic_body_at_commanded_speed():
     robot = pymunk.Circle(pymunk.Body(body_type=pymunk.Body.KINEMATIC), RADIUS)
     circle = ball((1, 0))
-    world = scene(robot=PhysicalEntity(robot.body, 0), ball=PhysicalEntity(circle.body))
+    world = scene(robot=PhysicalEntity(robot.body, observable=True), ball=PhysicalEntity(circle.body))
 
     for _ in range(4):
         observation = world.step(Action(0))
@@ -104,6 +104,26 @@ def test_kinematic_robot_pushes_dynamic_body_at_commanded_speed():
     assert world.position("ball")[0] > 1
     assert circle.body.velocity == pytest.approx((2, 0))
     assert robot.body.velocity == pytest.approx((2, 0))
+
+
+def test_shape_free_bodies_can_be_hidden_or_observed_with_or_without_noise():
+    exact_body = pymunk.Body(MASS, MOMENT)
+    exact_body.velocity = (1, 0)
+    world = scene(
+        hidden=PhysicalEntity(pymunk.Body(MASS, MOMENT), position_noise=0.25),
+        exact=PhysicalEntity(exact_body, observable=True),
+        noisy=PhysicalEntity(pymunk.Body(MASS, MOMENT), observable=True, position_noise=0.25),
+    )
+
+    initial = world.initial_observation
+    stepped = world.step(COAST)
+    assert "hidden" in world.ground_truth()
+    for observation, exact_position in ((initial, (0, 0)), (stepped, (0.1, 0))):
+        assert set(observation.entities) == {"robot", "exact", "noisy"}
+        assert observation.entities["exact"].position == exact_position
+        assert observation.entities["exact"].covariance == ((0, 0), (0, 0))
+        assert observation.entities["noisy"].position != (0, 0)
+        assert observation.entities["noisy"].covariance == ((0.0625, 0), (0, 0.0625))
 
 
 def test_physics_stays_in_owner_trace(tmp_path, monkeypatch):
@@ -114,7 +134,10 @@ def test_physics_stays_in_owner_trace(tmp_path, monkeypatch):
             circle, segment = ball(velocity=(0.5, 0)), wall()
             circle.friction = 0.7
             circle.elasticity = 0.3
-            return scene(target=PhysicalEntity(circle.body, 0), wall=PhysicalEntity(segment.body))
+            return scene(
+                target=PhysicalEntity(circle.body, observable=True),
+                wall=PhysicalEntity(segment.body),
+            )
 
     monkeypatch.setitem(TASKS, INTERCEPTION_GOAL, PhysicalInterception)
     owner_dir = tmp_path / "owner"
