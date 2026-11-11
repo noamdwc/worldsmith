@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict
 from typing import TextIO
 
-from worldsmith.api import INTERCEPTION_GOAL, ControllerFactory
+from worldsmith.api import ControllerFactory
 from worldsmith.benchmark.simulation import InvalidAction
 from worldsmith.benchmark.tasks.constants import TASKS
 from worldsmith.benchmark.tasks.task import Task
@@ -72,11 +72,11 @@ def evaluate(task: Task, factory: ControllerFactory, seeds: list[int], trace: Te
 def evaluate_all(
     controller_factory: ControllerFactory, seeds: list[int], trace: TextIO,
 ) -> dict:
-    """Evaluate one shared factory on the same fixed seeds for all three tasks."""
+    """Evaluate one shared factory on the same fixed seeds for all tasks."""
     tasks = {}
     for name, task_factory in TASKS.items():
         metrics = evaluate(task_factory(), controller_factory, seeds, trace)
-        if name == INTERCEPTION_GOAL:
+        if "capture_rate" in metrics:
             metrics["success_rate"] = metrics["capture_rate"]
         tasks[name] = metrics
     return {

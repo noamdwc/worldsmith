@@ -6,6 +6,7 @@ from dataclasses import dataclass
 type Vec2 = tuple[float, float]
 
 INTERCEPTION_GOAL = "interception"
+BOUNCING_INTERCEPTION_GOAL = "bouncing_interception"
 NAVIGATION_GOAL = "navigation"
 RENDEZVOUS_GOAL = "rendezvous"
 

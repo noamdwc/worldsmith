@@ -1,8 +1,8 @@
-# Public three-task benchmark
+# Public four-task benchmark
 
-One shared `make_controller()` handles all three goals. The researcher can read these task descriptions and all development traces. V1 uses no runtime LLM and does not require task blindness.
+One shared `make_controller()` handles all four goals. The researcher can read these task descriptions and all development traces. The benchmark uses no runtime LLM and does not require task blindness.
 
-All tasks use an open 2D plane and 0.1-second steps. The [World API](API.md) supplies noisy positions and measurement covariances, observation time, robot ID, maximum speed (2.4 units/second), and the goal identifier. Entity velocity is unobserved. Moving entities have constant velocity within each episode.
+All tasks use 2D scenes and 0.1-second steps. The [World API](API.md) supplies noisy positions and measurement covariances, observation time, robot ID, maximum speed (2.4 units/second), and the goal identifier. Entity velocity is unobserved. The first three tasks use constant-velocity targets or obstacles.
 
 ## Moving-target interception
 
@@ -28,12 +28,20 @@ Targets start 3–5 units away and move at 0.8–1.7 units/second in a sampled d
 
 Metrics: success rate, mean longest tracking duration, mean distance over control steps, and mean final distance.
 
+## Bouncing-object interception
+
+`observation.goal == "bouncing_interception"`. Get within 0.3 units of `target` within 45 steps. The target starts 2–3.2 units off center horizontally with outward motion at 3.4–4.4 units/second. Static walls redirect and slow the target on impact. Arena dimensions, starting position, speed, heading, and wall restitution vary by episode. The robot commands heading and throttle as usual, and its motion does not interact with the walls or target.
+
+The target position has 0.12 units of measurement noise (standard deviation per axis). The exact positions of `wall_left`, `wall_right`, `wall_bottom`, and `wall_top` mark the four wall midpoints. The arena is axis-aligned, with each wall extending to the adjacent walls. The target radius is 0.35 units and the wall segments have a 0.25-unit radius. Restitution and target velocity are unobserved. Cutting across the target's return path can help when it is moving faster than the robot.
+
+Metrics: success rate (also called capture rate), captures, and mean closest distance.
+
 ## Evaluation and splits
 
-`evaluate_controller()` evaluates all three tasks together on 8 fixed development seeds per task (0–7), for 24 episodes total. Scenarios and noisy measurements are deterministic for a given task, seed, and action sequence. Every episode starts with a fresh controller from the same factory.
+`evaluate_controller()` evaluates all four tasks together on 8 fixed development seeds per task (0–7), for 32 episodes total. Scenarios and noisy measurements are deterministic for a given task, seed, and action sequence. Every episode starts with a fresh controller from the same factory.
 
 Each development trace contains the initial observation, every action and resulting observation, and the episode outcome. Use the positions in the observations to reconstruct what the controller could infer at each step. The summary reports task-level performance metrics.
 
-The aggregate score is the equally weighted average of the three task success rates. Compare per-task results to see improvements and regressions; a higher aggregate can hide a regression on one task. Secondary metrics are diagnostic and are not normalized or included in the score.
+The aggregate score is the equally weighted average of the four task success rates. Compare per-task results to see improvements and regressions; a higher aggregate can hide a regression on one task. Secondary metrics are diagnostic and are not normalized or included in the score.
 
 The owner can evaluate held-out seeds (1000–1007). Researchers use development feedback only. Independent interception evaluation preserves its original 32-seed splits (0–31 and 1000–1031), so its full-split results are not directly comparable with the combined run's 8-seed subset.

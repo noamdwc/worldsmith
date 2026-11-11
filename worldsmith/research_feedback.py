@@ -1,4 +1,4 @@
-"""Publish the V1 development feedback exposed to AutoResearch."""
+"""Publish the development feedback exposed to AutoResearch."""
 
 import json
 from dataclasses import dataclass
@@ -9,11 +9,13 @@ from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS
 SUMMARY_FIELDS = ("benchmark", "goal", "controller", "split", "seeds", "episodes", "aggregate_score")
 TASK_METRICS = {
     "interception": ("captures", "capture_rate", "mean_closest_distance"),
+    "bouncing_interception": ("captures", "capture_rate", "mean_closest_distance"),
     "navigation": ("collision_rate", "mean_final_destination_distance", "mean_minimum_obstacle_clearance"),
     "rendezvous": ("mean_longest_tracking_seconds", "mean_distance", "mean_final_distance"),
 }
 EPISODE_OUTCOMES = {
     "interception": ("captured",),
+    "bouncing_interception": ("captured",),
     "navigation": ("success", "collided"),
     "rendezvous": ("success",),
 }

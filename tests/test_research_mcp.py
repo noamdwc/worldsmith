@@ -42,10 +42,10 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
     owner_summary = json.loads((owner / "results/summary.json").read_text())
     assert summary == owner_summary
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
-    assert metrics["episodes"] == summary["episodes"] == 24
+    assert metrics["episodes"] == summary["episodes"] == 32
     assert metrics["aggregate_score"] == summary["aggregate_score"] == 0
     assert metrics["tasks"] == summary["tasks"]
-    assert set(metrics["tasks"]) == {"interception", "navigation", "rendezvous"}
+    assert set(metrics["tasks"]) == {"interception", "navigation", "rendezvous", "bouncing_interception"}
     assert metrics["tasks"]["interception"]["captures"] == 0
     assert (run.parent / "code/autoresearch/skill.py").read_bytes() == (workspace / "skill.py").read_bytes()
     controller_snapshot = "code/autoresearch/controller.py"
@@ -63,10 +63,11 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
     received = iter(json.loads(line) for line in (owner / "stderr.txt").read_text().splitlines())
     outcomes = {
         "interception": ("captured",),
+        "bouncing_interception": ("captured",),
         "navigation": ("success", "collided"),
         "rendezvous": ("success",),
     }
-    assert len(saved_episodes) == len(private_episodes) == 24
+    assert len(saved_episodes) == len(private_episodes) == 32
     for public, private in zip(saved_episodes, private_episodes, strict=True):
         task = private["initial_observation"]["goal"]
         assert public["task"] == task and public["seed"] == private["seed"]
@@ -77,11 +78,30 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
         assert private["initial_state"]["robot"] == {"position": [0, 0], "velocity": [0, 0]}
         assert public["initial_observation"]["entities"]["robot"]["position"] != [0, 0]
         observation = public["initial_observation"]
+        if task == "bouncing_interception":
+            assert set(observation["entities"]) == {
+                "robot", "target", "wall_left", "wall_right", "wall_bottom", "wall_top",
+            }
+            target = private["initial_state"]["target"]
+            assert target["body_type"] == "dynamic"
+            assert target["shapes"][0]["type"] == "Circle"
+            assert set(observation["entities"]["target"]) == {"position", "covariance"}
+            assert observation["entities"]["target"]["position"] != target["position"]
+            wall = private["initial_state"]["wall_left"]
+            assert wall["body_type"] == "static"
+            assert "elasticity" in wall["shapes"][0]
+            assert observation["entities"]["wall_left"] == {
+                "position": wall["position"], "covariance": [[0, 0], [0, 0]],
+            }
         for frame, private_frame in zip(public["frames"], private["frames"], strict=True):
             assert set(frame) == {"observation", "action"}
             assert next(received) == [observation, frame["action"]]
             assert frame == {key: private_frame[key] for key in frame}
             assert set(private_frame["state"]) == set(observation["entities"])
+            assert all(
+                set(entity) == {"position", "covariance"}
+                for entity in frame["observation"]["entities"].values()
+            )
             assert set(private_frame["state"]["robot"]) == {"position", "velocity"}
             assert {"distance", "obstacle_clearance"} & private_frame.keys()
             observation = frame["observation"]
