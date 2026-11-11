@@ -5,8 +5,8 @@ import json
 import numpy as np
 import pytest
 
-from worldsmith.v2.evaluate import evaluate, json_state
-from worldsmith.v2.push_cube import PushController, make_env
+from worldsmith.benchmark.evaluate_push_cube import evaluate, json_state
+from worldsmith.benchmark.tasks.push_cube import PushController, make_env
 
 
 def test_native_reset_and_action():
@@ -48,6 +48,7 @@ def test_complete_episodes_and_artifacts(tmp_path):
     assert summary["render_backend"] == "sapien_cpu"
     assert summary["render_mode"] is None
     assert summary["max_episode_steps"] == 50
+    assert summary["controller"] == "worldsmith.benchmark.tasks.push_cube.PushController"
     assert summary["versions"]["mani-skill-nightly"] == "2026.8.2.400"
     assert summary["versions"]["sapien"] == "3.0.3"
     assert summary["seeds"] == [42, 43]

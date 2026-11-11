@@ -1166,7 +1166,7 @@ wheels = [
 ]
 
 [[package]]
-name = "worldsmith-v2"
+name = "worldsmith-maniskill"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

@@ -10,7 +10,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-from worldsmith.v2.push_cube import (
+from worldsmith.benchmark.tasks.push_cube import (
     ACTION_MODE,
     OBS_MODE,
     ROBOT,
@@ -86,7 +86,7 @@ def evaluate(episodes: int, seed: int, output: Path) -> dict:
             "render_backend": backend.render_backend,
             "render_mode": env.render_mode,
             "robot": ROBOT,
-            "controller": "worldsmith.v2.push_cube.PushController",
+            "controller": f"{PushController.__module__}.{PushController.__name__}",
             "versions": {
                 name: version(name)
                 for name in ("mani-skill-nightly", "sapien", "pin", "gymnasium", "numpy", "torch")

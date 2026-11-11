@@ -1,4 +1,4 @@
-# Worldsmith V2 · PushCube
+# ManiSkill PushCube
 
 Run ManiSkill's `PushCube-v1` with a Panda arm, PhysX CPU simulation, and a scripted Python controller.
 
@@ -13,12 +13,12 @@ brew install molten-vk vulkan-loader
 export VK_ICD_FILENAMES="$(brew --prefix molten-vk)/etc/vulkan/icd.d/MoltenVK_icd.json"
 export DYLD_LIBRARY_PATH="$(brew --prefix vulkan-loader)/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
-uv sync --project v2 --locked --python 3.11
-uv run --project v2 --locked --python 3.11 python -m worldsmith.v2.evaluate \
-  --episodes 3 --seed 42 --output runs/push-cube
+uv sync --project maniskill --locked --python 3.11
+uv run --project maniskill --locked --python 3.11 python -m worldsmith.benchmark.evaluate_push_cube \
+  --episodes 3 --seed 42 --output runs/push-cube-benchmark
 ```
 
-The V2 lock pins ManiSkill nightly `2026.8.2.400`, SAPIEN `3.0.3`, Pinocchio `4.1.0`, PyTorch `2.15.0`, Gymnasium `1.4.0`, and NumPy `2.4.6`. SAPIEN uses Pinocchio for the Panda's native CPU inverse kinematics. Use a new output path for each run. Episode seeds are consecutive integers starting at `--seed`. The opt-in integration checks cover same-seed resets in the tested stack. Trajectories can vary across simulator versions and hardware.
+The optional ManiSkill environment pins ManiSkill nightly `2026.8.2.400`, SAPIEN `3.0.3`, Pinocchio `4.1.0`, PyTorch `2.15.0`, Gymnasium `1.4.0`, and NumPy `2.4.6`. SAPIEN uses Pinocchio for the Panda's native CPU inverse kinematics. Use a new output path for each run. Episode seeds are consecutive integers starting at `--seed`. The opt-in integration checks cover same-seed resets in the tested stack. Trajectories can vary across simulator versions and hardware.
 
 ## Controller and scoring
 
@@ -34,6 +34,6 @@ The V2 lock pins ManiSkill nightly `2026.8.2.400`, SAPIEN `3.0.3`, Pinocchio `4.
 The example run succeeded on seeds 42, 43, and 44 in 16, 17, and 16 steps. Its episode trace was about 50 kB. This sample verifies the evaluation path.
 
 ```sh
-uv run --project v2 --locked --python 3.11 python -m pytest v2/tests/push_cube.py
+uv run --project maniskill --locked --python 3.11 python -m pytest tests/maniskill_push_cube.py
 uv run --locked python -m pytest
 ```
