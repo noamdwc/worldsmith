@@ -23,12 +23,26 @@ EPISODE_OUTCOMES = {
 class ResearchFeedback:
     summary: dict
     episodes: list[dict]
+    episode_indices: dict[tuple[int, str], int]
 
     def episode(self, seed: int, task: str) -> dict:
-        for episode in self.episodes:
-            if episode["seed"] == seed and episode["task"] == task:
-                return episode
-        raise ValueError(f"Seed {seed} was not in the latest development run for task {task!r}.")
+        index = self.episode_indices.get((seed, task))
+        if index is None:
+            raise ValueError(f"Seed {seed} was not in the latest development run for task {task!r}.")
+        return self.episodes[index]
+
+
+def public_observation(observation: dict) -> dict:
+    return {
+        "time": observation["time"],
+        "robot_id": observation["robot_id"],
+        "entities": {
+            name: {"position": measurement["position"], "covariance": measurement["covariance"]}
+            for name, measurement in observation["entities"].items()
+        },
+        "robot_max_speed": observation["robot_max_speed"],
+        "goal": observation["goal"],
+    }
 
 
 def publish_feedback(owner_results: Path, results: Path) -> ResearchFeedback:
@@ -42,19 +56,27 @@ def publish_feedback(owner_results: Path, results: Path) -> ResearchFeedback:
     }
 
     episodes = []
+    episode_indices = {}
     with (owner_results / "episodes.jsonl").open(encoding="utf-8") as trace:
         for line in trace:
             episode = json.loads(line)
+            seed = episode["seed"]
             task = episode["initial_observation"]["goal"]
+            episode_indices[seed, task] = len(episodes)
             episodes.append({
                 "task": task,
-                "seed": episode["seed"],
+                "seed": seed,
                 "steps": episode["steps"],
                 **{field: episode[field] for field in EPISODE_OUTCOMES[task]},
-                # These payloads are the public Observation and Action contract.
-                "initial_observation": episode["initial_observation"],
+                "initial_observation": public_observation(episode["initial_observation"]),
                 "frames": [
-                    {"observation": frame["observation"], "action": frame["action"]}
+                    {
+                        "observation": public_observation(frame["observation"]),
+                        "action": {
+                            "heading": frame["action"]["heading"],
+                            "throttle": frame["action"]["throttle"],
+                        },
+                    }
                     for frame in episode["frames"]
                 ],
             })
@@ -64,4 +86,4 @@ def publish_feedback(owner_results: Path, results: Path) -> ResearchFeedback:
     with (results / "episodes.jsonl").open("w", encoding="utf-8") as trace:
         for episode in episodes:
             trace.write(json.dumps(episode) + "\n")
-    return ResearchFeedback(summary, episodes)
+    return ResearchFeedback(summary, episodes, episode_indices)

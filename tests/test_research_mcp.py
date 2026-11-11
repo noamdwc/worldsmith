@@ -103,6 +103,28 @@ def test_evaluate_controller_saves_metrics_and_trace(workspace):
     assert research_mcp.get_episode_trace(0) == saved_episodes[0]
 
 
+def test_feedback_excludes_extra_observation_and_action_fields(workspace, tmp_path):
+    metrics = research_mcp.evaluate_controller()
+    expected = research_mcp.get_episode_trace(0)
+    owner_results = research_mcp.OWNER_RUNS / metrics["run_id"] / "results"
+    owner_trace = owner_results / "episodes.jsonl"
+    lines = owner_trace.read_text().splitlines(keepends=True)
+    episode = json.loads(lines[0])
+    episode["initial_observation"]["true_position"] = [0, 0]
+    frame = episode["frames"][0]
+    frame["observation"]["scoring_distance"] = 4.0
+    frame["observation"]["entities"]["target"]["true_velocity"] = [1, 0]
+    frame["action"]["diagnostic"] = "owner only"
+    lines[0] = json.dumps(episode) + "\n"
+    owner_trace.write_text("".join(lines))
+
+    results = tmp_path / "published"
+    feedback = publish_feedback(owner_results, results)
+    assert feedback.episode(0, "interception") == expected
+    with (results / "episodes.jsonl").open() as trace:
+        assert json.loads(next(trace)) == expected
+
+
 def test_feedback_refuses_heldout_results(tmp_path):
     (tmp_path / "summary.json").write_text(json.dumps({"split": "heldout", "seeds": list(range(1000, 1008))}))
     results = tmp_path / "public"
@@ -133,7 +155,7 @@ def test_archive_and_reset_preserve_both_result_views(workspace, tmp_path):
 
 
 def test_evaluation_timeout_keeps_previous_run(workspace, monkeypatch):
-    previous_feedback = research_mcp.ResearchFeedback({}, [])
+    previous_feedback = research_mcp.ResearchFeedback({}, [], {})
     monkeypatch.setattr(research_mcp, "latest_feedback", previous_feedback)
 
     def time_out(command, *, timeout, **kwargs):
