@@ -14,7 +14,7 @@ uv run --locked python -m pytest
 
 Each Make target evaluates one controller on the development split and uses a timestamped directory under `runs/`. To choose the directory, run `make chase OUTPUT=runs/chase-dev` with a path that does not yet exist.
 
-Each run writes `summary.json` and `episodes.jsonl` to a new output directory and prints the summary as JSON on stdout. Each trace contains the initial observation and the sequence of actions, resulting observations, and task measurements used by the scorer. `initial_observation.goal` identifies its task. Use `--task interception`, `--task navigation`, or `--task rendezvous` for independent evaluations; omitting `--task` preserves interception evaluation and its Chase default. Other tasks and `--task all` default to the shared starter in `autoresearch/controller.py`. Select any shared factory with `--controller module:make_controller`.
+Each owner CLI run writes `summary.json` and `episodes.jsonl` to a new output directory and prints the summary as JSON on stdout. Owner traces include observations, actions, true positions and velocities, and the per-step measurements used by the scorer. `initial_observation.goal` identifies the task. Use `--task interception`, `--task navigation`, or `--task rendezvous` for independent evaluations. Omitting `--task` selects interception and its Chase default. Other tasks and `--task all` default to the shared starter in `autoresearch/controller.py`. Select any shared factory with `--controller module:make_controller`.
 
 The combined benchmark (`worldsmith-v1`) uses 8 fixed seeds per task, 24 episodes total. `summary.json` includes per-task metrics under `tasks` and `aggregate_score`, the equal-weight average of the three success rates. Compare those task rows between runs to see improvements and regressions. Interception retains its capture metrics and also exposes `success_rate` in the combined summary.
 
@@ -41,9 +41,20 @@ uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 
 Run `make clear-autoresearch` to archive the current research work and reset the workspace to the shared starter controller and fresh journal. The command prints the archive location. Close the research session and wait for evaluations to finish before clearing.
 
-`evaluate_controller()` runs all three tasks together by default. `get_episode_trace(seed, task="interception")` selects a task and seed from the latest successful evaluation; the task can also be `"navigation"` or `"rendezvous"`. Each MCP evaluation saves its source under `runs/<run-id>/code/`, status in `evaluation.json`, and metrics and traces in `results/` when available. A record left in `preparing` or `running` indicates an interrupted evaluation. Inspect archived journals, final code, and evaluations directly in `research-history/<archive-id>/workspace/`. The archive's `metadata.json` records the Git commit and UTC timestamp at archive time.
-
 Reset checks that every current research file is present and unchanged in a completed archive before restoring the original controller and journal. If there are edits after archiving, archive again. Close the research session and wait for any evaluation to finish before running lifecycle commands.
+
+### Evaluation feedback and owner results
+
+`evaluate_controller()` runs the combined development split. `get_episode_trace(seed, task="interception")` selects a task and seed from the latest successful run in the current MCP session. Use `"navigation"` or `"rendezvous"` for the other tasks. Run held-out evaluations through the owner CLI with `--split heldout`.
+
+Each MCP evaluation writes two views with the same run ID and controller snapshot:
+
+- `autoresearch/runs/<run-id>/` stores the research snapshot, status, and public results. `results/episodes.jsonl` contains the initial observation, each action and resulting observation, and the episode outcome. `results/summary.json` contains aggregate and per-task metrics. Archives preserve these files under `research-history/<archive-id>/workspace/`.
+- `runs/owner/<run-id>/` stores the exact executed snapshot, status, raw results, and process diagnostics when available. The owner trace includes true positions and velocities at the initial state and every step, scoring measurements, and episode diagnostics. These files survive workspace resets.
+
+[research_feedback.py](worldsmith/research_feedback.py) defines which fields are published to the researcher. MCP serves traces from that published view. Controller errors include debugging details, and evaluator tracebacks are saved with owner results. A status of `preparing` or `running` indicates an interrupted evaluation.
+
+The directories and MCP tools separate the two views in the normal workflow. The local launcher uses the same OS account for the researcher and evaluator. Shell tools and controller code with filesystem read access can still read the owner files and evaluator source. This layout provides no OS-level confidentiality.
 
 ## Task and simulator boundary
 

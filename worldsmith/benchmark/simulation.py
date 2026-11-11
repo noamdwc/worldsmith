@@ -11,6 +11,10 @@ from worldsmith.api import Action, Observation, PositionMeasurement, Vec2
 TIME_STEP = 0.1
 
 
+class InvalidAction(ValueError):
+    """A controller command violates the Action contract."""
+
+
 @dataclass(frozen=True, slots=True)
 class Entity:
     position: Vec2
@@ -45,9 +49,15 @@ class Simulation:
         x, y = self._bodies[entity_id].position
         return x, y
 
+    def ground_truth(self) -> dict[str, dict[str, Vec2]]:
+        return {
+            name: {"position": tuple(body.position), "velocity": tuple(body.velocity)}
+            for name, body in self._bodies.items()
+        }
+
     def step(self, action: Action) -> Observation:
         if not math.isfinite(action.heading) or not 0 <= action.throttle <= 1:
-            raise ValueError("Action requires a finite heading and throttle in [0, 1]")
+            raise InvalidAction("Action requires a finite heading and throttle in [0, 1]")
 
         self._bodies[self._robot_id].velocity = pymunk.Vec2d(
             self._robot_max_speed * action.throttle, 0
