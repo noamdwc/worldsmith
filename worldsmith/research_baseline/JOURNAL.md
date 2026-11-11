@@ -15,5 +15,6 @@ Append an entry for each session and keep the entries for rejected candidates. U
 | Navigation | | | | Collision rate, mean final destination distance, mean minimum clearance |
 | Rendezvous | | | | Mean longest tracking seconds, mean distance, mean final distance |
 | Bouncing interception | | | | Mean closest distance |
+| Object pushing | | | | Mean final and minimum object distance, mean final object speed, mean contact seconds |
 
-The aggregate score is the mean of the four success rates. Keep only an aggregate improvement; reject ties. Preserve entries and artifacts for each attempted candidate iteration, including failed evaluations.
+The aggregate score is the mean of the five success rates. Keep only an aggregate improvement; reject ties. Preserve entries and artifacts for each attempted candidate iteration, including failed evaluations.

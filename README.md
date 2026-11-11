@@ -1,6 +1,6 @@
 # Worldsmith
 
-See [project.md](project.md) for the research idea. One shared Python controller receives the task name and sensor measurements at runtime. The combined benchmark tests interception, moving-obstacle navigation, rendezvous / tracking, and bouncing-object interception using noisy position measurements.
+See [project.md](project.md) for the research idea. One shared Python controller receives the task name and sensor measurements at runtime. The combined benchmark tests interception, moving-obstacle navigation, rendezvous / tracking, bouncing-object interception, and object pushing using noisy position measurements.
 
 ## Run the benchmark
 
@@ -14,11 +14,11 @@ uv run --locked python -m pytest
 
 Each Make target evaluates one controller on the development split and uses a timestamped directory under `runs/`. To choose the directory, run `make chase OUTPUT=runs/chase-dev` with a path that does not yet exist.
 
-Each owner CLI run writes `summary.json` and `episodes.jsonl` to a new output directory and prints the summary as JSON on stdout. Owner traces include observations, actions, true positions and velocities, and the per-step measurements used by the scorer. `initial_observation.goal` identifies the task. Use `--task interception`, `--task navigation`, `--task rendezvous`, or `--task bouncing_interception` for independent evaluations. Omitting `--task` selects interception and its Chase default. Other tasks and `--task all` default to the shared starter in `autoresearch/controller.py`. Select any shared factory with `--controller module:make_controller`.
+Each owner CLI run writes `summary.json` and `episodes.jsonl` to a new output directory and prints the summary as JSON on stdout. Owner traces include observations, actions, true positions and velocities, and the per-step measurements used by the scorer. `initial_observation.goal` identifies the task. Use `--task interception`, `--task navigation`, `--task rendezvous`, `--task bouncing_interception`, or `--task object_pushing` for independent evaluations. Omitting `--task` selects interception and its Chase default. Other tasks and `--task all` default to the shared starter in `autoresearch/controller.py`. Select any shared factory with `--controller module:make_controller`.
 
-The combined benchmark (`worldsmith-v2`) uses 8 fixed seeds per task, 32 episodes total. `summary.json` includes per-task metrics under `tasks` and `aggregate_score`, the equal-weight average of the four success rates. Compare those task rows between runs to see improvements and regressions. Both interception tasks report capture metrics and also expose `success_rate` in the combined summary.
+The combined benchmark (`worldsmith-v3`) uses 8 fixed seeds per task, 40 episodes total. `summary.json` includes per-task metrics under `tasks` and `aggregate_score`, the equal-weight average of the five success rates. Compare those task rows between runs to see improvements and regressions. Both interception tasks report capture metrics and also expose `success_rate` in the combined summary.
 
-Use `--split heldout` for owner comparisons after development, or `--seed 0` to replay a scenario (one episode per task with `--task all`). Development seeds are 0–7 and held-out seeds are 1000–1007 for the combined benchmark and independent navigation, rendezvous, and bouncing interception. Independent interception retains its original 32-seed splits (0–31 and 1000–1031) and benchmark ID `interception-v2`.
+Use `--split heldout` for owner comparisons after development, or `--seed 0` to replay a scenario (one episode per task with `--task all`). Development seeds are 0–7 and held-out seeds are 1000–1007 for the combined benchmark and independent navigation, rendezvous, bouncing interception, and object pushing. Independent interception retains its original 32-seed splits (0–31 and 1000–1031) and benchmark ID `interception-v2`.
 
 For interception, the robot and target move in an obstacle-free plane. The robot commands heading and throttle. The target moves at constant velocity sampled for each episode. Capture means coming within 0.3 simulation units of the target within 45 steps. `chase` aims at the latest measurement. `lead` estimates motion from recent measurements and aims ahead.
 
@@ -37,7 +37,7 @@ archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
 uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 ```
 
-`start` prepares the shared reactive starter controller and a fresh journal. It uses Chase for both interception goals. Navigation aims at the destination and turns away from nearby obstacles, while rendezvous approaches the current target position and slows down nearby. It uses no observation history, motion estimation, or prediction. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
+`start` prepares the shared reactive starter controller and a fresh journal. It uses Chase for both interception goals. Navigation aims at the destination and turns away from nearby obstacles, while rendezvous approaches the current target position and slows down nearby. For object pushing, it moves behind the object, pushes while aligned, and eases off near the destination. It uses no observation history, motion estimation, or prediction. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
 
 Run `make clear-autoresearch` to archive the current research work and reset the workspace to the shared starter controller and fresh journal. The command prints the archive location. Close the research session and wait for evaluations to finish before clearing.
 
@@ -45,7 +45,7 @@ Reset checks that every current research file is present and unchanged in a comp
 
 ### Evaluation feedback and owner results
 
-`evaluate_controller()` runs the combined development split. `get_episode_trace(seed, task="interception")` selects a task and seed from the latest successful run in the current MCP session. Use `"navigation"`, `"rendezvous"`, or `"bouncing_interception"` for the other tasks. Run held-out evaluations through the owner CLI with `--split heldout`.
+`evaluate_controller()` runs the combined development split. `get_episode_trace(seed, task="interception")` selects a task and seed from the latest successful run in the current MCP session. Use `"navigation"`, `"rendezvous"`, `"bouncing_interception"`, or `"object_pushing"` for the other tasks. Run held-out evaluations through the owner CLI with `--split heldout`.
 
 Each MCP evaluation writes two views with the same run ID and controller snapshot:
 
@@ -58,7 +58,7 @@ The directories and MCP tools separate the two views in the normal workflow. The
 
 ## Task and simulator boundary
 
-`benchmark/simulation.py` advances the bodies and produces observations. `benchmark/tasks/` defines the `Task` interface. Its `interception.py` defines the scene, objective, time budget, scoring, and the two task-specific reference controllers. The evaluator runs the episode and records the measurements and scores provided by the task. The CLI exposes all four tasks independently or together with `--task all`. Navigation scores destination arrival without obstacle contact; rendezvous scores 20 consecutive steps within a tracking radius. Bouncing interception uses a dynamic Pymunk circle and static arena walls with sampled restitution. It exposes the wall midpoints through the existing Observation contract.
+`benchmark/simulation.py` advances the bodies and produces observations. `benchmark/tasks/` defines the `Task` interface. Its `interception.py` defines the scene, objective, time budget, scoring, and the two task-specific reference controllers. The evaluator runs the episode and records the measurements and scores provided by the task. The CLI exposes all five tasks independently or together with `--task all`. Navigation scores destination arrival without obstacle contact; rendezvous scores 20 consecutive steps within a tracking radius. Bouncing interception uses a dynamic Pymunk circle and static arena walls with sampled restitution. It exposes the wall midpoints through the existing Observation contract. Object pushing uses a shaped kinematic robot and a dynamic circle, with Pymunk space damping modeling linear drag. Owner traces record per-step collision impulse, object speed, and distance to the destination.
 
 In traces, positions are under `observation.entities` and the controller's machine-readable task identifier is under `observation.goal`. The summary's `objective` field contains the human-readable `task.objective` (a mapping of task identifiers to objectives for combined runs). Read the [public task brief](autoresearch/TASKS.md) for success criteria, limits, and metrics. See the [World API](autoresearch/API.md) for the controller contract.
 

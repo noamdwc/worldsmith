@@ -1,6 +1,6 @@
-# Public four-task benchmark
+# Public five-task benchmark
 
-One shared `make_controller()` handles all four goals. The researcher can read these task descriptions and all development traces. The benchmark uses no runtime LLM and does not require task blindness.
+One shared `make_controller()` handles all five goals. The researcher can read these task descriptions and all development traces. The benchmark uses no runtime LLM and does not require task blindness.
 
 All tasks use 2D scenes and 0.1-second steps. The [World API](API.md) supplies noisy positions and measurement covariances, observation time, robot ID, maximum speed (2.4 units/second), and the goal identifier. Entity velocity is unobserved. The first three tasks use constant-velocity targets or obstacles.
 
@@ -36,12 +36,22 @@ The target position has 0.12 units of measurement noise (standard deviation per 
 
 Metrics: success rate (also called capture rate), captures, and mean closest distance.
 
+## Object pushing
+
+`observation.goal == "object_pushing"`. Move `object` within 0.25 units of the stationary `destination` at a speed of at most 0.15 units/second for 8 consecutive control steps (0.8 seconds). The episode allows 140 steps (14 seconds). Leaving the radius or exceeding the speed limit resets the consecutive-step count.
+
+The object starts at rest, 3–5 units from the destination. The robot starts on the destination side of the object and can push it by contact between their circles (radii 0.22 and 0.34 units, respectively). The plane is open. The object retains momentum after release and slows under linear drag. Mass, contact friction, and drag vary across episodes.
+
+Position noise has a standard deviation per axis of 0.02 units for the robot and 0.04 units for the object. The destination is exact. Velocity, contact impulse, and physical parameters are unobserved. Repositioning around the object, slowing before release, and correcting after a push can help it settle.
+
+Metrics include success rate, mean final and minimum object-to-destination distances, mean final object speed, and mean time spent transferring collision impulse.
+
 ## Evaluation and splits
 
-`evaluate_controller()` evaluates all four tasks together on 8 fixed development seeds per task (0–7), for 32 episodes total. Scenarios and noisy measurements are deterministic for a given task, seed, and action sequence. Every episode starts with a fresh controller from the same factory.
+`evaluate_controller()` evaluates all five tasks together on 8 fixed development seeds per task (0–7), for 40 episodes total. Scenarios and noisy measurements are deterministic for a given task, seed, and action sequence. Every episode starts with a fresh controller from the same factory.
 
 Each development trace contains the initial observation, every action and resulting observation, and the episode outcome. Use the positions in the observations to reconstruct what the controller could infer at each step. The summary reports task-level performance metrics.
 
-The aggregate score is the equally weighted average of the four task success rates. Compare per-task results to see improvements and regressions; a higher aggregate can hide a regression on one task. Secondary metrics are diagnostic and are not normalized or included in the score.
+The aggregate score is the equally weighted average of the five task success rates. Compare per-task results to see improvements and regressions; a higher aggregate can hide a regression on one task. Secondary metrics are diagnostic and are not normalized or included in the score.
 
 The owner can evaluate held-out seeds (1000–1007). Researchers use development feedback only. Independent interception evaluation preserves its original 32-seed splits (0–31 and 1000–1031), so its full-split results are not directly comparable with the combined run's 8-seed subset.

@@ -9,6 +9,7 @@ INTERCEPTION_GOAL = "interception"
 BOUNCING_INTERCEPTION_GOAL = "bouncing_interception"
 NAVIGATION_GOAL = "navigation"
 RENDEZVOUS_GOAL = "rendezvous"
+OBJECT_PUSHING_GOAL = "object_pushing"
 
 
 @dataclass(frozen=True, slots=True)
