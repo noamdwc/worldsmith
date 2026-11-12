@@ -1,72 +1,46 @@
-"""Run controllers against task-defined scenes and write episode traces."""
+"""Preserve the V1 research API and trace format using the shared evaluator."""
 
-import json
-from dataclasses import asdict
+from functools import partial
 from typing import TextIO
 
 from worldsmith.api import ControllerFactory
-from worldsmith.benchmark.simulation import InvalidAction
+from worldsmith.benchmark.evaluator import evaluate_episodes
+from worldsmith.benchmark.pymunk_adapter import ControllerError as ControllerError
+from worldsmith.benchmark.pymunk_adapter import PymunkAdapter
+from worldsmith.benchmark.results import write_episode
 from worldsmith.benchmark.tasks.constants import TASKS
 from worldsmith.benchmark.tasks.task import Task
 
 
-class ControllerError(RuntimeError):
-    """An error at the controller boundary that can be reported to the researcher."""
-
-
 def evaluate(task: Task, factory: ControllerFactory, seeds: list[int], trace: TextIO) -> dict:
-    episodes = []
-    for seed in seeds:
-        world = task.start(seed)
-        try:
-            controller = factory()
-        except Exception as exc:
-            raise ControllerError(f"Controller setup: {type(exc).__name__}: {exc}") from exc
-        observation = world.initial_observation
-        initial_observation = asdict(observation)
-        initial_state = world.ground_truth()
-        measurements = [task.measure(world)]
-        frames = []
-        success = False
+    adapter = PymunkAdapter(task)
 
-        for step in range(task.step_limit):
-            try:
-                action = controller(observation)
-            except Exception as exc:
-                raise ControllerError(
-                    f"{observation.goal}, seed {seed}, step {step + 1}: {type(exc).__name__}: {exc}"
-                ) from exc
-            try:
-                observation = world.step(action)
-            except InvalidAction as exc:
-                raise ControllerError(
-                    f"{observation.goal}, seed {seed}, step {step + 1}: {exc}"
-                ) from exc
-            measurement = task.measure(world)
-            measurements.append(measurement)
-            frames.append({
-                "action": {"heading": action.heading, "throttle": action.throttle},
-                "observation": asdict(observation),
-                "state": world.ground_truth(),
-                **measurement,
-            })
-            success = task.succeeded(measurements)
-            if success:
-                break
-
-        metrics = task.episode_metrics(measurements, success)
-        episodes.append(metrics)
-        trace.write(json.dumps({
-            "seed": seed,
+    def record(episode: dict, metrics: dict) -> None:
+        # V1 frames pair the action with its resulting observation and state.
+        steps = episode["steps"]
+        observations = [step["observation"] for step in steps[1:]]
+        observations.append(episode["final_observation"])
+        initial = episode["reset_info"]
+        write_episode(trace, {
+            "seed": episode["seed"],
             **metrics,
-            "steps": len(frames),
-            "initial_observation": initial_observation,
-            "initial_state": initial_state,
-            "initial_measurements": measurements[0],
-            "frames": frames,
-        }) + "\n")
+            "steps": episode["length"],
+            "initial_observation": steps[0]["observation"],
+            "initial_state": initial["state"],
+            "initial_measurements": initial["measurements"],
+            "frames": [
+                {
+                    "action": step["action"],
+                    "observation": observation,
+                    "state": step["info"]["state"],
+                    **step["info"]["measurements"],
+                }
+                for step, observation in zip(steps, observations, strict=True)
+            ],
+        }, legacy=True)
 
-    return {"episodes": len(episodes), **task.summarize(episodes)}
+    episodes, summary = evaluate_episodes(adapter, partial(adapter.make_controller, factory), seeds, record)
+    return {"episodes": len(episodes), **summary}
 
 
 def evaluate_all(

@@ -14,8 +14,8 @@ export VK_ICD_FILENAMES="$(brew --prefix molten-vk)/etc/vulkan/icd.d/MoltenVK_ic
 export DYLD_LIBRARY_PATH="$(brew --prefix vulkan-loader)/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
 uv sync --project maniskill --locked --python 3.11
-uv run --project maniskill --locked --python 3.11 python -m worldsmith.benchmark.evaluate_push_cube \
-  --episodes 3 --seed 42 --output runs/push-cube-benchmark
+uv run --project maniskill --locked --python 3.11 python -m worldsmith.benchmark.evaluator \
+  --task push_cube --episodes 3 --seed 42 --output runs/push-cube-benchmark
 ```
 
 The optional ManiSkill environment pins ManiSkill nightly `2026.8.2.400`, SAPIEN `3.0.3`, Pinocchio `4.1.0`, PyTorch `2.15.0`, Gymnasium `1.4.0`, and NumPy `2.4.6`. SAPIEN uses Pinocchio for the Panda's native CPU inverse kinematics. Use a new output path for each run. Episode seeds are consecutive integers starting at `--seed`. The opt-in integration checks cover same-seed resets in the tested stack. Trajectories can vary across simulator versions and hardware.
