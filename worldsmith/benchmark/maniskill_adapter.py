@@ -7,6 +7,8 @@ import gymnasium as gym
 import mani_skill.envs  # Registers native tasks with Gymnasium.
 import numpy as np
 
+from worldsmith.benchmark.runner import InvalidAction
+
 
 def make_env(task_id: str, robot: str, control_mode: str) -> gym.Env:
     return gym.make(
@@ -31,7 +33,7 @@ class ManiSkillAdapter:
     def encode_action(self, action: np.ndarray) -> list:
         space = self.env.action_space
         if not isinstance(action, np.ndarray) or not space.contains(action):
-            raise ValueError(f"Controller action must be a NumPy array in {space}: {action}")
+            raise InvalidAction(f"Controller action must be a NumPy array in {space}")
         return action.tolist()
 
     def step(self, action: np.ndarray):
@@ -55,6 +57,7 @@ class ManiSkillAdapter:
             "max_episode_steps": task.max_episode_steps,
             "obs_mode": native.obs_mode,
             "action_mode": native.control_mode,
+            "action_shape": list(self.env.action_space.shape),
             "reward_mode": native.reward_mode,
             "sim_backend": backend.sim_backend,
             "render_backend": backend.render_backend,

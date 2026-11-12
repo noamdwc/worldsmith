@@ -1,8 +1,10 @@
-# Public five-task benchmark
+# Worldsmith development tasks
 
-One shared `make_controller()` handles all five goals. The researcher can read these task descriptions and all development traces. The benchmark uses no runtime LLM and does not require task blindness.
+One shared `make_controller(task=...)` handles all 11 tasks. The researcher can read these task descriptions and all development traces. The benchmark uses no runtime LLM and does not require task blindness.
 
-All tasks use 2D scenes and 0.1-second steps. The [World API](API.md) supplies noisy positions and measurement covariances, observation time, robot ID, maximum speed (2.4 units/second), and the goal identifier. Entity velocity is unobserved. The first three tasks use constant-velocity targets or obstacles.
+## Pymunk
+
+These five tasks use 2D scenes and 0.1-second steps. The [World API](API.md) supplies noisy positions and measurement covariances, observation time, robot ID, maximum speed (2.4 units/second), and the goal identifier. Entity velocity is unobserved. The first three tasks use constant-velocity targets or obstacles.
 
 ## Moving-target interception
 
@@ -46,12 +48,41 @@ Position noise has a standard deviation per axis of 0.02 units for the robot and
 
 Metrics include success rate, mean final and minimum object-to-destination distances, mean final object speed, and mean time spent transferring collision impulse.
 
+## ManiSkill
+
+The six manipulation tasks use native ManiSkill success flags and the structured `state_dict` contract in [API.md](API.md). Episodes stop on native termination or truncation. Success rate is the published metric for each task.
+
+| Task | Native objective | Task observations in `extra` | Mode | Action size | Step limit |
+| --- | --- | --- | --- | ---: | ---: |
+| `push_cube` | Push the cube to the goal | TCP pose, object pose, goal position | `pd_ee_delta_pos` | 4 | 50 |
+| `pick_cube` | Pick up the cube and bring it to the goal | TCP pose, object pose, goal position, grasp flag | `pd_ee_delta_pos` | 4 | 50 |
+| `stack_cube` | Stack the first cube on the second and release it | TCP pose and both cube poses | `pd_ee_delta_pos` | 4 | 50 |
+| `peg_insertion_side` | Insert the peg head into the hole from the side | TCP pose, peg pose, hole pose, peg dimensions | `pd_ee_delta_pose` | 7 | 100 |
+| `pull_cube` | Pull the cube toward its goal on the robot side | TCP pose, object pose, goal position | `pd_ee_delta_pos` | 4 | 50 |
+| `push_t` | Push the T into alignment with the goal outline | TCP pose, object pose, goal position | `pd_ee_delta_pos` | 3 | 100 |
+
+PushT scores overlap, so position and orientation both matter. PegInsertionSide samples peg and hole geometry at reset and evaluates the peg head in the hole's frame.
+
 ## Evaluation and splits
 
-`evaluate_controller()` evaluates all five tasks together on 8 fixed development seeds per task (0–7), for 40 episodes total. Scenarios and noisy measurements are deterministic for a given task, seed, and action sequence. Every episode starts with a fresh controller from the same factory.
+`evaluate_controller()` evaluates `worldsmith-all-v1` on 8 fixed development seeds per task (0–7), for 88 episodes. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the 11 task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
 
-Each development trace contains the initial observation, every action and resulting observation, and the episode outcome. Use the positions in the observations to reconstruct what the controller could infer at each step. The summary reports task-level performance metrics.
+`get_episode_trace(seed, task)` accepts every task ID above and returns public feedback from the latest successful development run. The owner maintains held-out seeds separately. Researchers use development feedback for every candidate decision.
 
-The aggregate score is the equally weighted average of the five task success rates. Compare per-task results to see improvements and regressions; a higher aggregate can hide a regression on one task. Secondary metrics are diagnostic and are not normalized or included in the score.
+### Starter development scores
 
-The owner can evaluate held-out seeds (1000–1007). Researchers use development feedback only. Independent interception evaluation preserves its original 32-seed splits (0–31 and 1000–1031), so its full-split results are not directly comparable with the combined run's 8-seed subset.
+The starter succeeded in 53 of 88 episodes for a `worldsmith-all-v1` score of 60.23%.
+
+| Task | Successes / 8 |
+| --- | ---: |
+| `interception` | 6 |
+| `navigation` | 5 |
+| `rendezvous` | 6 |
+| `bouncing_interception` | 2 |
+| `object_pushing` | 4 |
+| `push_cube` | 8 |
+| `pick_cube` | 8 |
+| `stack_cube` | 6 |
+| `peg_insertion_side` | 0 |
+| `pull_cube` | 8 |
+| `push_t` | 0 |

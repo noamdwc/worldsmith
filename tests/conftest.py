@@ -14,7 +14,6 @@ def research_metrics():
         return evaluate(
             {name: PymunkAdapter(task) for name, task in tasks.items()},
             factory, seeds, partial(write_research_episode, trace),
-            prepare_controller=PymunkAdapter.make_controller,
             summarize=partial(summarize_research, combined=combined),
         )
 

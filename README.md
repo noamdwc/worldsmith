@@ -47,6 +47,8 @@ For interception, the robot and target move in an obstacle-free plane. The robot
 
 Run `make autoresearch` from the repo root or invoke [scripts/run-autoresearch.sh](scripts/run-autoresearch.sh) directly. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
 
+On Apple Silicon, prepare the pinned Python 3.11 environment and Vulkan loader using the [ManiSkill setup](maniskill/README.md). Export `VK_ICD_FILENAMES` and `DYLD_LIBRARY_PATH` as shown there before launching Codex. The MCP server runs Pymunk under its Python 3.12 interpreter and defaults to `maniskill/.venv/bin/python` for ManiSkill. Set `WORLDSMITH_MANISKILL_PYTHON` to an absolute interpreter path to use another installation of the pinned environment.
+
 ### Session lifecycle
 
 For a manually launched session, run these lifecycle commands from the repo root:
@@ -58,7 +60,7 @@ archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
 uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 ```
 
-`start` prepares the shared reactive starter controller and a fresh journal. It uses Chase for both interception goals. Navigation aims at the destination and turns away from nearby obstacles, while rendezvous approaches the current target position and slows down nearby. For object pushing, it moves behind the object, pushes while aligned, and eases off near the destination. It uses no observation history, motion estimation, or prediction. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
+`start` prepares the shared reactive starter controller and a fresh journal. It uses Chase for both interception goals. Navigation aims at the destination and turns away from nearby obstacles, while rendezvous approaches the current target position and slows down nearby. For object pushing, it moves behind the object, pushes while aligned, and eases off near the destination. The ManiSkill branches use simple waypoint and grasp routines with the public state observations. If the workspace contains research changes or results from earlier work, archive and reset it before starting.
 
 Run `make clear-autoresearch` to archive the current research work and reset the workspace to the shared starter controller and fresh journal. The command prints the archive location. Close the research session and wait for evaluations to finish before clearing.
 
@@ -66,16 +68,16 @@ Reset checks that every current research file is present and unchanged in a comp
 
 ### Evaluation feedback and owner results
 
-`evaluate_controller()` runs the combined development split. `get_episode_trace(seed, task="interception")` selects a task and seed from the latest successful run in the current MCP session. Use `"navigation"`, `"rendezvous"`, `"bouncing_interception"`, or `"object_pushing"` for the other tasks. Run held-out evaluations through the owner CLI with `--split heldout`.
+Each `evaluate_controller()` call runs `worldsmith-all-v1`, the 11-task development suite, with seeds 0–7 per task. Two local Python processes use the same controller snapshot and the same evaluator and runner. The aggregate is the equal-weight mean of the 11 success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
 
-Each MCP evaluation writes two views with the same run ID and controller snapshot:
+`get_episode_trace(seed, task)` selects one of the 88 episodes from the latest successful MCP evaluation. Each run writes two views with the same run ID:
 
-- `autoresearch/runs/<run-id>/` stores the research snapshot, status, and public results. `results/episodes.jsonl` contains the initial observation, each action and resulting observation, and the episode outcome. `results/summary.json` contains aggregate and per-task metrics. Archives preserve these files under `research-history/<archive-id>/workspace/`.
-- `runs/owner/<run-id>/` stores the exact executed snapshot, status, raw results, and process diagnostics when available. The owner trace includes true positions and velocities at the initial state and every step, scoring measurements, and episode diagnostics. These files survive workspace resets.
+- `autoresearch/runs/<run-id>/` contains a copy of the snapshot, status, and public results. `results/summary.json` records configuration, runtime, aggregate, and per-task scores and deltas. `results/episodes.jsonl` contains controller-visible observations and actions and permitted outcomes. Archives preserve these files under `research-history/<archive-id>/workspace/`.
+- `runs/owner/<run-id>/` contains the executed snapshot, raw artifacts organized by runtime and task, and process logs. These files survive workspace resets.
 
-[research_feedback.py](worldsmith/research_feedback.py) defines which fields are published to the researcher. MCP serves traces from that published view. Controller errors include debugging details, and evaluator tracebacks are saved with owner results. A status of `preparing` or `running` indicates an interrupted evaluation.
+The publisher exposes only development feedback. Evaluator tracebacks and raw simulator diagnostics stay in owner files. A status of `preparing` or `running` indicates an interrupted evaluation. The local launcher uses the same OS account for the researcher and evaluator, so the directory layout and MCP allowlist separate feedback in normal use. Restrict OS access separately if running untrusted controller code.
 
-The directories and MCP tools separate the two views in the normal workflow. The local launcher uses the same OS account for the researcher and evaluator. Shell tools and controller code with filesystem read access can still read the owner files and evaluator source. This layout provides no OS-level confidentiality.
+For held-out checks on the full suite, store a private JSON file outside the research workspace mapping each of the 11 task IDs to the first seed of its own disjoint eight-seed range. From an archived run's `code/` directory, set `PYTHONPATH` to the repository root. Run `python -B -m worldsmith.research_evaluation GROUP OUTPUT --heldout-seed-file SEED_FILE` with the corresponding pinned interpreter for each group (`pymunk` and `maniskill`). Use absolute paths to private output directories and the seed file. The historical Pymunk CLI still supports `--split heldout`.
 
 ## Task and simulator boundary
 

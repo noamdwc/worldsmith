@@ -9,8 +9,9 @@ from pathlib import Path
 
 from worldsmith.benchmark.evaluator import evaluate
 from worldsmith.benchmark.pymunk_adapter import (
-    ControllerError, PymunkAdapter, summarize_research, write_research_episode,
+    PymunkAdapter, summarize_research, write_research_episode,
 )
+from worldsmith.benchmark.runner import ControllerError
 from worldsmith.benchmark.tasks.constants import (
     BENCHMARKS, COMBINED_BENCHMARK, COMBINED_SPLITS, TASKS, TASK_SPLITS,
 )
@@ -84,7 +85,6 @@ def main():
             metrics = evaluate(
                 {name: PymunkAdapter(TASKS[name]()) for name in task_names},
                 factory, seeds, partial(write_research_episode, trace),
-                prepare_controller=PymunkAdapter.make_controller,
                 summarize=partial(summarize_research, combined=combined),
             )
     except ControllerError as exc:

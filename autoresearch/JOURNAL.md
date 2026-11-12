@@ -4,7 +4,7 @@ Append an entry for each session and keep the entries for rejected candidates. U
 
 ## Session template
 
-- **Date and baseline** — shared controller, run directory, aggregate score, and the per-task table below. The combined development benchmark has 8 episodes per task.
+- **Date and baseline** — shared controller, run directory, aggregate score, and the per-task table below. Record the `worldsmith-all-v1` benchmark ID, snapshot hash and evaluation runtime. The development suite has 8 episodes per task.
 - **Iteration** — number, hypothesis, evidence from a trace identified by task and seed, and focused code change. Note any expected benefit across tasks.
 - **Result and decision** — run directory and aggregate score or error; report each task’s success-rate delta from the retained controller, secondary metrics, and keep/reject decision. Highlight regressions even when aggregate score improves.
 - **Findings** — useful discoveries, remaining uncertainty, and baseline versus final aggregate and per-task results. Label these as development results.
@@ -16,5 +16,11 @@ Append an entry for each session and keep the entries for rejected candidates. U
 | Rendezvous | | | | Mean longest tracking seconds, mean distance, mean final distance |
 | Bouncing interception | | | | Mean closest distance |
 | Object pushing | | | | Mean final and minimum object distance, mean final object speed, mean contact seconds |
+| PushCube | | | | |
+| PickCube | | | | |
+| StackCube | | | | |
+| PegInsertionSide | | | | |
+| PullCube | | | | |
+| PushT | | | | |
 
-The aggregate score is the mean of the five success rates. Keep only an aggregate improvement; reject ties. Preserve entries and artifacts for each attempted candidate iteration, including failed evaluations.
+The aggregate score is the mean of the 11 success rates. Keep only an aggregate improvement; reject ties. Preserve entries and artifacts for each attempted candidate iteration, including failed evaluations.

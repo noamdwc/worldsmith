@@ -4,13 +4,17 @@ import json
 import os
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from worldsmith.benchmark.evaluator import evaluate_to_directory
 from worldsmith.benchmark.results import snapshot
-from worldsmith.benchmark.task_catalog import TASK_CATALOG
+from worldsmith.benchmark.runner import ControllerError
+from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
+from worldsmith.research_baseline.controller import make_controller
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TASKS = [
@@ -119,3 +123,28 @@ def test_native_manipulation(
     assert episode["success"] is final["info"]["success"][0] is False
     assert native_metric in final["info"]
     assert episode["final_observation"]["extra"][object_pose]
+
+
+@pytest.mark.parametrize("task", TASK_GROUPS["maniskill"])
+def test_shared_starter_with_native_observations(task, tmp_path):
+    open_adapter, _ = TASK_CATALOG[task]()
+    output = tmp_path / "run"
+    summary = evaluate_to_directory(
+        open_adapter, partial(make_controller, task=task), 1, 0, output, task=task,
+    )
+    episode = json.loads((output / "episodes.jsonl").read_text())
+    final_step = episode["steps"][-1]
+    assert final_step["terminated"] or final_step["truncated"]
+    assert episode["success"] is final_step["info"]["success"][0]
+    assert summary["success_rate"] == float(episode["success"])
+    assert set(episode["steps"][0]["observation"]) == {"agent", "extra"}
+    assert len(final_step["action"]) == summary["action_shape"][0]
+
+
+def test_invalid_shared_controller_action_fails_native_evaluation(tmp_path):
+    open_adapter, _ = TASK_CATALOG["push_cube"]()
+    with pytest.raises(ControllerError, match="push_cube, seed 0, step 1: Controller action"):
+        evaluate_to_directory(
+            open_adapter, lambda: lambda observation: np.full(4, np.nan, dtype=np.float32),
+            1, 0, tmp_path / "run", task="push_cube",
+        )
