@@ -3,11 +3,14 @@
 import argparse
 import json
 import os
+from functools import partial
 from importlib import import_module
 from pathlib import Path
 
-from worldsmith.benchmark.evaluator import evaluate_all, evaluate_v1
-from worldsmith.benchmark.pymunk_adapter import ControllerError
+from worldsmith.benchmark.evaluator import evaluate
+from worldsmith.benchmark.pymunk_adapter import (
+    ControllerError, PymunkAdapter, summarize_research, write_research_episode,
+)
 from worldsmith.benchmark.tasks.constants import (
     BENCHMARKS, COMBINED_BENCHMARK, COMBINED_SPLITS, TASKS, TASK_SPLITS,
 )
@@ -49,13 +52,14 @@ def main():
     else:
         split = None
         seeds = [args.seed]
-    task = None if args.task == "all" else TASKS[args.task]()
-    if task is None:
+    combined = args.task == "all"
+    task_names = TASKS if combined else (args.task,)
+    if combined:
         benchmark = COMBINED_BENCHMARK
         objective = {name: task_class.objective for name, task_class in TASKS.items()}
     else:
         benchmark = BENCHMARKS[args.task]
-        objective = task.objective
+        objective = TASKS[args.task].objective
     config = {
         "benchmark": benchmark,
         "objective": objective,
@@ -77,10 +81,12 @@ def main():
             if not callable(factory):
                 raise ControllerError(f"{args.controller} is not a callable controller factory")
         with (args.output / "episodes.jsonl").open("w", encoding="utf-8") as trace:
-            if task is None:
-                metrics = evaluate_all(factory, seeds, trace)
-            else:
-                metrics = evaluate_v1(task, factory, seeds, trace)
+            metrics = evaluate(
+                {name: PymunkAdapter(TASKS[name]()) for name in task_names},
+                factory, seeds, partial(write_research_episode, trace),
+                prepare_controller=PymunkAdapter.make_controller,
+                summarize=partial(summarize_research, combined=combined),
+            )
     except ControllerError as exc:
         # Keep the controller diagnostic separate from the private traceback.
         (args.output / "controller_error.txt").write_text(str(exc) + "\n", encoding="utf-8")

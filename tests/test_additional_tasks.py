@@ -13,7 +13,6 @@ from worldsmith.api import (
     BOUNCING_INTERCEPTION_GOAL, INTERCEPTION_GOAL, OBJECT_PUSHING_GOAL,
     Action, Observation, PositionMeasurement,
 )
-from worldsmith.benchmark.evaluator import evaluate_all, evaluate_v1
 from worldsmith.benchmark.simulation import Entity, Simulation
 from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS, TASKS, TASK_SPLITS
 from worldsmith.benchmark.tasks.navigation import COLLISION_DISTANCE, Navigation
@@ -21,7 +20,7 @@ from worldsmith.benchmark.tasks.rendezvous import HOLD_STEPS, TRACKING_RADIUS, R
 
 
 @pytest.mark.parametrize("goal", TASKS)
-def test_deterministic_episodes_and_goal_propagation(goal):
+def test_deterministic_episodes_and_goal_propagation(goal, research_metrics):
     task = TASKS[goal]()
     first_trace, replay_trace = StringIO(), StringIO()
     seen_goals = []
@@ -38,8 +37,8 @@ def test_deterministic_episodes_and_goal_propagation(goal):
 
         return control
 
-    first = evaluate_v1(task, factory, [0, 1], first_trace)
-    replay = evaluate_v1(task, make_controller, [0, 1], replay_trace)
+    first = research_metrics({goal: task}, factory, [0, 1], first_trace)
+    replay = research_metrics({goal: task}, make_controller, [0, 1], replay_trace)
     assert first == replay
     assert first_trace.getvalue() == replay_trace.getvalue()
     assert set(seen_goals) == {goal}
@@ -97,17 +96,17 @@ def test_rendezvous_requires_consecutive_tracking_steps():
 
 
 @pytest.mark.parametrize("goal", ["navigation", "rendezvous", OBJECT_PUSHING_GOAL])
-def test_failed_tasks_run_to_their_episode_limit(goal):
+def test_failed_tasks_run_to_their_episode_limit(goal, research_metrics):
     trace = StringIO()
     task = TASKS[goal]()
-    metrics = evaluate_v1(task, lambda: lambda observation: Action(0, 0), [0], trace)
+    metrics = research_metrics({goal: task}, lambda: lambda observation: Action(0, 0), [0], trace)
     episode = json.loads(trace.getvalue())
     assert metrics["success_rate"] == 0
     assert episode["steps"] == task.step_limit
     assert not episode["success"]
 
 
-def test_combined_evaluation_matches_independent_results_and_resets_controller():
+def test_combined_evaluation_matches_independent_results_and_resets_controller(research_metrics):
     seeds = list(COMBINED_SPLITS["dev"])
     trace = StringIO()
     factory_calls = 0
@@ -117,26 +116,28 @@ def test_combined_evaluation_matches_independent_results_and_resets_controller()
         factory_calls += 1
         return make_controller()
 
-    combined = evaluate_all(factory, seeds, trace)
+    combined = research_metrics(
+        {name: task() for name, task in TASKS.items()}, factory, seeds, trace, combined=True
+    )
     assert factory_calls == combined["episodes"] == 40
     rates = []
     for goal, task_factory in TASKS.items():
-        independent = evaluate_v1(task_factory(), make_controller, seeds, StringIO())
+        independent = research_metrics({goal: task_factory()}, make_controller, seeds, StringIO())
         if goal in (INTERCEPTION_GOAL, BOUNCING_INTERCEPTION_GOAL):
             independent["success_rate"] = independent["capture_rate"]
         assert combined["tasks"][goal] == independent
         rates.append(independent["success_rate"])
     assert combined["aggregate_score"] == sum(rates) / 5
     episodes = [json.loads(line) for line in trace.getvalue().splitlines()]
-    assert {(item["initial_observation"]["goal"], item["seed"]) for item in episodes} == {
+    assert [(item["initial_observation"]["goal"], item["seed"]) for item in episodes] == [
         (goal, seed) for goal in TASKS for seed in seeds
-    }
+    ]
     for goal in (INTERCEPTION_GOAL, "navigation", "rendezvous"):
         assert 0 < combined["tasks"][goal]["success_rate"] < 1
 
 
 @pytest.mark.parametrize("split", COMBINED_SPLITS)
-def test_combined_metrics_and_traces_match_kinematic_reference(split, monkeypatch):
+def test_combined_metrics_and_traces_match_kinematic_reference(split, monkeypatch, research_metrics):
     # Keep the pre-physics integration and sensing as a reference so exact trace
     # equality can be checked on the current platform without large fixtures.
     class KinematicReference:
@@ -190,12 +191,16 @@ def test_combined_metrics_and_traces_match_kinematic_reference(split, monkeypatc
 
     seeds = list(COMBINED_SPLITS[split])
     actual, reference = StringIO(), StringIO()
-    actual_metrics = evaluate_all(make_controller, seeds, actual)
+    actual_metrics = research_metrics(
+        {name: task() for name, task in TASKS.items()}, make_controller, seeds, actual, combined=True
+    )
     monkeypatch.delitem(TASKS, BOUNCING_INTERCEPTION_GOAL)
     monkeypatch.delitem(TASKS, OBJECT_PUSHING_GOAL)
     for task_factory in TASKS.values():
         monkeypatch.setattr(sys.modules[task_factory.__module__], "Simulation", KinematicReference)
-    reference_metrics = evaluate_all(make_controller, seeds, reference)
+    reference_metrics = research_metrics(
+        {name: task() for name, task in TASKS.items()}, make_controller, seeds, reference, combined=True
+    )
     assert {goal: actual_metrics["tasks"][goal] for goal in TASKS} == reference_metrics["tasks"]
     original_episodes = [
         line for line in actual.getvalue().splitlines(keepends=True)

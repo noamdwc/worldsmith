@@ -202,15 +202,40 @@ def test_evaluation_timeout_keeps_previous_run(workspace, monkeypatch):
     assert (run / "code/autoresearch/controller.py").is_file()
 
 
-def test_evaluation_reports_subprocess_error(workspace):
+@pytest.mark.parametrize(("source", "diagnostic"), [
+    ("raise ValueError('import failure')\n", "ValueError: import failure"),
+    (
+        "def make_controller(): raise ValueError('setup failure')\n",
+        "Controller setup: ValueError: setup failure",
+    ),
+    (
+        "def control(observation): raise RuntimeError('action failure')\n"
+        "def make_controller(): return control\n",
+        "interception, seed 0, step 1: RuntimeError: action failure",
+    ),
+    (
+        "from worldsmith.api import Action\n"
+        "def make_controller(): return lambda observation: Action(0, 2)\n",
+        "interception, seed 0, step 1: Action requires a finite heading and throttle in [0, 1]",
+    ),
+], ids=["import", "setup", "action", "invalid-throttle"])
+def test_evaluation_reports_controller_errors_without_publishing_tracebacks(workspace, source, diagnostic):
     controller = workspace / "controller.py"
-    controller.write_text("raise ValueError('invalid action')\n")
+    controller.write_text(source)
 
-    with pytest.raises(RuntimeError, match="Evaluation failed: ValueError: invalid action"):
+    with pytest.raises(RuntimeError) as failure:
         research_mcp.evaluate_controller()
     [run] = (workspace / "runs").iterdir()
-    assert json.loads((run / "evaluation.json").read_text())["status"] == "failed"
+    assert str(failure.value) == f"Evaluation failed: {diagnostic}. Run: {run.name}"
+    status = json.loads((run / "evaluation.json").read_text())
+    assert status["status"] == "failed"
+    assert status["error"] == f"Evaluation failed: {diagnostic}"
     assert (run / "code/autoresearch/controller.py").read_bytes() == controller.read_bytes()
+    assert not (run / "results").exists()
+    assert not (run / "stderr.txt").exists()
+    owner = research_mcp.OWNER_RUNS / run.name
+    assert (owner / "results/controller_error.txt").read_text() == diagnostic + "\n"
+    assert "Traceback" in (owner / "stderr.txt").read_text()
 
 
 def test_evaluator_stderr_stays_private(workspace, monkeypatch):

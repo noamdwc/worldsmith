@@ -5,7 +5,6 @@ from io import StringIO
 import pytest
 
 from worldsmith.api import Action
-from worldsmith.benchmark.evaluator import evaluate_v1
 from worldsmith.benchmark.tasks.bouncing_interception import BouncingInterception
 from worldsmith.benchmark.tasks.interception import CAPTURE_RADIUS
 
@@ -46,13 +45,13 @@ def test_seed_varies_target_and_wall_properties():
     assert first["wall_left"]["shapes"][0]["elasticity"] != second["wall_left"]["shapes"][0]["elasticity"]
 
 
-def test_capture_boundary_and_episode_limit():
+def test_capture_boundary_and_episode_limit(research_metrics):
     task = BouncingInterception()
     assert task.succeeded([{"distance": CAPTURE_RADIUS}])
     assert not task.succeeded([{"distance": CAPTURE_RADIUS + 0.01}])
 
     trace = StringIO()
-    metrics = evaluate_v1(task, lambda: lambda observation: Action(0, 0), [12], trace)
+    metrics = research_metrics({"bouncing_interception": task}, lambda: lambda observation: Action(0, 0), [12], trace)
     assert metrics["capture_rate"] == 0
     episode = json.loads(trace.getvalue())
     assert not episode["captured"]

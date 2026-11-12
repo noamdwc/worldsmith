@@ -19,10 +19,11 @@ See [ManiSkill PushCube](maniskill/README.md) for the same command in the pinned
 ManiSkill environment. The V1 research commands below use their established seed
 splits, combined benchmark, and trace format.
 
-Python callers migrating from `worldsmith.benchmark.evaluate` should import
-`evaluate_v1` (formerly `evaluate`) and `evaluate_all` from
-`worldsmith.benchmark.evaluator`. Import `ControllerError` from
-`worldsmith.benchmark.pymunk_adapter`.
+Python callers migrating from `worldsmith.benchmark.evaluate` use
+`worldsmith.benchmark.evaluator.evaluate` with an ordered mapping of task names
+to open adapters, a controller factory, explicit seeds, and a trace recorder.
+The research CLI supplies its recording and summary policies from
+`worldsmith.benchmark.pymunk_adapter`, which also defines `ControllerError`.
 
 ```sh
 uv sync --locked

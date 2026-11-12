@@ -1,22 +1,17 @@
 """Evaluate controllers with task-provided scoring and save their traces."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import platform
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import partial
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, ContextManager, Protocol, TextIO
+from typing import ContextManager, Protocol, TypeVar
 
-from worldsmith.benchmark.results import write_episode, write_summary, write_v1_episode
-from worldsmith.benchmark.runner import ControllerFactory, Simulator, run_episode
+from worldsmith.benchmark.results import TaskEvaluation, write_scored_episode, write_summary
+from worldsmith.benchmark.runner import Controller, ControllerFactory, Simulator, run_episode
 from worldsmith.benchmark.task_catalog import TASK_CATALOG
-
-if TYPE_CHECKING:
-    from worldsmith.benchmark.tasks.task import Task
 
 
 class EvaluationAdapter(Simulator, Protocol):
@@ -27,12 +22,15 @@ class EvaluationAdapter(Simulator, Protocol):
     def summarize(self, episodes: list[dict]) -> dict: ...
 
 
+Adapter = TypeVar("Adapter", bound=EvaluationAdapter)
+
+
 def evaluate_episodes(
     adapter: EvaluationAdapter,
     controller_factory: ControllerFactory,
     seeds: list[int],
     record: Callable[[dict, dict], None],
-) -> tuple[list[dict], dict]:
+) -> TaskEvaluation:
     rows = []
     scores = []
     for seed in seeds:
@@ -41,10 +39,33 @@ def evaluate_episodes(
         record(episode, metrics)
         rows.append({"seed": seed, "length": episode["length"], **metrics})
         scores.append(metrics)
-    return rows, adapter.summarize(scores)
+    return TaskEvaluation(rows, adapter.summarize(scores))
 
 
 def evaluate(
+    tasks: Mapping[str, Adapter],
+    controller_factory: ControllerFactory,
+    seeds: list[int],
+    record: Callable[[dict, dict], None],
+    *,
+    prepare_controller: Callable[[Adapter, ControllerFactory], Controller] | None = None,
+    summarize: Callable[[dict[str, TaskEvaluation]], dict] | None = None,
+) -> dict:
+    """Evaluate open adapters in task order, with a shared factory and seed set.
+
+    Controller preparation runs after each reset. Return the task results
+    directly or pass them to the supplied benchmark summary policy.
+    """
+    results = {}
+    for name, adapter in tasks.items():
+        factory = controller_factory
+        if prepare_controller is not None:
+            factory = partial(prepare_controller, adapter, controller_factory)
+        results[name] = evaluate_episodes(adapter, factory, seeds, record)
+    return results if summarize is None else summarize(results)
+
+
+def evaluate_to_directory(
     open_adapter: Callable[[], ContextManager[EvaluationAdapter]],
     controller_factory: ControllerFactory,
     episodes: int,
@@ -60,10 +81,9 @@ def evaluate(
     output.mkdir(parents=True)
     with open_adapter() as adapter:
         with (output / "episodes.jsonl").open("w", encoding="utf-8") as traces:
-            def record(episode: dict, metrics: dict) -> None:
-                write_episode(traces, {**episode, **metrics})
-
-            rows, aggregate = evaluate_episodes(adapter, controller_factory, seeds, record)
+            result = evaluate(
+                {"task": adapter}, controller_factory, seeds, partial(write_scored_episode, traces)
+            )["task"]
         summary = adapter.metadata()
 
     factory_type = type(controller_factory)
@@ -74,34 +94,11 @@ def evaluate(
         python=platform.python_version(),
         platform=platform.platform(),
         seeds=seeds,
-        episodes=rows,
-        **aggregate,
+        episodes=result.episodes,
+        **result.metrics,
     )
     write_summary(output, summary)
     return summary
-
-
-def evaluate_v1(task: Task, factory: ControllerFactory, seeds: list[int], trace: TextIO) -> dict:
-    """Evaluate a V1 task and write the trace consumed by AutoResearch."""
-    from worldsmith.benchmark.pymunk_adapter import PymunkAdapter
-
-    adapter = PymunkAdapter(task)
-    episodes, summary = evaluate_episodes(
-        adapter, partial(adapter.make_controller, factory), seeds, partial(write_v1_episode, trace)
-    )
-    return {"episodes": len(episodes), **summary}
-
-
-def evaluate_all(controller_factory: ControllerFactory, seeds: list[int], trace: TextIO) -> dict:
-    """Evaluate one shared factory on the same fixed seeds for all V1 tasks."""
-    from worldsmith.benchmark.pymunk_adapter import summarize_combined
-    from worldsmith.benchmark.tasks.constants import TASKS
-
-    tasks = {
-        name: evaluate_v1(task_factory(), controller_factory, seeds, trace)
-        for name, task_factory in TASKS.items()
-    }
-    return summarize_combined(tasks)
 
 
 def main() -> None:
@@ -122,7 +119,8 @@ def main() -> None:
         if not callable(factory):
             parser.error("--controller must name a callable factory")
 
-    print(json.dumps(evaluate(open_adapter, factory, args.episodes, args.seed, args.output), indent=2))
+    summary = evaluate_to_directory(open_adapter, factory, args.episodes, args.seed, args.output)
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

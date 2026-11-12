@@ -9,7 +9,6 @@ import pytest
 
 from autoresearch.controller import make_controller
 from worldsmith.api import Action, Observation
-from worldsmith.benchmark.evaluator import evaluate_v1
 from worldsmith.benchmark.simulation import TIME_STEP, Entity, Simulation
 from worldsmith.benchmark.tasks.interception import SPLITS, TARGET_NOISE, Chase, Interception, Lead
 
@@ -32,10 +31,10 @@ def test_invalid_action_is_rejected(action):
         Interception().start(12).step(action)
 
 
-def test_reference_development_benchmarks_are_unchanged():
+def test_reference_development_benchmarks_are_unchanged(research_metrics):
     seeds = list(SPLITS["dev"])
-    chase = evaluate_v1(Interception(), Chase, seeds, StringIO())
-    lead = evaluate_v1(Interception(), Lead, seeds, StringIO())
+    chase = research_metrics({"interception": Interception()}, Chase, seeds, StringIO())
+    lead = research_metrics({"interception": Interception()}, Lead, seeds, StringIO())
     assert chase == {
         "episodes": 32, "captures": 24, "capture_rate": 0.75,
         "mean_closest_distance": pytest.approx(0.440274733137007),
@@ -46,7 +45,7 @@ def test_reference_development_benchmarks_are_unchanged():
     }
 
 
-def test_evaluator_passes_goal_to_controller_and_trace():
+def test_evaluator_passes_goal_to_controller_and_trace(research_metrics):
     observations = []
 
     def controller(observation):
@@ -55,7 +54,7 @@ def test_evaluator_passes_goal_to_controller_and_trace():
 
     trace = StringIO()
     task = Interception()
-    evaluate_v1(task, lambda: controller, [12], trace)
+    research_metrics({"interception": task}, lambda: controller, [12], trace)
     assert [observation.goal for observation in observations] == ["interception"] * task.step_limit
 
     episode = json.loads(trace.getvalue())
@@ -72,7 +71,7 @@ def test_simulation_preserves_the_supplied_goal():
     assert world.step(Action(0.0)).goal == "example"
 
 
-def test_legacy_observation_constructor_and_chase_behavior():
+def test_legacy_observation_constructor_and_chase_behavior(research_metrics):
     initial = Interception().start(12).initial_observation
     legacy = Observation(initial.time, initial.robot_id, initial.entities, initial.robot_max_speed)
     assert legacy == initial
@@ -80,8 +79,8 @@ def test_legacy_observation_constructor_and_chase_behavior():
     seeds = list(SPLITS["dev"])
     chase_trace = StringIO()
     shared_trace = StringIO()
-    chase = evaluate_v1(Interception(), Chase, seeds, chase_trace)
-    shared = evaluate_v1(Interception(), make_controller, seeds, shared_trace)
+    chase = research_metrics({"interception": Interception()}, Chase, seeds, chase_trace)
+    shared = research_metrics({"interception": Interception()}, make_controller, seeds, shared_trace)
     assert shared == chase
     assert shared_trace.getvalue() == chase_trace.getvalue()
 

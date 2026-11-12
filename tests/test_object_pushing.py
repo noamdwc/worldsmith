@@ -6,8 +6,7 @@ from io import StringIO
 import pytest
 
 from autoresearch.controller import make_controller
-from worldsmith.api import Action
-from worldsmith.benchmark.evaluator import evaluate_v1
+from worldsmith.api import OBJECT_PUSHING_GOAL, Action
 from worldsmith.benchmark.simulation import TIME_STEP
 from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS
 from worldsmith.benchmark.tasks.object_pushing import (
@@ -100,10 +99,12 @@ def test_scene_varies_across_seeds_and_exposes_only_position_measurements():
     }
 
 
-def test_successful_starter_episodes_move_and_settle_via_contact():
+def test_successful_starter_episodes_move_and_settle_via_contact(research_metrics):
     trace = StringIO()
     task = ObjectPushing()
-    metrics = evaluate_v1(task, make_controller, list(COMBINED_SPLITS["dev"]), trace)
+    metrics = research_metrics(
+        {OBJECT_PUSHING_GOAL: task}, make_controller, list(COMBINED_SPLITS["dev"]), trace
+    )
     assert 0 < metrics["success_rate"] < 1
     for line in trace.getvalue().splitlines():
         episode = json.loads(line)

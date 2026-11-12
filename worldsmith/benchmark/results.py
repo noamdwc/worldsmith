@@ -3,7 +3,12 @@
 import json
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import TextIO
+from typing import NamedTuple, TextIO
+
+
+class TaskEvaluation(NamedTuple):
+    episodes: list[dict]
+    metrics: dict
 
 
 def snapshot(value):
@@ -24,29 +29,8 @@ def write_episode(trace: TextIO, episode: dict, *, legacy: bool = False) -> None
     trace.write(json.dumps(episode, **options) + "\n")
 
 
-def write_v1_episode(trace: TextIO, episode: dict, metrics: dict) -> None:
-    # V1 frames pair the action with its resulting observation and state.
-    steps = episode["steps"]
-    observations = [step["observation"] for step in steps[1:]]
-    observations.append(episode["final_observation"])
-    initial = episode["reset_info"]
-    write_episode(trace, {
-        "seed": episode["seed"],
-        **metrics,
-        "steps": episode["length"],
-        "initial_observation": steps[0]["observation"],
-        "initial_state": initial["state"],
-        "initial_measurements": initial["measurements"],
-        "frames": [
-            {
-                "action": step["action"],
-                "observation": observation,
-                "state": step["info"]["state"],
-                **step["info"]["measurements"],
-            }
-            for step, observation in zip(steps, observations, strict=True)
-        ],
-    }, legacy=True)
+def write_scored_episode(trace: TextIO, episode: dict, metrics: dict) -> None:
+    write_episode(trace, {**episode, **metrics})
 
 
 def write_summary(output: Path, summary: dict) -> None:

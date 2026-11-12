@@ -1,8 +1,10 @@
 """Adapt V1 Pymunk scenes and task scoring to the common evaluation protocol."""
 
 from contextlib import nullcontext
+from typing import TextIO
 
 from worldsmith.api import INTERCEPTION_GOAL, Action, Controller, ControllerFactory
+from worldsmith.benchmark.results import TaskEvaluation, write_episode
 from worldsmith.benchmark.simulation import InvalidAction
 from worldsmith.benchmark.tasks.constants import BENCHMARKS, TASKS
 from worldsmith.benchmark.tasks.task import Task
@@ -73,8 +75,41 @@ class PymunkAdapter:
         }
 
 
-def summarize_combined(tasks: dict[str, dict]) -> dict:
-    """Score the V1 benchmark as the equal-weight mean of task success rates."""
+def write_research_episode(trace: TextIO, episode: dict, metrics: dict) -> None:
+    # Research frames pair the action with its resulting observation and state.
+    steps = episode["steps"]
+    observations = [step["observation"] for step in steps[1:]]
+    observations.append(episode["final_observation"])
+    initial = episode["reset_info"]
+    write_episode(trace, {
+        "seed": episode["seed"],
+        **metrics,
+        "steps": episode["length"],
+        "initial_observation": steps[0]["observation"],
+        "initial_state": initial["state"],
+        "initial_measurements": initial["measurements"],
+        "frames": [
+            {
+                "action": step["action"],
+                "observation": observation,
+                "state": step["info"]["state"],
+                **step["info"]["measurements"],
+            }
+            for step, observation in zip(steps, observations, strict=True)
+        ],
+    }, legacy=True)
+
+
+def summarize_research(results: dict[str, TaskEvaluation], *, combined: bool) -> dict:
+    """Report native metrics or score the combined benchmark across all tasks."""
+    tasks = {
+        name: {"episodes": len(result.episodes), **result.metrics}
+        for name, result in results.items()
+    }
+    if not combined:
+        (metrics,) = tasks.values()
+        return metrics
+
     for metrics in tasks.values():
         if "capture_rate" in metrics:
             metrics["success_rate"] = metrics["capture_rate"]
