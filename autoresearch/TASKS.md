@@ -65,9 +65,9 @@ PushT scores overlap, so position and orientation both matter. PegInsertionSide 
 
 ## Evaluation and splits
 
-`evaluate_controller()` evaluates `worldsmith-all-v1` on 8 fixed development seeds per task (0–7), for 88 episodes. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the 11 task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
+`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v1`, has 88 episodes. The ManiSkill-only suite, `worldsmith-maniskill-v1`, has 48. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
 
-`get_episode_trace(seed, task)` accepts every task ID above and returns public feedback from the latest successful development run. The owner maintains held-out seeds separately. Researchers use development feedback for every candidate decision.
+`get_episode_trace(seed, task)` accepts task IDs in the active suite and returns public feedback from the latest successful development run. The owner maintains held-out seeds separately. Researchers use development feedback for every candidate decision.
 
 ### Starter development scores
 

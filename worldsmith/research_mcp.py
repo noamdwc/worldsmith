@@ -13,13 +13,17 @@ from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
 
-from worldsmith.benchmark.task_catalog import TASK_GROUPS
+from worldsmith.research_evaluation import SUITES
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, WORKSPACE, copy_entry, research_entries
 
 # The full starter suite takes about 17–19 seconds on an Apple M2 Pro.
 EVALUATION_TIMEOUT_SECONDS = 90
 OWNER_RUNS = ROOT / "runs" / "owner"
+SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
+if SUITE not in SUITES:
+    raise ValueError("WORLDSMITH_RESEARCH_SUITE must be 'all' or 'maniskill'")
+
 mcp = FastMCP("worldsmith")
 latest_feedback: ResearchFeedback | None = None
 retained_summary: dict | None = None
@@ -80,7 +84,7 @@ class EvaluationFailure(RuntimeError):
 
 @mcp.tool(structured_output=True)
 def evaluate_controller() -> dict[str, object]:
-    """Evaluate the shared controller on all development tasks and save the run."""
+    """Evaluate the shared controller on this session's development suite and save the run."""
     global latest_feedback, retained_summary
     started = monotonic()
     deadline = started + EVALUATION_TIMEOUT_SECONDS
@@ -115,7 +119,8 @@ def evaluate_controller() -> dict[str, object]:
                 "Set WORLDSMITH_MANISKILL_PYTHON to the absolute path of the pinned Python 3.11 interpreter"
             )
         runtimes = {"pymunk": sys.executable, "maniskill": str(maniskill_python)}
-        for group in TASK_GROUPS:
+        _, groups = SUITES[SUITE]
+        for group in groups:
             group_results = owner_results / group
             try:
                 run_group(group, runtimes[group], code, group_results, deadline)
@@ -130,7 +135,7 @@ def evaluate_controller() -> dict[str, object]:
             if snapshot_hash(code) != digest:
                 raise EvaluationFailure(f"Controller snapshot changed during the {group} evaluation")
         feedback = publish_feedback(
-            owner_results, output / "results", controller_sha256=digest,
+            owner_results, output / "results", suite=SUITE, controller_sha256=digest,
             started=started, retained=retained_summary,
         )
     except EvaluationFailure as exc:
@@ -154,10 +159,12 @@ def evaluate_controller() -> dict[str, object]:
 
 
 @mcp.tool(structured_output=True)
-def get_episode_trace(seed: int, task: str = "interception") -> dict[str, object]:
+def get_episode_trace(seed: int, task: str | None = None) -> dict[str, object]:
     """Return a task/seed episode from the latest successful development run in this session."""
     if latest_feedback is None:
         raise ValueError("Run evaluate_controller() first.")
+    if task is None:
+        task = "push_cube" if SUITE == "maniskill" else "interception"
     return latest_feedback.episode(seed, task)
 
 

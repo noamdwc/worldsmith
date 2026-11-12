@@ -10,7 +10,10 @@ from worldsmith.benchmark.evaluator import evaluate_to_directory
 from worldsmith.benchmark.runner import ControllerError
 from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
 
-BENCHMARK = "worldsmith-all-v1"
+SUITES = {
+    "all": ("worldsmith-all-v1", tuple(TASK_GROUPS)),
+    "maniskill": ("worldsmith-maniskill-v1", ("maniskill",)),
+}
 DEV_SEEDS = tuple(range(8))
 CONTROLLER = "autoresearch.controller:make_controller"
 

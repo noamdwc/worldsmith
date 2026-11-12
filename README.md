@@ -45,7 +45,7 @@ For interception, the robot and target move in an obstacle-free plane. The robot
 
 ## AutoResearch workspace
 
-Run `make autoresearch` from the repo root or invoke [scripts/run-autoresearch.sh](scripts/run-autoresearch.sh) directly. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
+Run `make autoresearch` from the repo root for all 11 tasks, or `make autoresearch-maniskill` for the six ManiSkill tasks. The [launcher script](scripts/run-autoresearch.sh) also accepts `all` or `maniskill`. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
 
 On Apple Silicon, prepare the pinned Python 3.11 environment and Vulkan loader using the [ManiSkill setup](maniskill/README.md). Export `VK_ICD_FILENAMES` and `DYLD_LIBRARY_PATH` as shown there before launching Codex. The MCP server runs Pymunk under its Python 3.12 interpreter and defaults to `maniskill/.venv/bin/python` for ManiSkill. Set `WORLDSMITH_MANISKILL_PYTHON` to an absolute interpreter path to use another installation of the pinned environment.
 
@@ -68,9 +68,9 @@ Reset checks that every current research file is present and unchanged in a comp
 
 ### Evaluation feedback and owner results
 
-Each `evaluate_controller()` call runs `worldsmith-all-v1`, the 11-task development suite, with seeds 0–7 per task. Two local Python processes use the same controller snapshot and the same evaluator and runner. The aggregate is the equal-weight mean of the 11 success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
+Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite. The default `worldsmith-all-v1` suite evaluates 88 episodes across Pymunk and ManiSkill with the same controller snapshot. `worldsmith-maniskill-v1` evaluates 48 episodes using the ManiSkill runtime. Both use the same evaluator and runner and score the equal-weight mean of their task success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
 
-`get_episode_trace(seed, task)` selects one of the 88 episodes from the latest successful MCP evaluation. Each run writes two views with the same run ID:
+`get_episode_trace(seed, task)` selects an episode from the latest successful MCP evaluation. With no task specified, it returns `interception` for the full suite or `push_cube` for ManiSkill-only. Each run writes two views with the same run ID:
 
 - `autoresearch/runs/<run-id>/` contains a copy of the snapshot, status, and public results. `results/summary.json` records configuration, runtime, aggregate, and per-task scores and deltas. `results/episodes.jsonl` contains controller-visible observations and actions and permitted outcomes. Archives preserve these files under `research-history/<archive-id>/workspace/`.
 - `runs/owner/<run-id>/` contains the executed snapshot, raw artifacts organized by runtime and task, and process logs. These files survive workspace resets.

@@ -9,7 +9,7 @@ import pytest
 
 from worldsmith import research_lifecycle, research_mcp
 from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
-from worldsmith.research_evaluation import BENCHMARK, DEV_SEEDS
+from worldsmith.research_evaluation import DEV_SEEDS
 from worldsmith.research_feedback import MANISKILL_CONFIG, publish_feedback
 
 RUN = subprocess.run
@@ -21,6 +21,7 @@ def workspace(tmp_path, monkeypatch):
     workspace.mkdir()
     shutil.copyfile(research_lifecycle.BASELINE / "controller.py", workspace / "controller.py")
     monkeypatch.setattr(research_mcp, "WORKSPACE", workspace)
+    monkeypatch.setattr(research_mcp, "SUITE", "all")
     monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
     monkeypatch.setattr(research_mcp, "latest_feedback", None)
     monkeypatch.setattr(research_mcp, "retained_summary", None)
@@ -115,7 +116,7 @@ def make_controller(*, task):
     ]
     assert (run.parent / "code/autoresearch/controller.py").read_text() == source
     summary = json.loads((run / "summary.json").read_text())
-    assert summary["benchmark"] == BENCHMARK
+    assert summary["benchmark"] == "worldsmith-all-v1"
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
     assert summary["episodes"] == 88
     assert summary["runtime_seconds"] > 0
@@ -158,6 +159,21 @@ def make_controller(*, task):
     assert research_mcp.get_episode_trace(0, "push_cube") == push
 
 
+def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace, maniskill_worker, monkeypatch):
+    monkeypatch.setattr(research_mcp, "SUITE", "maniskill")
+    maniskill_worker.successes = 6
+
+    metrics = research_mcp.evaluate_controller()
+    assert [call[0] for call in maniskill_worker.calls] == ["maniskill"]
+    assert metrics["benchmark"] == "worldsmith-maniskill-v1"
+    assert metrics["episodes"] == 48
+    assert set(metrics["tasks"]) == set(TASK_GROUPS["maniskill"])
+    assert metrics["aggregate_score"] == 0.75
+    assert research_mcp.get_episode_trace(0) == research_mcp.get_episode_trace(0, "push_cube")
+    with pytest.raises(ValueError, match="task 'interception'"):
+        research_mcp.get_episode_trace(0, "interception")
+
+
 def test_per_task_changes_use_retained_run(workspace, maniskill_worker):
     baseline = research_mcp.evaluate_controller()
     maniskill_worker.successes = 6
@@ -178,13 +194,13 @@ def test_feedback_refuses_incomplete_or_heldout_results(workspace, maniskill_wor
 
     results = tmp_path / "public"
     with pytest.raises(ValueError, match="Incomplete development split for push_t"):
-        publish_feedback(owner_results, results, controller_sha256="", started=monotonic(), retained=None)
+        publish_feedback(owner_results, results, suite="all", controller_sha256="", started=monotonic(), retained=None)
     first_summary = owner_results / "pymunk/interception/summary.json"
     summary = json.loads(first_summary.read_text())
     summary["seeds"] = list(range(1000, 1008))
     first_summary.write_text(json.dumps(summary))
     with pytest.raises(ValueError, match="Incomplete development split for interception"):
-        publish_feedback(owner_results, results, controller_sha256="", started=monotonic(), retained=None)
+        publish_feedback(owner_results, results, suite="all", controller_sha256="", started=monotonic(), retained=None)
     assert not results.exists()
 
 

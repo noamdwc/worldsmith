@@ -6,7 +6,7 @@ from pathlib import Path
 from time import monotonic
 
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
-from worldsmith.research_evaluation import BENCHMARK, CONTROLLER, DEV_SEEDS
+from worldsmith.research_evaluation import CONTROLLER, DEV_SEEDS, SUITES
 
 MANISKILL_CONFIG = (
     "task_id", "task_version", "max_episode_steps", "obs_mode", "action_mode",
@@ -97,6 +97,7 @@ def publish_feedback(
     owner_results: Path,
     results: Path,
     *,
+    suite: str,
     controller_sha256: str,
     started: float,
     retained: dict | None,
@@ -105,8 +106,9 @@ def publish_feedback(
     episodes = []
     episode_indices = {}
     seeds = list(DEV_SEEDS)
-    for group, names in TASK_GROUPS.items():
-        for task in names:
+    benchmark, groups = SUITES[suite]
+    for group in groups:
+        for task in TASK_GROUPS[group]:
             task_results = owner_results / group / task
             native = json.loads((task_results / "summary.json").read_text(encoding="utf-8"))
             with (task_results / "episodes.jsonl").open(encoding="utf-8") as trace:
@@ -144,7 +146,7 @@ def publish_feedback(
 
     aggregate = sum(task["success_rate"] for task in tasks.values()) / len(tasks)
     summary = {
-        "benchmark": BENCHMARK,
+        "benchmark": benchmark,
         "split": "dev",
         "controller": CONTROLLER,
         "controller_snapshot_sha256": controller_sha256,
