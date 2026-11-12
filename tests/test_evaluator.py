@@ -1,11 +1,12 @@
 import json
 import subprocess
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 import pytest
 
-from worldsmith.benchmark.evaluator import evaluate
+from worldsmith.benchmark.evaluator import evaluate, main
+from worldsmith.benchmark.task_catalog import TASK_CATALOG
 
 
 class CounterAdapter:
@@ -95,6 +96,27 @@ def test_invalid_seed_sequence(episodes, seed, tmp_path):
     with pytest.raises(ValueError, match="episode count and seeds"):
         evaluate(open_adapter, None, episodes, seed, output)
     assert not output.exists()
+
+
+def test_cli_selects_adapter_and_default_controller_from_catalog(monkeypatch, tmp_path, capsys):
+    def controller_factory():
+        return lambda observation: [3]
+
+    def load_counter():
+        return lambda: nullcontext(CounterAdapter()), controller_factory
+
+    output = tmp_path / "evaluation"
+    monkeypatch.setitem(TASK_CATALOG, "counter", load_counter)
+    monkeypatch.setattr(sys, "argv", [
+        "evaluator", "--task", "counter", "--episodes", "1", "--seed", "7",
+        "--output", str(output),
+    ])
+    main()
+
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["task_id"] == "counter"
+    assert summary["controller"].endswith(".controller_factory")
+    assert summary["episodes"] == [{"seed": 7, "length": 1, "points": 21}]
 
 
 def test_v1_task_uses_standard_artifacts_from_unified_cli(tmp_path):

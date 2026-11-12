@@ -1,8 +1,10 @@
 """Adapt V1 Pymunk scenes and task scoring to the common evaluation protocol."""
 
-from worldsmith.api import Action, Controller, ControllerFactory
+from contextlib import nullcontext
+
+from worldsmith.api import INTERCEPTION_GOAL, Action, Controller, ControllerFactory
 from worldsmith.benchmark.simulation import InvalidAction
-from worldsmith.benchmark.tasks.constants import BENCHMARKS
+from worldsmith.benchmark.tasks.constants import BENCHMARKS, TASKS
 from worldsmith.benchmark.tasks.task import Task
 
 
@@ -69,3 +71,17 @@ class PymunkAdapter:
             "objective": self.task.objective,
             "max_episode_steps": self.task.step_limit,
         }
+
+
+def evaluation_setup(task_name: str):
+    def open_adapter():
+        return nullcontext(PymunkAdapter(TASKS[task_name]()))
+
+    if task_name == INTERCEPTION_GOAL:
+        from worldsmith.benchmark.tasks.interception import Chase
+
+        return open_adapter, Chase
+
+    from autoresearch.controller import make_controller
+
+    return open_adapter, make_controller

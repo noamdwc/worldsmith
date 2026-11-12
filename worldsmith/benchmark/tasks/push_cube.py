@@ -107,3 +107,7 @@ class PushController:
         return action
 
     __call__ = act
+
+
+def evaluation_setup():
+    return open_push_cube, PushController
