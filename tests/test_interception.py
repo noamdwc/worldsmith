@@ -9,7 +9,7 @@ import pytest
 
 from autoresearch.controller import make_controller
 from worldsmith.api import Action, Observation
-from worldsmith.benchmark.evaluate import evaluate
+from worldsmith.benchmark.evaluator import evaluate_v1
 from worldsmith.benchmark.simulation import TIME_STEP, Entity, Simulation
 from worldsmith.benchmark.tasks.interception import SPLITS, TARGET_NOISE, Chase, Interception, Lead
 
@@ -34,8 +34,8 @@ def test_invalid_action_is_rejected(action):
 
 def test_reference_development_benchmarks_are_unchanged():
     seeds = list(SPLITS["dev"])
-    chase = evaluate(Interception(), Chase, seeds, StringIO())
-    lead = evaluate(Interception(), Lead, seeds, StringIO())
+    chase = evaluate_v1(Interception(), Chase, seeds, StringIO())
+    lead = evaluate_v1(Interception(), Lead, seeds, StringIO())
     assert chase == {
         "episodes": 32, "captures": 24, "capture_rate": 0.75,
         "mean_closest_distance": pytest.approx(0.440274733137007),
@@ -55,7 +55,7 @@ def test_evaluator_passes_goal_to_controller_and_trace():
 
     trace = StringIO()
     task = Interception()
-    evaluate(task, lambda: controller, [12], trace)
+    evaluate_v1(task, lambda: controller, [12], trace)
     assert [observation.goal for observation in observations] == ["interception"] * task.step_limit
 
     episode = json.loads(trace.getvalue())
@@ -80,8 +80,8 @@ def test_legacy_observation_constructor_and_chase_behavior():
     seeds = list(SPLITS["dev"])
     chase_trace = StringIO()
     shared_trace = StringIO()
-    chase = evaluate(Interception(), Chase, seeds, chase_trace)
-    shared = evaluate(Interception(), make_controller, seeds, shared_trace)
+    chase = evaluate_v1(Interception(), Chase, seeds, chase_trace)
+    shared = evaluate_v1(Interception(), make_controller, seeds, shared_trace)
     assert shared == chase
     assert shared_trace.getvalue() == chase_trace.getvalue()
 

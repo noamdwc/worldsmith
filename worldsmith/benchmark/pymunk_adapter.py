@@ -73,6 +73,18 @@ class PymunkAdapter:
         }
 
 
+def summarize_combined(tasks: dict[str, dict]) -> dict:
+    """Score the V1 benchmark as the equal-weight mean of task success rates."""
+    for metrics in tasks.values():
+        if "capture_rate" in metrics:
+            metrics["success_rate"] = metrics["capture_rate"]
+    return {
+        "episodes": sum(metrics["episodes"] for metrics in tasks.values()),
+        "aggregate_score": sum(metrics["success_rate"] for metrics in tasks.values()) / len(tasks),
+        "tasks": tasks,
+    }
+
+
 def evaluation_setup(task_name: str):
     def open_adapter():
         return nullcontext(PymunkAdapter(TASKS[task_name]()))

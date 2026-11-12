@@ -5,7 +5,7 @@ from io import StringIO
 import pytest
 
 from worldsmith.api import Action
-from worldsmith.benchmark.evaluate import evaluate
+from worldsmith.benchmark.evaluator import evaluate_v1
 from worldsmith.benchmark.tasks.bouncing_interception import BouncingInterception
 from worldsmith.benchmark.tasks.interception import CAPTURE_RADIUS
 
@@ -52,7 +52,7 @@ def test_capture_boundary_and_episode_limit():
     assert not task.succeeded([{"distance": CAPTURE_RADIUS + 0.01}])
 
     trace = StringIO()
-    metrics = evaluate(task, lambda: lambda observation: Action(0, 0), [12], trace)
+    metrics = evaluate_v1(task, lambda: lambda observation: Action(0, 0), [12], trace)
     assert metrics["capture_rate"] == 0
     episode = json.loads(trace.getvalue())
     assert not episode["captured"]

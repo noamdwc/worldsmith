@@ -1,16 +1,22 @@
 """Evaluate controllers with task-provided scoring and save their traces."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import platform
 from collections.abc import Callable
+from functools import partial
 from importlib import import_module
 from pathlib import Path
-from typing import ContextManager, Protocol
+from typing import TYPE_CHECKING, ContextManager, Protocol, TextIO
 
-from worldsmith.benchmark.results import write_episode, write_summary
+from worldsmith.benchmark.results import write_episode, write_summary, write_v1_episode
 from worldsmith.benchmark.runner import ControllerFactory, Simulator, run_episode
 from worldsmith.benchmark.task_catalog import TASK_CATALOG
+
+if TYPE_CHECKING:
+    from worldsmith.benchmark.tasks.task import Task
 
 
 class EvaluationAdapter(Simulator, Protocol):
@@ -73,6 +79,29 @@ def evaluate(
     )
     write_summary(output, summary)
     return summary
+
+
+def evaluate_v1(task: Task, factory: ControllerFactory, seeds: list[int], trace: TextIO) -> dict:
+    """Evaluate a V1 task and write the trace consumed by AutoResearch."""
+    from worldsmith.benchmark.pymunk_adapter import PymunkAdapter
+
+    adapter = PymunkAdapter(task)
+    episodes, summary = evaluate_episodes(
+        adapter, partial(adapter.make_controller, factory), seeds, partial(write_v1_episode, trace)
+    )
+    return {"episodes": len(episodes), **summary}
+
+
+def evaluate_all(controller_factory: ControllerFactory, seeds: list[int], trace: TextIO) -> dict:
+    """Evaluate one shared factory on the same fixed seeds for all V1 tasks."""
+    from worldsmith.benchmark.pymunk_adapter import summarize_combined
+    from worldsmith.benchmark.tasks.constants import TASKS
+
+    tasks = {
+        name: evaluate_v1(task_factory(), controller_factory, seeds, trace)
+        for name, task_factory in TASKS.items()
+    }
+    return summarize_combined(tasks)
 
 
 def main() -> None:

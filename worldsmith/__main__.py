@@ -6,7 +6,8 @@ import os
 from importlib import import_module
 from pathlib import Path
 
-from worldsmith.benchmark.evaluate import ControllerError, evaluate, evaluate_all
+from worldsmith.benchmark.evaluator import evaluate_all, evaluate_v1
+from worldsmith.benchmark.pymunk_adapter import ControllerError
 from worldsmith.benchmark.tasks.constants import (
     BENCHMARKS, COMBINED_BENCHMARK, COMBINED_SPLITS, TASKS, TASK_SPLITS,
 )
@@ -79,7 +80,7 @@ def main():
             if task is None:
                 metrics = evaluate_all(factory, seeds, trace)
             else:
-                metrics = evaluate(task, factory, seeds, trace)
+                metrics = evaluate_v1(task, factory, seeds, trace)
     except ControllerError as exc:
         # Keep the controller diagnostic separate from the private traceback.
         (args.output / "controller_error.txt").write_text(str(exc) + "\n", encoding="utf-8")

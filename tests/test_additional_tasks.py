@@ -13,7 +13,7 @@ from worldsmith.api import (
     BOUNCING_INTERCEPTION_GOAL, INTERCEPTION_GOAL, OBJECT_PUSHING_GOAL,
     Action, Observation, PositionMeasurement,
 )
-from worldsmith.benchmark.evaluate import evaluate, evaluate_all
+from worldsmith.benchmark.evaluator import evaluate_all, evaluate_v1
 from worldsmith.benchmark.simulation import Entity, Simulation
 from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS, TASKS, TASK_SPLITS
 from worldsmith.benchmark.tasks.navigation import COLLISION_DISTANCE, Navigation
@@ -38,8 +38,8 @@ def test_deterministic_episodes_and_goal_propagation(goal):
 
         return control
 
-    first = evaluate(task, factory, [0, 1], first_trace)
-    replay = evaluate(task, make_controller, [0, 1], replay_trace)
+    first = evaluate_v1(task, factory, [0, 1], first_trace)
+    replay = evaluate_v1(task, make_controller, [0, 1], replay_trace)
     assert first == replay
     assert first_trace.getvalue() == replay_trace.getvalue()
     assert set(seen_goals) == {goal}
@@ -100,7 +100,7 @@ def test_rendezvous_requires_consecutive_tracking_steps():
 def test_failed_tasks_run_to_their_episode_limit(goal):
     trace = StringIO()
     task = TASKS[goal]()
-    metrics = evaluate(task, lambda: lambda observation: Action(0, 0), [0], trace)
+    metrics = evaluate_v1(task, lambda: lambda observation: Action(0, 0), [0], trace)
     episode = json.loads(trace.getvalue())
     assert metrics["success_rate"] == 0
     assert episode["steps"] == task.step_limit
@@ -121,7 +121,7 @@ def test_combined_evaluation_matches_independent_results_and_resets_controller()
     assert factory_calls == combined["episodes"] == 40
     rates = []
     for goal, task_factory in TASKS.items():
-        independent = evaluate(task_factory(), make_controller, seeds, StringIO())
+        independent = evaluate_v1(task_factory(), make_controller, seeds, StringIO())
         if goal in (INTERCEPTION_GOAL, BOUNCING_INTERCEPTION_GOAL):
             independent["success_rate"] = independent["capture_rate"]
         assert combined["tasks"][goal] == independent
