@@ -5,7 +5,7 @@ from contextlib import contextmanager, nullcontext
 
 import pytest
 
-from worldsmith.benchmark.evaluator import evaluate, main
+from worldsmith.benchmark.evaluator import evaluate, evaluate_to_directory, main
 from worldsmith.benchmark.task_catalog import TASK_CATALOG
 
 
@@ -63,7 +63,7 @@ def test_seeded_evaluation_uses_native_scores_and_snapshots(tmp_path):
         return control
 
     output = tmp_path / "evaluation"
-    summary = evaluate(open_adapter, factory, 2, 7, output)
+    summary = evaluate_to_directory(open_adapter, factory, 2, 7, output)
 
     assert events == ["opened", "controller", "controller", "closed"]
     assert json.loads((output / "summary.json").read_text()) == summary
@@ -87,6 +87,37 @@ def test_seeded_evaluation_uses_native_scores_and_snapshots(tmp_path):
     assert second["steps"][-1]["truncated"] and not second["steps"][-1]["terminated"]
 
 
+def test_task_collection_uses_shared_factory_and_benchmark_summary():
+    class DoubleScoreAdapter(CounterAdapter):
+        def score(self, episode):
+            return {"points": 2 * super().score(episode)["points"]}
+
+    factory_calls = []
+    recorded = []
+
+    def factory():
+        factory_calls.append("created")
+        return lambda observation: [3]
+
+    def record(episode, metrics):
+        recorded.append((episode["seed"], metrics["points"]))
+
+    def summarize(results):
+        assert list(results) == ["double", "counter"]
+        double_points = results["double"].metrics["total_points"]
+        counter_points = results["counter"].metrics["total_points"]
+        return {"points_difference": double_points - counter_points}
+
+    summary = evaluate(
+        {"double": DoubleScoreAdapter(), "counter": CounterAdapter()},
+        factory, [7, 8], record, summarize=summarize,
+    )
+
+    assert len(factory_calls) == 4
+    assert recorded == [(7, 42), (8, 48), (7, 21), (8, 24)]
+    assert summary == {"points_difference": 45}
+
+
 @pytest.mark.parametrize(("episodes", "seed"), [(0, 42), (1, -1), (2, 2**32 - 1)])
 def test_invalid_seed_sequence(episodes, seed, tmp_path):
     def open_adapter():
@@ -94,7 +125,7 @@ def test_invalid_seed_sequence(episodes, seed, tmp_path):
 
     output = tmp_path / "evaluation"
     with pytest.raises(ValueError, match="episode count and seeds"):
-        evaluate(open_adapter, None, episodes, seed, output)
+        evaluate_to_directory(open_adapter, None, episodes, seed, output)
     assert not output.exists()
 
 
