@@ -1,0 +1,19 @@
+[project]
+name = "worldsmith-maniskill"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "gymnasium==1.4.0",
+    "mani-skill-nightly==2026.8.2.400",
+    "numpy==2.4.6",
+    "pin==4.1.0",
+    "sapien==3.0.3",
+    "torch==2.15.0",
+]
+
+[dependency-groups]
+dev = ["pytest==9.2.0"]
+
+[tool.uv]
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
