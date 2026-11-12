@@ -6,6 +6,19 @@ See [project.md](project.md) for the research idea. One shared Python controller
 
 ## Run the benchmark
 
+The shared evaluator runs individual tasks from either simulator family and writes
+`summary.json` and `episodes.jsonl`. Use `--controller module:factory` to supply a
+factory that creates a fresh controller for each episode.
+
+```sh
+uv run --locked python -m worldsmith.benchmark.evaluator \
+  --task navigation --episodes 3 --seed 42 --output runs/navigation
+```
+
+See [ManiSkill PushCube](maniskill/README.md) for the same command in the pinned
+ManiSkill environment. The V1 research commands below use their established seed
+splits, combined benchmark, and trace format.
+
 ```sh
 uv sync --locked
 make chase
