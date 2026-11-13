@@ -19,7 +19,7 @@ from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, WORKSPACE, copy_entry, research_entries
 
 EVALUATION_TIMEOUT_SECONDS = 90
-SUITE_TIMEOUT_SECONDS = {"all": 360, "libero": 300}
+SUITE_TIMEOUT_SECONDS = {"all": 360, "libero": 300, "robosuite": 120}
 OWNER_RUNS = ROOT / "runs" / "owner"
 SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
 if SUITE not in SUITES:

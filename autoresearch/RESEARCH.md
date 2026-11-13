@@ -2,7 +2,7 @@
 
 Improve one shared task-aware controller across the tasks in the active development suite using their public observations and reusable Python strategies. Read [TASKS.md](TASKS.md); task descriptions and detailed development traces are available to you. Use only the public files in this workspace and the `worldsmith` MCP tools for evaluation. [AGENTS.md](AGENTS.md) defines the workspace rules.
 
-The launch selects the full development suite (14 tasks, 112 episodes), tabletop manipulation (six tasks, 48 episodes), or arm manipulation with varied starting layouts (three tasks, 24 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
+The launch selects the full development suite (17 tasks, 136 episodes), tabletop manipulation (six tasks, 48 episodes), arm manipulation with varied starting layouts (three tasks, 24 episodes), or door opening, nut assembly, and hammer handover (three tasks, 24 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
 
 ## Budget and process
 

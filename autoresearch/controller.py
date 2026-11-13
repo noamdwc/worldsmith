@@ -48,7 +48,13 @@ def push_object(observation: Observation, robot_x: float, robot_y: float) -> Act
 
 
 def make_controller(*, task=None):
-    if task in ("open_middle_drawer", "place_bowl_on_plate", "place_two_items_in_basket"):
+    if task == "handover_hammer":
+        return lambda observation: np.tile([0., 0., 0., 0., 0., 0., -1.], 2)
+
+    if task in (
+        "open_middle_drawer", "place_bowl_on_plate", "place_two_items_in_basket",
+        "open_latched_door", "assemble_nuts",
+    ):
         return lambda observation: np.array([0., 0., 0., 0., 0., 0., -1.])
 
     if task in ("push_cube", "pull_cube", "pick_cube", "stack_cube", "peg_insertion_side", "push_t"):

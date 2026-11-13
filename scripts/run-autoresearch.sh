@@ -7,7 +7,8 @@ case "${1:-all}" in
     all) suite=all; tasks="the full development suite" ;;
     maniskill) suite=maniskill; tasks="the six tabletop manipulation tasks" ;;
     libero) suite=libero; tasks="the three arm manipulation tasks with varied starting layouts" ;;
-    *) printf 'Usage: %s [all|maniskill|libero]\n' "$0" >&2; exit 2 ;;
+    robosuite) suite=robosuite; tasks="door opening, nut assembly, and hammer handover" ;;
+    *) printf 'Usage: %s [all|maniskill|libero|robosuite]\n' "$0" >&2; exit 2 ;;
 esac
 export WORLDSMITH_RESEARCH_SUITE="$suite"
 

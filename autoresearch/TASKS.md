@@ -75,15 +75,27 @@ These tasks run in the full suite and in a dedicated 24-episode suite. Objects s
 
 See [API.md](API.md) for the corresponding observation and action conventions. The starter holds position with the gripper open on these three tasks.
 
+## Door opening, nut assembly, and hammer handover
+
+The three tasks run in the full suite and in a dedicated 24-episode suite. An episode ends at the first success or the step limit. The starter keeps both motion commands and angular commands at zero with the grippers open.
+
+| Task | Success criterion | Scene observations | Step limit |
+| --- | --- | --- | ---: |
+| `open_latched_door` | Swing the door past 0.3 radians. The door starts latched. | `handle_pos`, `hinge_pos`, `hinge_angle`, `latch_angle` | 300 |
+| `assemble_nuts` | Seat both nuts on their matching pegs and move the gripper away. Each nut center must be within 0.03 m of the peg on both horizontal axes and below 0.05 m above the table. The tool must be more than about 0.042 m from each nut center. | For both `square` and `round`: `<shape>_nut_pos`, `<shape>_nut_quat`, `<shape>_nut_handle_pos`, `<shape>_peg_pos` | 450 |
+| `handover_hammer` | The receiving arm grasps the handle while the pickup arm has released the hammer and the lower end of the hammer is more than 0.1 m above the table | `hammer_pos`, `hammer_quat`, `hammer_handle_pos`, `table_height` | 400 |
+
+See [API.md](API.md) for tool observations, frames, and action limits.
+
 ## Evaluation and splits
 
-`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v2`, has 112 episodes. The tabletop manipulation suite, `worldsmith-manipulation-v1`, has 48. The arm manipulation suite with varied starting layouts, `worldsmith-arm-position-v1`, has 24. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
+`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v3`, has 136 episodes. The door, assembly, and handover suite, `worldsmith-arm-skills-v1`, has 24. The tabletop manipulation suite, `worldsmith-manipulation-v1`, has 48. The arm manipulation suite with varied starting layouts, `worldsmith-arm-position-v1`, has 24. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
 
 `get_episode_trace(seed, task)` accepts task IDs in the active suite and returns public feedback from the latest successful development run. The owner maintains held-out seeds separately. Researchers use development feedback for every candidate decision.
 
 ### Starter development scores
 
-The starter succeeded in 53 of 112 episodes for a `worldsmith-all-v2` score of 47.32%.
+The starter succeeded in 53 of 136 episodes for a `worldsmith-all-v3` score of 38.97%.
 
 | Task | Successes / 8 |
 | --- | ---: |
@@ -101,3 +113,6 @@ The starter succeeded in 53 of 112 episodes for a `worldsmith-all-v2` score of 4
 | `open_middle_drawer` | 0 |
 | `place_bowl_on_plate` | 0 |
 | `place_two_items_in_basket` | 0 |
+| `open_latched_door` | 0 |
+| `assemble_nuts` | 0 |
+| `handover_hammer` | 0 |
