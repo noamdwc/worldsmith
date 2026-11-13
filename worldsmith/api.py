@@ -2,8 +2,10 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypeAlias
 
-type Vec2 = tuple[float, float]
+# The shared controller imports this module in both Python environments.
+Vec2: TypeAlias = tuple[float, float]
 
 INTERCEPTION_GOAL = "interception"
 BOUNCING_INTERCEPTION_GOAL = "bouncing_interception"
@@ -33,5 +35,5 @@ class Action:
     throttle: float = 1.0  # Fraction of robot_max_speed, in [0, 1].
 
 
-type Controller = Callable[[Observation], Action]
-type ControllerFactory = Callable[[], Controller]
+Controller: TypeAlias = Callable[[Observation], Action]
+ControllerFactory: TypeAlias = Callable[[], Controller]

@@ -7,6 +7,7 @@ from worldsmith.api import INTERCEPTION_GOAL, Action
 from worldsmith.benchmark.results import TaskEvaluation, write_episode
 from worldsmith.benchmark.runner import InvalidAction
 from worldsmith.benchmark.tasks.constants import BENCHMARKS, TASKS
+from worldsmith.benchmark.tasks.interception import Chase
 from worldsmith.benchmark.tasks.task import Task
 
 
@@ -100,8 +101,6 @@ def evaluation_setup(task_name: str):
         return nullcontext(PymunkAdapter(TASKS[task_name]()))
 
     if task_name == INTERCEPTION_GOAL:
-        from worldsmith.benchmark.tasks.interception import Chase
-
         return open_adapter, Chase
 
     from autoresearch.controller import make_controller

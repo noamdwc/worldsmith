@@ -2,10 +2,20 @@
 
 from math import atan2, hypot
 
+import numpy as np
 
-def push_object(observation, robot_x, robot_y):
-    from worldsmith.api import Action
+from worldsmith.api import (
+    BOUNCING_INTERCEPTION_GOAL,
+    INTERCEPTION_GOAL,
+    NAVIGATION_GOAL,
+    OBJECT_PUSHING_GOAL,
+    RENDEZVOUS_GOAL,
+    Action,
+    Observation,
+)
 
+
+def push_object(observation: Observation, robot_x: float, robot_y: float) -> Action:
     object_x, object_y = observation.entities["object"].position
     destination_x, destination_y = observation.entities["destination"].position
     dx, dy = destination_x - object_x, destination_y - object_y
@@ -40,11 +50,6 @@ def push_object(observation, robot_x, robot_y):
 def make_controller(*, task=None):
     if task in ("push_cube", "pull_cube", "pick_cube", "stack_cube", "peg_insertion_side", "push_t"):
         return manipulation_controller(task)
-
-    from worldsmith.api import (
-        BOUNCING_INTERCEPTION_GOAL, INTERCEPTION_GOAL, NAVIGATION_GOAL, OBJECT_PUSHING_GOAL,
-        RENDEZVOUS_GOAL, Action, Observation,
-    )
 
     def control(observation: Observation) -> Action:
         goal = task if task is not None else observation.goal
@@ -88,8 +93,6 @@ def make_controller(*, task=None):
 
 
 def manipulation_controller(task):
-    import numpy as np
-
     waypoint = 0
     closing_steps = 0
 
