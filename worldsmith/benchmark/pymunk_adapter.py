@@ -3,15 +3,12 @@
 from contextlib import nullcontext
 from typing import TextIO
 
-from worldsmith.api import INTERCEPTION_GOAL, Action, Controller, ControllerFactory
+from worldsmith.api import INTERCEPTION_GOAL, Action
 from worldsmith.benchmark.results import TaskEvaluation, write_episode
-from worldsmith.benchmark.simulation import InvalidAction
+from worldsmith.benchmark.runner import InvalidAction
 from worldsmith.benchmark.tasks.constants import BENCHMARKS, TASKS
+from worldsmith.benchmark.tasks.interception import Chase
 from worldsmith.benchmark.tasks.task import Task
-
-
-class ControllerError(RuntimeError):
-    """An error at the controller boundary that can be reported to the researcher."""
 
 
 class PymunkAdapter:
@@ -19,40 +16,19 @@ class PymunkAdapter:
         self.task = task
 
     def reset(self, seed: int):
-        self.seed = seed
         self.world = self.task.start(seed)
         observation = self.world.initial_observation
         self.measurements = [self.task.measure(self.world)]
         self.goal = observation.goal
         return observation, self._info()
 
-    def make_controller(self, factory: ControllerFactory) -> Controller:
-        try:
-            controller = factory()
-        except Exception as exc:
-            raise ControllerError(f"Controller setup: {type(exc).__name__}: {exc}") from exc
-
-        def act(observation):
-            try:
-                return controller(observation)
-            except Exception as exc:
-                raise ControllerError(
-                    f"{self.goal}, seed {self.seed}, step {len(self.measurements)}: "
-                    f"{type(exc).__name__}: {exc}"
-                ) from exc
-
-        return act
-
     def encode_action(self, action: Action) -> dict:
+        if not isinstance(action, Action):
+            raise InvalidAction("Controller must return an Action")
         return {"heading": action.heading, "throttle": action.throttle}
 
     def step(self, action: Action):
-        try:
-            observation = self.world.step(action)
-        except InvalidAction as exc:
-            raise ControllerError(
-                f"{self.goal}, seed {self.seed}, step {len(self.measurements)}: {exc}"
-            ) from exc
+        observation = self.world.step(action)
         self.measurements.append(self.task.measure(self.world))
         success = self.task.succeeded(self.measurements)
         truncated = len(self.measurements) - 1 == self.task.step_limit and not success
@@ -125,8 +101,6 @@ def evaluation_setup(task_name: str):
         return nullcontext(PymunkAdapter(TASKS[task_name]()))
 
     if task_name == INTERCEPTION_GOAL:
-        from worldsmith.benchmark.tasks.interception import Chase
-
         return open_adapter, Chase
 
     from autoresearch.controller import make_controller

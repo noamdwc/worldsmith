@@ -1,16 +1,16 @@
 import json
-import sys
+from contextlib import nullcontext
 from random import Random
 
 import pymunk
 import pytest
 
-from worldsmith.__main__ import main
 from worldsmith.api import INTERCEPTION_GOAL, Action
+from worldsmith.benchmark.evaluator import evaluate_to_directory
+from worldsmith.benchmark.pymunk_adapter import PymunkAdapter
 from worldsmith.benchmark.simulation import Entity, PhysicalEntity, Simulation
-from worldsmith.benchmark.tasks.constants import TASKS
-from worldsmith.benchmark.tasks.interception import Interception
-from worldsmith.research_feedback import publish_feedback
+from worldsmith.benchmark.tasks.interception import Chase, Interception
+from worldsmith.research_feedback import public_episode
 
 COAST = Action(0, 0)
 RADIUS = 0.25
@@ -166,7 +166,7 @@ def test_shape_free_bodies_can_be_hidden_or_observed_with_or_without_noise():
         assert observation.entities["noisy"].covariance == ((0.0625, 0), (0, 0.0625))
 
 
-def test_physics_stays_in_owner_trace(tmp_path, monkeypatch):
+def test_physics_stays_in_owner_trace(tmp_path):
     class PhysicalInterception(Interception):
         step_limit = 1
 
@@ -179,26 +179,30 @@ def test_physics_stays_in_owner_trace(tmp_path, monkeypatch):
                 wall=PhysicalEntity(segment.body),
             )
 
-    monkeypatch.setitem(TASKS, INTERCEPTION_GOAL, PhysicalInterception)
     owner_dir = tmp_path / "owner"
-    monkeypatch.setattr(sys, "argv", ["worldsmith", "evaluate", "--task", "all", "--output", str(owner_dir)])
-    main()
-    public = publish_feedback(owner_dir, tmp_path / "public").episode(0, INTERCEPTION_GOAL)
+    evaluate_to_directory(
+        lambda: nullcontext(PymunkAdapter(PhysicalInterception())), Chase, 1, 0, owner_dir,
+    )
     with (owner_dir / "episodes.jsonl").open() as trace:
         owner = json.loads(next(trace))
+    public = public_episode(INTERCEPTION_GOAL, "pymunk", owner)
 
-    assert owner["initial_state"]["wall"]["body_type"] == "static"
-    assert owner["initial_state"]["target"]["position"] == [0, 0]
-    assert owner["frames"][0]["state"]["target"] == {
+    assert owner["reset_info"]["state"]["wall"]["body_type"] == "static"
+    assert owner["reset_info"]["state"]["target"]["position"] == [0, 0]
+    assert owner["steps"][0]["info"]["state"]["target"] == {
         "position": [0.05, 0], "velocity": [0.5, 0],
         "body_type": "dynamic", "mass": MASS, "moment": MOMENT,
         "angle": 0, "angular_velocity": 0,
         "shapes": [{"type": "Circle", "friction": 0.7, "elasticity": 0.3}],
     }
-    assert public["initial_observation"] == owner["initial_observation"]
-    assert set(public) == {"task", "seed", "steps", "captured", "initial_observation", "frames"}
+    assert public["initial_observation"] == owner["steps"][0]["observation"]
+    assert set(public) == {
+        "task", "seed", "steps", "captured", "success", "terminated", "truncated",
+        "initial_observation", "frames", "final_observation",
+    }
     assert set(public["frames"][0]) == {"action", "observation"}
-    assert public["frames"][0]["observation"] == owner["frames"][0]["observation"]
-    for observation in (public["initial_observation"], public["frames"][0]["observation"]):
+    assert public["frames"][0]["observation"] == owner["steps"][0]["observation"]
+    assert public["final_observation"] == owner["final_observation"]
+    for observation in (public["initial_observation"], public["final_observation"]):
         assert set(observation["entities"]) == {"robot", "target"}
         assert set(observation["entities"]["target"]) == {"position", "covariance"}

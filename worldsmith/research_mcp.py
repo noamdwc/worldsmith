@@ -5,19 +5,28 @@ import os
 import subprocess
 import sys
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
+from time import monotonic
 from traceback import format_exc
 from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
 
+from worldsmith.research_evaluation import SUITES
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, WORKSPACE, copy_entry, research_entries
 
-EVALUATION_TIMEOUT_SECONDS = 30
+# The full starter suite takes about 17–19 seconds on an Apple M2 Pro.
+EVALUATION_TIMEOUT_SECONDS = 90
 OWNER_RUNS = ROOT / "runs" / "owner"
+SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
+if SUITE not in SUITES:
+    raise ValueError("WORLDSMITH_RESEARCH_SUITE must be 'all' or 'maniskill'")
+
 mcp = FastMCP("worldsmith")
 latest_feedback: ResearchFeedback | None = None
+retained_summary: dict | None = None
 
 
 def now() -> str:
@@ -41,10 +50,48 @@ def snapshot_code(destination: Path):
         raise ValueError("Workspace has no controller.py to evaluate.")
 
 
+def snapshot_hash(code: Path) -> str:
+    # Include helper files as well as controller.py in the snapshot identity.
+    digest = sha256()
+    for path in sorted(code.rglob("*")):
+        if path.is_file():
+            digest.update(path.relative_to(code).as_posix().encode() + b"\0")
+            digest.update(sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def run_group(group: str, python: str, code: Path, output: Path, deadline: float):
+    log = output.parent.parent / f"{group}-stderr.txt"
+    with log.open("w", encoding="utf-8") as stderr:
+        result = subprocess.run(
+            [python, "-B", "-m", "worldsmith.research_evaluation", group, str(output)],
+            cwd=code,
+            env={**os.environ, "PYTHONPATH": str(ROOT)},
+            stdout=stderr,
+            stderr=subprocess.STDOUT,
+            timeout=max(0, deadline - monotonic()),
+        )
+    if result.returncode:
+        diagnostic = output / "controller_feedback.txt"
+        if diagnostic.is_file():
+            raise EvaluationFailure(diagnostic.read_text(encoding="utf-8").strip())
+        marker = output / "task.txt"
+        message = "Evaluator could not complete the run"
+        if marker.is_file():
+            message += f" while evaluating {marker.read_text(encoding='utf-8')}"
+        raise EvaluationFailure(message) from subprocess.CalledProcessError(result.returncode, result.args)
+
+
+class EvaluationFailure(RuntimeError):
+    """Evaluation failure whose message can be included in public feedback."""
+
+
 @mcp.tool(structured_output=True)
 def evaluate_controller() -> dict[str, object]:
-    """Evaluate the shared controller on all development tasks and save the run."""
-    global latest_feedback
+    """Evaluate the shared controller on this session's development suite and save the run."""
+    global latest_feedback, retained_summary
+    started = monotonic()
+    deadline = started + EVALUATION_TIMEOUT_SECONDS
     run_id = f"mcp-{uuid4().hex}"
     output = WORKSPACE / "runs" / run_id
     owner_run = OWNER_RUNS / run_id
@@ -54,10 +101,7 @@ def evaluate_controller() -> dict[str, object]:
     except OSError:
         raise RuntimeError(f"Could not create evaluation directories. Run: {run_id}") from None
 
-    record = {
-        "run_id": run_id,
-        "started_at": now(),
-    }
+    record = {"run_id": run_id, "started_at": now()}
 
     def save_status(status: str, **details):
         for directory in (owner_run, output):
@@ -65,39 +109,44 @@ def evaluate_controller() -> dict[str, object]:
 
     code = owner_run / "code"
     owner_results = owner_run / "results"
+    maniskill_python = Path(os.environ.get(
+        "WORLDSMITH_MANISKILL_PYTHON", ROOT / "maniskill/.venv/bin/python",
+    )).expanduser()
     try:
         save_status("preparing")
         snapshot_code(code / "autoresearch")
         copy_entry(code, output / "code", skip_cache=True)
+        digest = snapshot_hash(code)
         save_status("running")
-        # Run the exact snapshot in a fresh process and keep its stdout off MCP's wire.
-        result = subprocess.run(
-            [
-                sys.executable, "-B", "-m", "worldsmith", "evaluate",
-                "--controller", "autoresearch.controller:make_controller",
-                "--task", "all", "--split", "dev", "--output", str(owner_results),
-            ],
-            cwd=code,
-            env={**os.environ, "PYTHONPATH": str(ROOT)},
-            capture_output=True,
-            text=True,
-            timeout=EVALUATION_TIMEOUT_SECONDS,
-        )
-        if result.stderr:
-            (owner_run / "stderr.txt").write_text(result.stderr, encoding="utf-8")
-        if result.returncode:
-            diagnostic = owner_results / "controller_error.txt"
-            detail = diagnostic.read_text(encoding="utf-8").strip() if diagnostic.is_file() else (
-                f"evaluator exited with status {result.returncode}"
+        if not maniskill_python.is_absolute() or not os.access(maniskill_python, os.X_OK):
+            raise EvaluationFailure("Evaluation environment is unavailable") from ValueError(
+                "Set WORLDSMITH_MANISKILL_PYTHON to the absolute path of the pinned Python 3.11 interpreter"
             )
-            message = f"Evaluation failed: {detail}"
-            save_status("failed", error=message, ended_at=now())
-            raise RuntimeError(f"{message}. Run: {run_id}")
-        feedback = publish_feedback(owner_results, output / "results")
-    except subprocess.TimeoutExpired:
-        message = f"Evaluation timed out after {EVALUATION_TIMEOUT_SECONDS} seconds."
-        save_status("timed_out", error=message, ended_at=now())
-        raise RuntimeError(f"{message} Run: {run_id}") from None
+        runtimes = {"pymunk": sys.executable, "maniskill": str(maniskill_python)}
+        _, groups = SUITES[SUITE]
+        for group in groups:
+            group_results = owner_results / group
+            try:
+                run_group(group, runtimes[group], code, group_results, deadline)
+            except subprocess.TimeoutExpired:
+                marker = group_results / "task.txt"
+                (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
+                message = f"Evaluation timed out after {EVALUATION_TIMEOUT_SECONDS} seconds"
+                if marker.is_file():
+                    message += f" while evaluating {marker.read_text(encoding='utf-8')}"
+                save_status("timed_out", error=message, ended_at=now())
+                raise RuntimeError(f"{message}. Run: {run_id}") from None
+            if snapshot_hash(code) != digest:
+                raise EvaluationFailure("Controller snapshot changed during evaluation")
+        feedback = publish_feedback(
+            owner_results, output / "results", suite=SUITE, controller_sha256=digest,
+            started=started, retained=retained_summary,
+        )
+    except EvaluationFailure as exc:
+        (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
+        message = f"Evaluation failed: {exc}"
+        save_status("failed", error=message, ended_at=now())
+        raise RuntimeError(f"{message}. Run: {run_id}") from None
     except (OSError, KeyError, ValueError):
         (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
         message = "Evaluation could not prepare the snapshot or publish feedback."
@@ -105,22 +154,22 @@ def evaluate_controller() -> dict[str, object]:
         raise RuntimeError(f"{message} Run: {run_id}") from None
     save_status("succeeded", ended_at=now())
     latest_feedback = feedback
-    summary = feedback.summary
+    if retained_summary is None or feedback.summary["aggregate_score"] > retained_summary["aggregate_score"]:
+        retained_summary = feedback.summary
     return {
         "run_id": run_id,
         "run_dir": (output / "results").relative_to(WORKSPACE).as_posix(),
-        "benchmark": summary["benchmark"],
-        "episodes": summary["episodes"],
-        "aggregate_score": summary["aggregate_score"],
-        "tasks": summary["tasks"],
+        **feedback.summary,
     }
 
 
 @mcp.tool(structured_output=True)
-def get_episode_trace(seed: int, task: str = "interception") -> dict[str, object]:
+def get_episode_trace(seed: int, task: str | None = None) -> dict[str, object]:
     """Return a task/seed episode from the latest successful development run in this session."""
     if latest_feedback is None:
         raise ValueError("Run evaluate_controller() first.")
+    if task is None:
+        task = "push_cube" if SUITE == "maniskill" else "interception"
     return latest_feedback.episode(seed, task)
 
 

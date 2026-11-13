@@ -3,10 +3,11 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 
-from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS
+from worldsmith.benchmark.task_catalog import TASK_GROUPS
+from worldsmith.research_evaluation import CONTROLLER, DEV_SEEDS, SUITES
 
-SUMMARY_FIELDS = ("benchmark", "objective", "controller", "split", "seeds", "episodes", "aggregate_score")
 TASK_METRICS = {
     "interception": ("captures", "capture_rate", "mean_closest_distance"),
     "bouncing_interception": ("captures", "capture_rate", "mean_closest_distance"),
@@ -20,9 +21,7 @@ TASK_METRICS = {
 EPISODE_OUTCOMES = {
     "interception": ("captured",),
     "bouncing_interception": ("captured",),
-    "navigation": ("success", "collided"),
-    "rendezvous": ("success",),
-    "object_pushing": ("success",),
+    "navigation": ("collided",),
 }
 
 
@@ -52,45 +51,104 @@ def public_observation(observation: dict) -> dict:
     }
 
 
-def publish_feedback(owner_results: Path, results: Path) -> ResearchFeedback:
-    owner_summary = json.loads((owner_results / "summary.json").read_text(encoding="utf-8"))
-    if owner_summary["split"] != "dev" or owner_summary["seeds"] != list(COMBINED_SPLITS["dev"]):
-        raise ValueError("Research feedback requires the combined development split.")
-    summary = {field: owner_summary[field] for field in SUMMARY_FIELDS}
-    summary["tasks"] = {
-        task: {field: metrics[field] for field in ("episodes", "success_rate", *TASK_METRICS[task])}
-        for task, metrics in owner_summary["tasks"].items()
+def public_episode(task: str, group: str, episode: dict) -> dict:
+    steps = episode["steps"]
+    if group == "pymunk":
+        frames = [
+            {
+                "observation": public_observation(step["observation"]),
+                "action": {key: step["action"][key] for key in ("heading", "throttle")},
+            }
+            for step in steps
+        ]
+        final_observation = public_observation(episode["final_observation"])
+    else:
+        # These structured observations are the exact controller inputs.
+        frames = [{"observation": step["observation"], "action": step["action"]} for step in steps]
+        final_observation = episode["final_observation"]
+
+    outcomes = {field: episode[field] for field in EPISODE_OUTCOMES.get(task, ())}
+    success = outcomes["captured"] if "captured" in outcomes else episode["success"]
+    return {
+        "task": task,
+        "seed": episode["seed"],
+        "steps": episode["length"],
+        "success": success,
+        "terminated": steps[-1]["terminated"],
+        "truncated": steps[-1]["truncated"],
+        **outcomes,
+        "initial_observation": frames[0]["observation"],
+        "frames": frames,
+        "final_observation": final_observation,
     }
 
+
+def publish_feedback(
+    owner_results: Path,
+    results: Path,
+    *,
+    suite: str,
+    controller_sha256: str,
+    started: float,
+    retained: dict | None,
+) -> ResearchFeedback:
+    tasks = {}
     episodes = []
     episode_indices = {}
-    with (owner_results / "episodes.jsonl").open(encoding="utf-8") as trace:
-        for line in trace:
-            episode = json.loads(line)
-            seed = episode["seed"]
-            task = episode["initial_observation"]["goal"]
-            episode_indices[seed, task] = len(episodes)
-            episodes.append({
-                "task": task,
-                "seed": seed,
-                "steps": episode["steps"],
-                **{field: episode[field] for field in EPISODE_OUTCOMES[task]},
-                "initial_observation": public_observation(episode["initial_observation"]),
-                "frames": [
-                    {
-                        "observation": public_observation(frame["observation"]),
-                        "action": {
-                            "heading": frame["action"]["heading"],
-                            "throttle": frame["action"]["throttle"],
-                        },
-                    }
-                    for frame in episode["frames"]
-                ],
-            })
+    seeds = list(DEV_SEEDS)
+    benchmark, groups = SUITES[suite]
+    for group in groups:
+        for task in TASK_GROUPS[group]:
+            task_results = owner_results / group / task
+            native = json.loads((task_results / "summary.json").read_text(encoding="utf-8"))
+            with (task_results / "episodes.jsonl").open(encoding="utf-8") as trace:
+                rows = [json.loads(line) for line in trace]
+            if (
+                native["seeds"] != seeds
+                or [row["seed"] for row in native["episodes"]] != seeds
+                or [row["seed"] for row in rows] != seeds
+            ):
+                raise ValueError(f"Incomplete development split for {task}")
 
-    results.mkdir()
-    (results / "summary.json").write_text(json.dumps(summary) + "\n", encoding="utf-8")
-    with (results / "episodes.jsonl").open("w", encoding="utf-8") as trace:
+            metric_fields = TASK_METRICS[task] if group == "pymunk" else ()
+            rate_field = "capture_rate" if "capture_rate" in metric_fields else "success_rate"
+            success_rate = native[rate_field]
+            tasks[task] = {
+                "episodes": len(seeds),
+                "seeds": seeds,
+                "success_rate": success_rate,
+                **{field: native[field] for field in metric_fields},
+                "success_rate_change": (
+                    None if retained is None else success_rate - retained["tasks"][task]["success_rate"]
+                ),
+                "configuration": {
+                    "max_episode_steps": native["max_episode_steps"],
+                    **{key: native[key] for key in ("objective", "action_shape") if key in native},
+                },
+            }
+            for row in rows:
+                episode_indices[row["seed"], task] = len(episodes)
+                episodes.append(public_episode(task, group, row))
+
+    aggregate = sum(task["success_rate"] for task in tasks.values()) / len(tasks)
+    summary = {
+        "benchmark": benchmark,
+        "split": "dev",
+        "controller": CONTROLLER,
+        "controller_snapshot_sha256": controller_sha256,
+        "seeds": seeds,
+        "episodes": len(episodes),
+        "aggregate_score": aggregate,
+        "retained_aggregate_score": None if retained is None else retained["aggregate_score"],
+        "retained_controller_snapshot_sha256": None if retained is None else retained["controller_snapshot_sha256"],
+        "tasks": tasks,
+    }
+    staging = results.with_suffix(".tmp")
+    staging.mkdir()
+    with (staging / "episodes.jsonl").open("w", encoding="utf-8") as trace:
         for episode in episodes:
             trace.write(json.dumps(episode) + "\n")
+    summary["runtime_seconds"] = monotonic() - started
+    (staging / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    staging.rename(results)
     return ResearchFeedback(summary, episodes, episode_indices)

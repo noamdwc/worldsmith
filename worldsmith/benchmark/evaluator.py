@@ -7,10 +7,10 @@ from collections.abc import Callable, Mapping
 from functools import partial
 from importlib import import_module
 from pathlib import Path
-from typing import ContextManager, Protocol, TypeVar
+from typing import ContextManager, Protocol
 
 from worldsmith.benchmark.results import TaskEvaluation, write_scored_episode, write_summary
-from worldsmith.benchmark.runner import Controller, ControllerFactory, Simulator, run_episode
+from worldsmith.benchmark.runner import ControllerFactory, Simulator, run_episode
 from worldsmith.benchmark.task_catalog import TASK_CATALOG
 
 
@@ -22,19 +22,18 @@ class EvaluationAdapter(Simulator, Protocol):
     def summarize(self, episodes: list[dict]) -> dict: ...
 
 
-Adapter = TypeVar("Adapter", bound=EvaluationAdapter)
-
-
 def evaluate_episodes(
     adapter: EvaluationAdapter,
     controller_factory: ControllerFactory,
     seeds: list[int],
     record: Callable[[dict, dict], None],
+    *,
+    task: str,
 ) -> TaskEvaluation:
     rows = []
     scores = []
     for seed in seeds:
-        episode = run_episode(adapter, controller_factory, seed)
+        episode = run_episode(adapter, controller_factory, seed, task=task)
         metrics = adapter.score(episode)
         record(episode, metrics)
         rows.append({"seed": seed, "length": episode["length"], **metrics})
@@ -43,25 +42,20 @@ def evaluate_episodes(
 
 
 def evaluate(
-    tasks: Mapping[str, Adapter],
+    tasks: Mapping[str, EvaluationAdapter],
     controller_factory: ControllerFactory,
     seeds: list[int],
     record: Callable[[dict, dict], None],
     *,
-    prepare_controller: Callable[[Adapter, ControllerFactory], Controller] | None = None,
     summarize: Callable[[dict[str, TaskEvaluation]], dict] | None = None,
 ) -> dict:
     """Evaluate open adapters in task order, with a shared factory and seed set.
 
-    Controller preparation runs after each reset. Return the task results
-    directly or pass them to the supplied benchmark summary policy.
+    Return the task results directly or pass them to the supplied summary policy.
     """
     results = {}
     for name, adapter in tasks.items():
-        factory = controller_factory
-        if prepare_controller is not None:
-            factory = partial(prepare_controller, adapter, controller_factory)
-        results[name] = evaluate_episodes(adapter, factory, seeds, record)
+        results[name] = evaluate_episodes(adapter, controller_factory, seeds, record, task=name)
     return results if summarize is None else summarize(results)
 
 
@@ -71,6 +65,8 @@ def evaluate_to_directory(
     episodes: int,
     seed: int,
     output: Path,
+    *,
+    task: str = "task",
 ) -> dict:
     if episodes < 1 or seed < 0 or seed + episodes > 2**32:
         raise ValueError("Use a positive episode count and seeds in [0, 2**32).")
@@ -81,9 +77,9 @@ def evaluate_to_directory(
     output.mkdir(parents=True)
     with open_adapter() as adapter:
         with (output / "episodes.jsonl").open("w", encoding="utf-8") as traces:
-            result = evaluate(
-                {"task": adapter}, controller_factory, seeds, partial(write_scored_episode, traces)
-            )["task"]
+            result = evaluate_episodes(
+                adapter, controller_factory, seeds, partial(write_scored_episode, traces), task=task,
+            )
         summary = adapter.metadata()
 
     factory_type = type(controller_factory)
@@ -119,7 +115,7 @@ def main() -> None:
         if not callable(factory):
             parser.error("--controller must name a callable factory")
 
-    summary = evaluate_to_directory(open_adapter, factory, args.episodes, args.seed, args.output)
+    summary = evaluate_to_directory(open_adapter, factory, args.episodes, args.seed, args.output, task=args.task)
     print(json.dumps(summary, indent=2))
 
 

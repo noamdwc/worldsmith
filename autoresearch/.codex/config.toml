@@ -1,6 +1,8 @@
 [mcp_servers.worldsmith]
 command = "uv"
 required = true
+tool_timeout_sec = 105
+env_vars = ["WORLDSMITH_RESEARCH_SUITE", "WORLDSMITH_MANISKILL_PYTHON", "VK_ICD_FILENAMES", "DYLD_LIBRARY_PATH"]
 args = ["run", "--locked", "--directory", "..", "python", "-m", "worldsmith.research_mcp"]
 
 [mcp_servers.worldsmith.tools.evaluate_controller]

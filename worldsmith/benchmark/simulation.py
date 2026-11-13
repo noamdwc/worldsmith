@@ -8,6 +8,7 @@ from random import Random
 import pymunk
 
 from worldsmith.api import Action, Observation, PositionMeasurement, Vec2
+from worldsmith.benchmark.runner import InvalidAction
 
 TIME_STEP = 0.1
 _BODY_TYPES = {
@@ -15,10 +16,6 @@ _BODY_TYPES = {
     pymunk.Body.DYNAMIC: "dynamic",
     pymunk.Body.STATIC: "static",
 }
-
-
-class InvalidAction(ValueError):
-    """A controller command violates the Action contract."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,11 +1,18 @@
 import json
 import shutil
 import subprocess
+import sys
+from pathlib import Path
+from time import monotonic
 
 import pytest
 
 from worldsmith import research_lifecycle, research_mcp
+from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
+from worldsmith.research_evaluation import DEV_SEEDS
 from worldsmith.research_feedback import publish_feedback
+
+RUN = subprocess.run
 
 
 @pytest.fixture
@@ -14,152 +21,203 @@ def workspace(tmp_path, monkeypatch):
     workspace.mkdir()
     shutil.copyfile(research_lifecycle.BASELINE / "controller.py", workspace / "controller.py")
     monkeypatch.setattr(research_mcp, "WORKSPACE", workspace)
+    monkeypatch.setattr(research_mcp, "SUITE", "all")
     monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
     monkeypatch.setattr(research_mcp, "latest_feedback", None)
+    monkeypatch.setattr(research_mcp, "retained_summary", None)
+    maniskill_python = tmp_path / "maniskill-python"
+    maniskill_python.symlink_to(sys.executable)
+    monkeypatch.setenv("WORLDSMITH_MANISKILL_PYTHON", str(maniskill_python))
     return workspace
 
 
-def test_evaluate_controller_saves_metrics_and_trace(workspace):
-    (workspace / "skill.py").write_text("def throttle(): return 0.0\n")
-    (workspace / "controller.py").write_text(
-        "import json, sys\n"
-        "from dataclasses import asdict\n"
-        "from autoresearch.skill import throttle\n"
-        "from worldsmith.api import Action\n"
-        "def control(observation):\n"
-        "    action = Action(0, throttle())\n"
-        "    print(json.dumps([asdict(observation), asdict(action)]), file=sys.stderr)\n"
-        "    return action\n"
-        "def make_controller(): return control\n"
-    )
+@pytest.fixture
+def maniskill_worker(workspace, monkeypatch):
+    # Standard tests need only Pymunk. The opt-in integration tests run real SAPIEN.
+    class Worker:
+        def __init__(self):
+            self.calls = []
+            self.successes = 8
+            self.after_pymunk = None
+
+        def run(self, command, *, cwd, **kwargs):
+            if "worldsmith.research_evaluation" not in command:
+                return RUN(command, cwd=cwd, **kwargs)
+            group, directory = command[-2:]
+            output = Path(directory)
+            self.calls.append((group, command[0], cwd, (cwd / "autoresearch/controller.py").read_bytes()))
+            if group == "pymunk":
+                result = RUN(command, cwd=cwd, **kwargs)
+                if self.after_pymunk:
+                    self.after_pymunk()
+                return result
+
+            for task in TASK_GROUPS["maniskill"]:
+                task_output = output / task
+                task_output.mkdir(parents=True)
+                episodes = []
+                for seed in DEV_SEEDS:
+                    observation = {"agent": {"qpos": [[0.0]]}, "extra": {"tcp_pose": [[1.0]]}}
+                    episodes.append({
+                        "seed": seed,
+                        "length": 1,
+                        "success": seed < self.successes,
+                        "reset_info": {"private_reset": True},
+                        "steps": [{
+                            "observation": observation,
+                            "action": [0.0],
+                            "terminated": seed < self.successes,
+                            "truncated": seed >= self.successes,
+                            "reward": 1.0,
+                            "info": {"private_step": True},
+                        }],
+                        "final_observation": observation,
+                    })
+                (task_output / "episodes.jsonl").write_text(
+                    "".join(json.dumps(row) + "\n" for row in episodes),
+                )
+                (task_output / "summary.json").write_text(json.dumps({
+                    "task_id": "PushCube-v1",
+                    "task_version": 1,
+                    "max_episode_steps": 50,
+                    "action_shape": [4],
+                    "sim_backend": "physx_cpu",
+                    "render_backend": "sapien_cpu",
+                    "versions": {"mani-skill-nightly": "private version"},
+                    "python": "3.11",
+                    "obs_mode": "state_dict",
+                    "seeds": list(DEV_SEEDS),
+                    "episodes": [{key: row[key] for key in ("seed", "length", "success")} for row in episodes],
+                    "success_rate": self.successes / len(DEV_SEEDS),
+                    "private_metric": 123,
+                }))
+            return subprocess.CompletedProcess(command, 0)
+
+    worker = Worker()
+    monkeypatch.setattr(research_mcp.subprocess, "run", worker.run)
+    return worker
+
+
+def test_full_suite_snapshot_scoring_and_public_feedback(workspace, maniskill_worker):
+    source = '''from worldsmith.api import Action
+
+def make_controller(*, task):
+    def control(observation):
+        assert observation.goal == task
+        return Action(0, 0)
+    return control
+'''
+    controller = workspace / "controller.py"
+    controller.write_text(source)
+    maniskill_worker.after_pymunk = lambda: controller.write_text("raise RuntimeError('live edit')\n")
     with pytest.raises(ValueError, match="Run evaluate_controller"):
         research_mcp.get_episode_trace(0)
 
     metrics = research_mcp.evaluate_controller()
     run = workspace / metrics["run_dir"]
     owner = research_mcp.OWNER_RUNS / metrics["run_id"]
+    assert maniskill_worker.calls == [
+        ("pymunk", sys.executable, owner / "code", source.encode()),
+        ("maniskill", str(workspace.parent / "maniskill-python"), owner / "code", source.encode()),
+    ]
+    assert (run.parent / "code/autoresearch/controller.py").read_text() == source
     summary = json.loads((run / "summary.json").read_text())
-    owner_summary = json.loads((owner / "results/summary.json").read_text())
-    assert summary == owner_summary
+    assert summary["benchmark"] == "worldsmith-all-v1"
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
-    assert metrics["episodes"] == summary["episodes"] == 40
-    assert metrics["aggregate_score"] == summary["aggregate_score"] == 0
-    assert metrics["tasks"] == summary["tasks"]
-    assert set(metrics["tasks"]) == {
-        "interception", "navigation", "rendezvous", "bouncing_interception", "object_pushing",
+    assert summary["episodes"] == 88
+    assert summary["runtime_seconds"] > 0
+    assert set(summary["tasks"]) == set(TASK_CATALOG)
+    assert all(row["episodes"] == 8 for row in summary["tasks"].values())
+    assert summary["aggregate_score"] == pytest.approx(6 / 11)
+    assert summary["tasks"]["interception"]["captures"] == 0
+    assert summary["tasks"]["push_cube"]["configuration"] == {
+        "max_episode_steps": 50, "action_shape": [4],
     }
-    assert metrics["tasks"]["interception"]["captures"] == 0
-    assert (run.parent / "code/autoresearch/skill.py").read_bytes() == (workspace / "skill.py").read_bytes()
-    controller_snapshot = "code/autoresearch/controller.py"
-    assert (owner / controller_snapshot).read_bytes() == (run.parent / controller_snapshot).read_bytes()
+    assert set(summary["tasks"]["interception"]["configuration"]) == {"max_episode_steps", "objective"}
+    for term in ("pymunk", "maniskill", "sapien", "physx", "state_dict", "PushCube-v1", "private version"):
+        assert term not in json.dumps(metrics)
+    native = json.loads((owner / "results/maniskill/push_cube/summary.json").read_text())
+    assert native["sim_backend"] == "physx_cpu" and native["versions"]["mani-skill-nightly"] == "private version"
+    assert "private_metric" not in summary["tasks"]["push_cube"]
+    assert all(row["success_rate_change"] is None for row in summary["tasks"].values())
     record = json.loads((run.parent / "evaluation.json").read_text())
     assert record == json.loads((owner / "evaluation.json").read_text())
     assert record["status"] == "succeeded"
-    assert record["run_id"] == metrics["run_id"]
 
-    episode = research_mcp.get_episode_trace(0)
-    public_trace = run / "episodes.jsonl"
-    saved_episodes = [json.loads(line) for line in public_trace.read_text().splitlines()]
-    owner_trace = owner / "results/episodes.jsonl"
-    private_episodes = [json.loads(line) for line in owner_trace.read_text().splitlines()]
-    received = iter(json.loads(line) for line in (owner / "stderr.txt").read_text().splitlines())
-    outcomes = {
-        "interception": ("captured",),
-        "bouncing_interception": ("captured",),
-        "navigation": ("success", "collided"),
-        "rendezvous": ("success",),
-        "object_pushing": ("success",),
-    }
-    assert len(saved_episodes) == len(private_episodes) == 40
-    for public, private in zip(saved_episodes, private_episodes, strict=True):
-        task = private["initial_observation"]["goal"]
-        assert public["task"] == task and public["seed"] == private["seed"]
-        assert set(public) == {"task", "seed", "steps", "initial_observation", "frames", *outcomes[task]}
-        assert all(public[key] == private[key] for key in outcomes[task])
-        assert public["steps"] == private["steps"] == len(public["frames"])
-        assert public["initial_observation"] == private["initial_observation"]
-        robot = private["initial_state"]["robot"]
-        assert robot["velocity"] == [0, 0]
-        observation = public["initial_observation"]
-        assert observation["entities"]["robot"]["position"] != robot["position"]
-        if task == "object_pushing":
-            assert robot["body_type"] == "kinematic"
-            assert "contact_impulse" in private["initial_measurements"]
-            assert "velocity_retention_per_second" in private["initial_state"]["object"]
-        else:
-            assert robot == {"position": [0, 0], "velocity": [0, 0]}
-        if task == "bouncing_interception":
-            assert set(observation["entities"]) == {
-                "robot", "target", "wall_left", "wall_right", "wall_bottom", "wall_top",
-            }
-            target = private["initial_state"]["target"]
-            assert target["body_type"] == "dynamic"
-            assert target["shapes"][0]["type"] == "Circle"
-            assert set(observation["entities"]["target"]) == {"position", "covariance"}
-            assert observation["entities"]["target"]["position"] != target["position"]
-            wall = private["initial_state"]["wall_left"]
-            assert wall["body_type"] == "static"
-            assert "elasticity" in wall["shapes"][0]
-            assert observation["entities"]["wall_left"] == {
-                "position": wall["position"], "covariance": [[0, 0], [0, 0]],
-            }
-        for frame, private_frame in zip(public["frames"], private["frames"], strict=True):
-            assert set(frame) == {"observation", "action"}
-            assert next(received) == [observation, frame["action"]]
-            assert frame == {key: private_frame[key] for key in frame}
-            assert set(private_frame["state"]) == set(observation["entities"])
-            assert all(
-                set(entity) == {"position", "covariance"}
-                for entity in frame["observation"]["entities"].values()
-            )
-            assert set(private_frame["state"]["robot"]) == set(robot)
-            assert {"distance", "obstacle_clearance", "object_distance"} & private_frame.keys()
-            observation = frame["observation"]
-    assert next(received, None) is None
-    assert episode == saved_episodes[0]
-    for task in metrics["tasks"]:
-        episode = research_mcp.get_episode_trace(0, task)
-        assert episode == next(
-            item for item in saved_episodes
-            if item["seed"] == 0 and item["initial_observation"]["goal"] == task
-        )
+    saved = [json.loads(line) for line in (run / "episodes.jsonl").read_text().splitlines()]
+    assert len(saved) == 88
+    for public in saved:
+        assert research_mcp.get_episode_trace(public["seed"], public["task"]) == public
+        assert all(set(frame) == {"observation", "action"} for frame in public["frames"])
+        assert "reset_info" not in public and "private_step" not in json.dumps(public)
+    private_trace = owner / "results/maniskill/push_cube/episodes.jsonl"
+    private = json.loads(private_trace.read_text().splitlines()[0])
+    push = research_mcp.get_episode_trace(0, "push_cube")
+    assert push["success"] and push["terminated"] and not push["truncated"]
+    assert push["frames"][0]["observation"] == private["steps"][0]["observation"]
+    assert push["frames"][0]["action"] == private["steps"][0]["action"]
+    intercept = research_mcp.get_episode_trace(0)
+    path = owner / "results/pymunk/interception/episodes.jsonl"
+    private = json.loads(path.read_text().splitlines()[0])
+    assert intercept["initial_observation"] == private["steps"][0]["observation"]
+    assert intercept["frames"][0]["observation"] == private["steps"][0]["observation"]
+    assert intercept["frames"][0]["action"] == private["steps"][0]["action"]
+    assert intercept["final_observation"] == private["final_observation"]
+    assert set(intercept) == set(push) | {"captured"}
+    assert intercept["success"] == intercept["captured"]
+    assert "state" in private["reset_info"] and "state" not in intercept
     with pytest.raises(ValueError, match="task 'unknown'"):
         research_mcp.get_episode_trace(0, "unknown")
     with pytest.raises(ValueError, match="Seed 1000 was not in the latest development run"):
-        research_mcp.get_episode_trace(1000)
+        research_mcp.get_episode_trace(1000, "push_cube")
 
     # MCP serves the published feedback even if an editable run file is replaced.
-    public_trace.write_bytes(owner_trace.read_bytes())
-    assert research_mcp.get_episode_trace(0) == saved_episodes[0]
+    (run / "episodes.jsonl").write_bytes(private_trace.read_bytes())
+    assert research_mcp.get_episode_trace(0, "push_cube") == push
 
 
-def test_feedback_excludes_extra_observation_and_action_fields(workspace, tmp_path):
+def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace, maniskill_worker, monkeypatch):
+    monkeypatch.setattr(research_mcp, "SUITE", "maniskill")
+    maniskill_worker.successes = 6
+
     metrics = research_mcp.evaluate_controller()
-    expected = research_mcp.get_episode_trace(0)
+    assert [call[0] for call in maniskill_worker.calls] == ["maniskill"]
+    assert metrics["benchmark"] == "worldsmith-manipulation-v1"
+    assert metrics["episodes"] == 48
+    assert set(metrics["tasks"]) == set(TASK_GROUPS["maniskill"])
+    assert metrics["aggregate_score"] == 0.75
+    assert research_mcp.get_episode_trace(0) == research_mcp.get_episode_trace(0, "push_cube")
+    with pytest.raises(ValueError, match="task 'interception'"):
+        research_mcp.get_episode_trace(0, "interception")
+
+
+def test_per_task_changes_use_retained_run(workspace, maniskill_worker):
+    baseline = research_mcp.evaluate_controller()
+    maniskill_worker.successes = 6
+    weaker = research_mcp.evaluate_controller()
+    tie = research_mcp.evaluate_controller()
+    assert weaker["aggregate_score"] < baseline["aggregate_score"]
+    assert weaker["retained_aggregate_score"] == tie["retained_aggregate_score"] == baseline["aggregate_score"]
+    assert tie["tasks"]["push_cube"]["success_rate_change"] == -0.25
+    assert tie["tasks"]["interception"]["success_rate_change"] == 0
+
+
+def test_feedback_refuses_incomplete_or_heldout_results(workspace, maniskill_worker, tmp_path):
+    metrics = research_mcp.evaluate_controller()
     owner_results = research_mcp.OWNER_RUNS / metrics["run_id"] / "results"
-    owner_trace = owner_results / "episodes.jsonl"
-    lines = owner_trace.read_text().splitlines(keepends=True)
-    episode = json.loads(lines[0])
-    episode["initial_observation"]["true_position"] = [0, 0]
-    frame = episode["frames"][0]
-    frame["observation"]["scoring_distance"] = 4.0
-    frame["observation"]["entities"]["target"]["true_velocity"] = [1, 0]
-    frame["action"]["diagnostic"] = "owner only"
-    lines[0] = json.dumps(episode) + "\n"
-    owner_trace.write_text("".join(lines))
+    last_trace = owner_results / "maniskill/push_t/episodes.jsonl"
+    rows = last_trace.read_text().splitlines()
+    last_trace.write_text("\n".join(rows[:-1]) + "\n")
 
-    results = tmp_path / "published"
-    feedback = publish_feedback(owner_results, results)
-    assert feedback.episode(0, "interception") == expected
-    with (results / "episodes.jsonl").open() as trace:
-        assert json.loads(next(trace)) == expected
-
-
-def test_feedback_refuses_heldout_results(tmp_path):
-    (tmp_path / "summary.json").write_text(json.dumps({"split": "heldout", "seeds": list(range(1000, 1008))}))
     results = tmp_path / "public"
-    with pytest.raises(ValueError, match="development split"):
-        publish_feedback(tmp_path, results)
+    with pytest.raises(ValueError, match="Incomplete development split for push_t"):
+        publish_feedback(owner_results, results, suite="all", controller_sha256="", started=monotonic(), retained=None)
+    first_summary = owner_results / "pymunk/interception/summary.json"
+    summary = json.loads(first_summary.read_text())
+    summary["seeds"] = list(range(1000, 1008))
+    first_summary.write_text(json.dumps(summary))
+    with pytest.raises(ValueError, match="Incomplete development split for interception"):
+        publish_feedback(owner_results, results, suite="all", controller_sha256="", started=monotonic(), retained=None)
     assert not results.exists()
 
 
@@ -169,10 +227,10 @@ def test_researcher_cannot_select_heldout_split(workspace):
     assert not (workspace / "runs").exists()
 
 
-def test_archive_and_reset_preserve_both_result_views(workspace, tmp_path):
+def test_archive_and_reset_preserve_both_result_views(workspace, maniskill_worker, tmp_path):
     metrics = research_mcp.evaluate_controller()
     public_trace = workspace / metrics["run_dir"] / "episodes.jsonl"
-    owner_trace = research_mcp.OWNER_RUNS / metrics["run_id"] / "results/episodes.jsonl"
+    owner_trace = research_mcp.OWNER_RUNS / metrics["run_id"] / "results/maniskill/push_cube/episodes.jsonl"
     public_bytes, owner_bytes = public_trace.read_bytes(), owner_trace.read_bytes()
     history = tmp_path / "research-history"
     archive_id = research_lifecycle.archive_session(workspace, history)
@@ -184,72 +242,78 @@ def test_archive_and_reset_preserve_both_result_views(workspace, tmp_path):
     assert not (archived / "runs/owner").exists()
 
 
-def test_evaluation_timeout_keeps_previous_run(workspace, monkeypatch):
+@pytest.mark.parametrize("timed_out", [True, False])
+def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, monkeypatch, timed_out):
     previous_feedback = research_mcp.ResearchFeedback({}, [], {})
     monkeypatch.setattr(research_mcp, "latest_feedback", previous_feedback)
+    private_error = "ValueError: privileged scenario diagnostic"
 
-    def time_out(command, *, timeout, **kwargs):
-        assert timeout == 30
-        raise subprocess.TimeoutExpired(command, timeout)
+    def fail(command, *, timeout, stdout, **kwargs):
+        assert 0 < timeout <= research_mcp.EVALUATION_TIMEOUT_SECONDS
+        if command[-2] == "pymunk":
+            return subprocess.CompletedProcess(command, 0)
+        output = Path(command[-1])
+        output.mkdir(parents=True)
+        (output / "task.txt").write_text("push_cube")
+        stdout.write(private_error)
+        if timed_out:
+            raise subprocess.TimeoutExpired(command, timeout)
+        return subprocess.CompletedProcess(command, 1)
 
-    monkeypatch.setattr(research_mcp.subprocess, "run", time_out)
-
-    with pytest.raises(RuntimeError, match="Evaluation timed out after 30 seconds"):
+    monkeypatch.setattr(research_mcp.subprocess, "run", fail)
+    with pytest.raises(RuntimeError, match="while evaluating push_cube") as failure:
         research_mcp.evaluate_controller()
     assert research_mcp.latest_feedback is previous_feedback
     [run] = (workspace / "runs").iterdir()
-    assert json.loads((run / "evaluation.json").read_text())["status"] == "timed_out"
+    status = json.loads((run / "evaluation.json").read_text())
+    assert status["status"] == ("timed_out" if timed_out else "failed")
+    assert private_error not in str(failure.value)
+    assert private_error not in status["error"]
+    assert "maniskill" not in status["error"]
+    assert (research_mcp.OWNER_RUNS / run.name / "maniskill-stderr.txt").read_text() == private_error
     assert (run / "code/autoresearch/controller.py").is_file()
+    assert not (run / "results").exists()
 
 
-@pytest.mark.parametrize(("source", "diagnostic"), [
-    ("raise ValueError('import failure')\n", "ValueError: import failure"),
+@pytest.mark.parametrize(("source", "diagnostic", "public_message"), [
     (
-        "def make_controller(): raise ValueError('setup failure')\n",
-        "Controller setup: ValueError: setup failure",
+        "raise ValueError('private pymunk import failure')\n",
+        "Controller import: ValueError: private pymunk import failure",
+        "Could not load controller.py or its make_controller factory",
     ),
     (
-        "def control(observation): raise RuntimeError('action failure')\n"
+        "def make_controller(): raise ValueError('private pymunk setup failure')\n",
+        "interception, seed 0, controller setup: ValueError: private pymunk setup failure",
+        "interception, seed 0: make_controller raised an exception",
+    ),
+    (
+        "def control(observation): raise RuntimeError('private pymunk action failure')\n"
         "def make_controller(): return control\n",
-        "interception, seed 0, step 1: RuntimeError: action failure",
+        "interception, seed 0, step 1: RuntimeError: private pymunk action failure",
+        "interception, seed 0, step 1: controller raised an exception",
     ),
     (
         "from worldsmith.api import Action\n"
         "def make_controller(): return lambda observation: Action(0, 2)\n",
         "interception, seed 0, step 1: Action requires a finite heading and throttle in [0, 1]",
+        "interception, seed 0, step 1: controller returned an invalid action",
     ),
 ], ids=["import", "setup", "action", "invalid-throttle"])
-def test_evaluation_reports_controller_errors_without_publishing_tracebacks(workspace, source, diagnostic):
+def test_controller_errors_without_publishing_tracebacks(workspace, source, diagnostic, public_message):
     controller = workspace / "controller.py"
     controller.write_text(source)
-
     with pytest.raises(RuntimeError) as failure:
         research_mcp.evaluate_controller()
     [run] = (workspace / "runs").iterdir()
-    assert str(failure.value) == f"Evaluation failed: {diagnostic}. Run: {run.name}"
+    assert str(failure.value) == f"Evaluation failed: {public_message}. Run: {run.name}"
     status = json.loads((run / "evaluation.json").read_text())
     assert status["status"] == "failed"
-    assert status["error"] == f"Evaluation failed: {diagnostic}"
+    assert status["error"] == f"Evaluation failed: {public_message}"
     assert (run / "code/autoresearch/controller.py").read_bytes() == controller.read_bytes()
     assert not (run / "results").exists()
-    assert not (run / "stderr.txt").exists()
     owner = research_mcp.OWNER_RUNS / run.name
-    assert (owner / "results/controller_error.txt").read_text() == diagnostic + "\n"
-    assert "Traceback" in (owner / "stderr.txt").read_text()
-
-
-def test_evaluator_stderr_stays_private(workspace, monkeypatch):
-    private_error = "ValueError: privileged scenario diagnostic"
-    monkeypatch.setattr(
-        research_mcp.subprocess, "run",
-        lambda command, **kwargs: subprocess.CompletedProcess(command, 1, "", private_error),
-    )
-    with pytest.raises(RuntimeError, match="evaluator exited with status 1") as failure:
-        research_mcp.evaluate_controller()
-    [run] = (workspace / "runs").iterdir()
-    assert private_error not in str(failure.value)
-    assert private_error not in (run / "evaluation.json").read_text()
-    assert (research_mcp.OWNER_RUNS / run.name / "stderr.txt").read_text() == private_error
+    assert (owner / "results/pymunk/controller_error.txt").read_text() == diagnostic + "\n"
+    assert "Traceback" in (owner / "pymunk-stderr.txt").read_text()
 
 
 def test_interrupted_evaluation_keeps_snapshot(workspace, monkeypatch):

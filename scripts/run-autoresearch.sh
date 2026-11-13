@@ -3,6 +3,13 @@ set -e
 
 CDPATH= cd "$(dirname "$0")/.."
 
+case "${1:-all}" in
+    all) suite=all; tasks="the full development suite" ;;
+    maniskill) suite=maniskill; tasks="the six tabletop manipulation tasks" ;;
+    *) printf 'Usage: %s [all|maniskill]\n' "$0" >&2; exit 2 ;;
+esac
+export WORLDSMITH_RESEARCH_SUITE="$suite"
+
 lifecycle() {
     uv run --locked python -m worldsmith.research_lifecycle "$@"
 }
@@ -11,7 +18,7 @@ lifecycle start
 status=0
 (
     cd autoresearch && exec codex exec --sandbox workspace-write \
-        "Run the three-iteration AutoResearch session in RESEARCH.md and summarize your findings."
+        "Run the three-iteration AutoResearch session in RESEARCH.md on $tasks and summarize your findings."
 ) || status=$?
 
 archive_id=$(lifecycle archive)
