@@ -1,13 +1,52 @@
 """Native integration checks. Run with the pinned optional Python environment."""
 
+import subprocess
+
 import numpy as np
 import pytest
 
 from worldsmith.benchmark.evaluator import evaluate_episodes
+from worldsmith.benchmark import libero_adapter
 from worldsmith.benchmark.libero_adapter import idle
 from worldsmith.benchmark.runner import InvalidAction
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_feedback import public_episode
+
+
+def test_source_check_allows_assets_and_generated_files(tmp_path, monkeypatch):
+    git = ["git", "-C", str(tmp_path)]
+    subprocess.run([*git, "init", "-q"], check=True)
+    source = tmp_path / "module.py"
+    source.write_text("pass\n")
+    subprocess.run([*git, "add", "module.py"], check=True)
+    subprocess.run([*git, "-c", "user.name=Test", "-c", "user.email=test@example.com",
+                    "commit", "-qm", "Pinned source"], check=True)
+    revision = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    monkeypatch.setattr(libero_adapter, "SOURCE", tmp_path)
+    monkeypatch.setattr(libero_adapter, "SOURCE_REVISION", revision)
+
+    asset = tmp_path / "libero/libero/init_files/task.pruned_init"
+    asset.parent.mkdir(parents=True)
+    asset.touch()
+    cache = tmp_path / "__pycache__"
+    cache.mkdir()
+    (cache / "module.cpython-311.pyc").touch()
+    (tmp_path / "MUJOCO_LOG.TXT").touch()
+    assets = ["init_files/task.pruned_init"]
+    libero_adapter.check_source(assets)
+
+    added = tmp_path / "other.py"
+    added.touch()
+    with pytest.raises(RuntimeError, match="Unexpected file.*other.py"):
+        libero_adapter.check_source(assets)
+    added.unlink()
+
+    source.write_text("# local edit\n")
+    with pytest.raises(RuntimeError, match="local changes"):
+        libero_adapter.check_source(assets)
+    subprocess.run([*git, "add", "module.py"], check=True)
+    with pytest.raises(RuntimeError, match="local changes"):
+        libero_adapter.check_source(assets)
 
 
 @pytest.mark.parametrize(("task", "object_key"), [
