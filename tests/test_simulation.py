@@ -196,9 +196,13 @@ def test_physics_stays_in_owner_trace(tmp_path):
         "shapes": [{"type": "Circle", "friction": 0.7, "elasticity": 0.3}],
     }
     assert public["initial_observation"] == owner["steps"][0]["observation"]
-    assert set(public) == {"task", "seed", "steps", "captured", "initial_observation", "frames"}
+    assert set(public) == {
+        "task", "seed", "steps", "captured", "success", "terminated", "truncated",
+        "initial_observation", "frames", "final_observation",
+    }
     assert set(public["frames"][0]) == {"action", "observation"}
-    assert public["frames"][0]["observation"] == owner["final_observation"]
-    for observation in (public["initial_observation"], public["frames"][0]["observation"]):
+    assert public["frames"][0]["observation"] == owner["steps"][0]["observation"]
+    assert public["final_observation"] == owner["final_observation"]
+    for observation in (public["initial_observation"], public["final_observation"]):
         assert set(observation["entities"]) == {"robot", "target"}
         assert set(observation["entities"]["target"]) == {"position", "covariance"}

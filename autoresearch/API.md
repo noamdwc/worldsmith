@@ -1,39 +1,31 @@
 # Public World API
 
-Import `Action`, `Observation`, and `Controller` from `worldsmith.api`. See [controller.py](controller.py) for a working example.
+Define `make_controller(*, task=None)` in [controller.py](controller.py). AutoResearch passes the task ID when it creates a fresh controller for each episode. Return a callable that takes the current observation and returns one action. Keep episode memory in that callable or its closure and treat observations as read-only.
 
-## Pymunk observation
+## Planar movement
 
-| Field | Type | Meaning |
-|---|---|---|
-| `time` | `float` | Simulated seconds since the episode started |
-| `robot_id` | `str` | Entity ID of the robot you control |
-| `entities` | `dict[str, PositionMeasurement]` | Noisy position measurements keyed by entity ID |
-| `robot_max_speed` | `float` | Maximum commanded speed in simulation units per second |
-| `goal` | `str` | Machine-readable task identifier for the controller. One of `"interception"`, `"navigation"`, `"rendezvous"`, `"bouncing_interception"`, or `"object_pushing"` |
+Import `Action` and `Observation` from `worldsmith.api`. See [TASKS.md](TASKS.md) for each task’s entities and limits.
 
-The simulator supplies the same goal in the initial observation and every subsequent observation. Existing four-argument calls to `Observation(...)` default to `"interception"`.
+| Observation field | Type | Meaning |
+| --- | --- | --- |
+| `time` | `float` | Simulated seconds since the start of the episode |
+| `robot_id` | `str` | ID of the robot you control |
+| `entities` | `dict[str, PositionMeasurement]` | Position measurements keyed by entity ID |
+| `robot_max_speed` | `float` | Maximum commanded speed in world units per second |
+| `goal` | `str` | Task ID, constant throughout the episode |
 
-Evaluation summaries use the `objective` key for the human-readable `task.objective`. Combined summaries map task identifiers to their objective descriptions under that key.
+Each `PositionMeasurement` has a position tuple `(x, y)` in world units and a covariance tuple `((xx, xy), (yx, yy))`. The diagonal entries are variances in squared world units.
 
-Each `PositionMeasurement` has a `position` tuple `(x, y)` in simulation units and a `covariance` tuple `((xx, xy), (yx, yy))` describing position measurement noise. The diagonal entries are variances in squared simulation units. Treat measurements as read-only. Entity positions are measurements, and velocity is unobserved. In bouncing interception, the four `wall_*` entities give exact wall midpoint positions with zero covariance. Object pushing provides noisy positions for `robot` and `object` and an exact position for `destination`. See [TASKS.md](TASKS.md) for task-specific entities and scoring.
+Return `Action(heading, throttle=1.0)`. Heading is a finite angle in radians counterclockwise from the positive x axis. Throttle is a fraction of `robot_max_speed` between `0` (stop) and `1` (full speed). When the factory is called without a task ID, use `observation.goal` for planar tasks.
 
-## Pymunk action
+## Tabletop manipulation
 
-Return `Action(heading, throttle=1.0)`. `heading` is a finite angle in radians measured counterclockwise from the positive x axis. `throttle` is a fraction of `robot_max_speed` between `0` (stop) and `1` (full speed).
+Observations are nested dictionaries of tensors with a leading batch dimension of one. The `agent` entry provides joint state, including `qpos` and `qvel`. The `extra` entry contains task measurements listed in [TASKS.md](TASKS.md). For example, `observation["extra"]["tcp_pose"][0, :3]` gives the tool center point position. Pose vectors use `[x, y, z, qw, qx, qy, qz]`, with position in meters.
 
-## ManiSkill observation and action
-
-The controller receives the original `state_dict`, a nested dictionary of CPU tensors with a leading batch dimension of one. `agent` provides robot joint state. `extra` provides the task observations in [TASKS.md](TASKS.md). Treat observations as read-only. For example, `observation["extra"]["tcp_pose"][0, :3]` is the TCP position.
-
-Return a NumPy `float32` array of the documented action size with values in `[-1, 1]`. The first three values command XYZ displacements in the robot base frame, with 0.1 m per axis at full scale. In pose mode, the next three values command rotation. On gripper-equipped robots, the last value commands the gripper, with `-1` closing it. PushT uses a stick and takes only XYZ commands.
-
-## Shared controller
-
-Define one `make_controller(*, task=None)` in `controller.py`. AutoResearch supplies the catalog task ID when it creates a fresh controller for each episode. The returned Python callable receives the native observation at each step and returns the corresponding native action. The optional default preserves the zero-argument Pymunk CLI contract through `observation.goal`.
-
-Store episode history on the returned object or in its closure. The file and any common helpers must import under Python 3.11 and 3.12. Import runtime-specific dependencies inside the corresponding branch, as the starter does. The controller runs without a runtime LLM.
+Return a NumPy `float32` array with entries in `[-1, 1]`. The first three entries command XYZ displacement in the robot base frame, with 0.1 m per axis at full scale. For the peg task, the next three entries form an XYZ rotation command in the robot base frame. The command vector is clipped to unit length, then multiplied by −0.1 to obtain XYZ Euler increments in radians. On tasks with a gripper, the last entry commands it, with `-1` closing and `+1` opening. PushT uses a stick and takes only XYZ commands.
 
 ## Development feedback
 
-The summary includes the snapshot hash, benchmark and task configuration, development seeds and episode counts, success rates, deltas from the retained controller, native metrics when available, and wall-clock runtime. Pymunk traces pair each action with its resulting observation, starting from `initial_observation`. ManiSkill traces pair each action with the observation that produced it and include `final_observation`, success, and native termination flags. The `state_dict` values are serialized as lists. Raw simulator `info`, reward, ground truth, and evaluator diagnostics stay in owner artifacts.
+`evaluate_controller()` returns the benchmark ID, snapshot hash, development seeds and episode counts, success rates and changes from the retained controller, task metrics when available, and elapsed time.
+
+`get_episode_trace(seed, task)` returns the episode outcome and the observations and actions in order. Each frame pairs the observation available when the controller acted with its action. `initial_observation` is the first input and `final_observation` is the state observed after the last action. Tensor values appear as lists. The trace reports whether the episode succeeded and whether it terminated or reached its step limit.

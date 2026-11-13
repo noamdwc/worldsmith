@@ -55,7 +55,8 @@ For a manually launched session, run these lifecycle commands from the repo root
 
 ```sh
 uv run --locked python -m worldsmith.research_lifecycle start
-# Launch Codex as described in the research run guide, then wait for it to exit.
+# Run this command from the autoresearch directory, then wait for it to exit.
+(cd autoresearch && codex "Run the three-iteration AutoResearch session in RESEARCH.md.")
 archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
 uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 ```
@@ -66,9 +67,11 @@ Run `make clear-autoresearch` to archive the current research work and reset the
 
 Reset checks that every current research file is present and unchanged in a completed archive before restoring the original controller and journal. If there are edits after archiving, archive again. Close the research session and wait for any evaluation to finish before running lifecycle commands.
 
+For a manual ManiSkill-only session, export `WORLDSMITH_RESEARCH_SUITE=maniskill` before launching Codex and ask it to work on the tabletop manipulation suite.
+
 ### Evaluation feedback and owner results
 
-Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite. The default `worldsmith-all-v1` suite evaluates 88 episodes across Pymunk and ManiSkill with the same controller snapshot. `worldsmith-maniskill-v1` evaluates 48 episodes using the ManiSkill runtime. Both use the same evaluator and runner and score the equal-weight mean of their task success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
+Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite. The default `worldsmith-all-v1` suite evaluates 88 episodes across Pymunk and ManiSkill with the same controller snapshot. `worldsmith-manipulation-v1` evaluates 48 episodes using the ManiSkill runtime. Earlier ManiSkill-only archives use the ID `worldsmith-maniskill-v1` for the same task set and scoring. Both current suites use the same evaluator and runner and score the equal-weight mean of their task success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
 
 `get_episode_trace(seed, task)` selects an episode from the latest successful MCP evaluation. With no task specified, it returns `interception` for the full suite or `push_cube` for ManiSkill-only. Each run writes two views with the same run ID:
 

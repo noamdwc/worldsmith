@@ -1,4 +1,4 @@
-"""Shared starter for the Pymunk and ManiSkill development tasks."""
+"""Shared starter for planar movement and tabletop manipulation tasks."""
 
 from math import atan2, hypot
 

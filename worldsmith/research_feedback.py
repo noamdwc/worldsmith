@@ -8,11 +8,6 @@ from time import monotonic
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_evaluation import CONTROLLER, DEV_SEEDS, SUITES
 
-MANISKILL_CONFIG = (
-    "task_id", "task_version", "max_episode_steps", "obs_mode", "action_mode",
-    "action_shape", "reward_mode", "sim_backend", "render_backend", "render_mode",
-    "robot", "reconfiguration_freq", "versions",
-)
 TASK_METRICS = {
     "interception": ("captures", "capture_rate", "mean_closest_distance"),
     "bouncing_interception": ("captures", "capture_rate", "mean_closest_distance"),
@@ -26,9 +21,7 @@ TASK_METRICS = {
 EPISODE_OUTCOMES = {
     "interception": ("captured",),
     "bouncing_interception": ("captured",),
-    "navigation": ("success", "collided"),
-    "rendezvous": ("success",),
-    "object_pushing": ("success",),
+    "navigation": ("collided",),
 }
 
 
@@ -60,36 +53,33 @@ def public_observation(observation: dict) -> dict:
 
 def public_episode(task: str, group: str, episode: dict) -> dict:
     steps = episode["steps"]
-    public = {"task": task, "seed": episode["seed"], "steps": episode["length"]}
     if group == "pymunk":
-        # Preserve the existing pairing of action with its resulting observation.
-        observations = [step["observation"] for step in steps[1:]] + [episode["final_observation"]]
-        return {
-            **public,
-            **{field: episode[field] for field in EPISODE_OUTCOMES[task]},
-            "initial_observation": public_observation(steps[0]["observation"]),
-            "frames": [
-                {
-                    "observation": public_observation(observation),
-                    "action": {key: step["action"][key] for key in ("heading", "throttle")},
-                }
-                for step, observation in zip(steps, observations, strict=True)
-            ],
-        }
+        frames = [
+            {
+                "observation": public_observation(step["observation"]),
+                "action": {key: step["action"][key] for key in ("heading", "throttle")},
+            }
+            for step in steps
+        ]
+        final_observation = public_observation(episode["final_observation"])
+    else:
+        # These structured observations are the exact controller inputs.
+        frames = [{"observation": step["observation"], "action": step["action"]} for step in steps]
+        final_observation = episode["final_observation"]
 
-    # The entire native state_dict is a controller input. Reset/step info, rewards,
-    # and other simulator diagnostics remain in the owner artifacts.
+    outcomes = {field: episode[field] for field in EPISODE_OUTCOMES.get(task, ())}
+    success = outcomes["captured"] if "captured" in outcomes else episode["success"]
     return {
-        **public,
-        "success": episode["success"],
+        "task": task,
+        "seed": episode["seed"],
+        "steps": episode["length"],
+        "success": success,
         "terminated": steps[-1]["terminated"],
         "truncated": steps[-1]["truncated"],
-        "initial_observation": steps[0]["observation"],
-        "frames": [
-            {"observation": step["observation"], "action": step["action"]}
-            for step in steps
-        ],
-        "final_observation": episode["final_observation"],
+        **outcomes,
+        "initial_observation": frames[0]["observation"],
+        "frames": frames,
+        "final_observation": final_observation,
     }
 
 
@@ -121,9 +111,6 @@ def publish_feedback(
                 raise ValueError(f"Incomplete development split for {task}")
 
             metric_fields = TASK_METRICS[task] if group == "pymunk" else ()
-            config_fields = (
-                ("task_id", "objective", "max_episode_steps") if group == "pymunk" else MANISKILL_CONFIG
-            )
             rate_field = "capture_rate" if "capture_rate" in metric_fields else "success_rate"
             success_rate = native[rate_field]
             tasks[task] = {
@@ -135,9 +122,8 @@ def publish_feedback(
                     None if retained is None else success_rate - retained["tasks"][task]["success_rate"]
                 ),
                 "configuration": {
-                    "runtime": group,
-                    "python": native["python"],
-                    **{field: native[field] for field in config_fields},
+                    "max_episode_steps": native["max_episode_steps"],
+                    **{key: native[key] for key in ("objective", "action_shape") if key in native},
                 },
             }
             for row in rows:

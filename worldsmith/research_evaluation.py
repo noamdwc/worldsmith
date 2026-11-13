@@ -12,7 +12,7 @@ from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
 
 SUITES = {
     "all": ("worldsmith-all-v1", tuple(TASK_GROUPS)),
-    "maniskill": ("worldsmith-maniskill-v1", ("maniskill",)),
+    "maniskill": ("worldsmith-manipulation-v1", ("maniskill",)),
 }
 DEV_SEEDS = tuple(range(8))
 CONTROLLER = "autoresearch.controller:make_controller"
@@ -45,7 +45,10 @@ def main() -> None:
 
             parameters = signature(make_controller).parameters
         except Exception as exc:
-            raise ControllerError(f"Controller import: {type(exc).__name__}: {exc}") from exc
+            raise ControllerError(
+                f"Controller import: {type(exc).__name__}: {exc}",
+                public_message="Could not load controller.py or its make_controller factory",
+            ) from exc
 
         for task, load in group.items():
             (output / "task.txt").write_text(task, encoding="utf-8")
@@ -56,6 +59,7 @@ def main() -> None:
             )
     except ControllerError as exc:
         (output / "controller_error.txt").write_text(str(exc) + "\n", encoding="utf-8")
+        (output / "controller_feedback.txt").write_text(exc.public_message + "\n", encoding="utf-8")
         raise
 
 

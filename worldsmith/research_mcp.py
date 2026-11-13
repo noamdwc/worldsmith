@@ -72,10 +72,14 @@ def run_group(group: str, python: str, code: Path, output: Path, deadline: float
             timeout=max(0, deadline - monotonic()),
         )
     if result.returncode:
-        diagnostic = output / "controller_error.txt"
+        diagnostic = output / "controller_feedback.txt"
         if diagnostic.is_file():
             raise EvaluationFailure(diagnostic.read_text(encoding="utf-8").strip())
-        raise EvaluationFailure(f"evaluator exited with status {result.returncode}")
+        marker = output / "task.txt"
+        message = "Evaluator could not complete the run"
+        if marker.is_file():
+            message += f" while evaluating {marker.read_text(encoding='utf-8')}"
+        raise EvaluationFailure(message) from subprocess.CalledProcessError(result.returncode, result.args)
 
 
 class EvaluationFailure(RuntimeError):
@@ -115,7 +119,7 @@ def evaluate_controller() -> dict[str, object]:
         digest = snapshot_hash(code)
         save_status("running")
         if not maniskill_python.is_absolute() or not os.access(maniskill_python, os.X_OK):
-            raise EvaluationFailure(
+            raise EvaluationFailure("Evaluation environment is unavailable") from ValueError(
                 "Set WORLDSMITH_MANISKILL_PYTHON to the absolute path of the pinned Python 3.11 interpreter"
             )
         runtimes = {"pymunk": sys.executable, "maniskill": str(maniskill_python)}
@@ -124,21 +128,22 @@ def evaluate_controller() -> dict[str, object]:
             group_results = owner_results / group
             try:
                 run_group(group, runtimes[group], code, group_results, deadline)
-            except (subprocess.TimeoutExpired, EvaluationFailure) as exc:
+            except subprocess.TimeoutExpired:
                 marker = group_results / "task.txt"
-                location = f"{group}/{marker.read_text(encoding='utf-8')}" if marker.is_file() else group
-                if isinstance(exc, subprocess.TimeoutExpired):
-                    message = f"Evaluation timed out after {EVALUATION_TIMEOUT_SECONDS} seconds ({location})"
-                    save_status("timed_out", error=message, ended_at=now())
-                    raise RuntimeError(f"{message}. Run: {run_id}") from None
-                raise EvaluationFailure(f"{location}: {exc}") from None
+                (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
+                message = f"Evaluation timed out after {EVALUATION_TIMEOUT_SECONDS} seconds"
+                if marker.is_file():
+                    message += f" while evaluating {marker.read_text(encoding='utf-8')}"
+                save_status("timed_out", error=message, ended_at=now())
+                raise RuntimeError(f"{message}. Run: {run_id}") from None
             if snapshot_hash(code) != digest:
-                raise EvaluationFailure(f"Controller snapshot changed during the {group} evaluation")
+                raise EvaluationFailure("Controller snapshot changed during evaluation")
         feedback = publish_feedback(
             owner_results, output / "results", suite=SUITE, controller_sha256=digest,
             started=started, retained=retained_summary,
         )
     except EvaluationFailure as exc:
+        (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
         message = f"Evaluation failed: {exc}"
         save_status("failed", error=message, ended_at=now())
         raise RuntimeError(f"{message}. Run: {run_id}") from None

@@ -4,8 +4,8 @@ set -e
 CDPATH= cd "$(dirname "$0")/.."
 
 case "${1:-all}" in
-    all) suite=all; tasks="all Pymunk and ManiSkill tasks" ;;
-    maniskill) suite=maniskill; tasks="the six ManiSkill tasks" ;;
+    all) suite=all; tasks="the full development suite" ;;
+    maniskill) suite=maniskill; tasks="the six tabletop manipulation tasks" ;;
     *) printf 'Usage: %s [all|maniskill]\n' "$0" >&2; exit 2 ;;
 esac
 export WORLDSMITH_RESEARCH_SUITE="$suite"

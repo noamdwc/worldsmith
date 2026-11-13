@@ -16,6 +16,10 @@ class InvalidAction(ValueError):
 class ControllerError(RuntimeError):
     """Failure at the controller boundary, with episode context."""
 
+    def __init__(self, message: str, *, public_message: str = "Controller failed"):
+        super().__init__(message)
+        self.public_message = public_message
+
 
 class Simulator(Protocol):
     """Supply native observations and actions and detached action records."""
@@ -33,7 +37,10 @@ def run_episode(
     try:
         controller = controller_factory()
     except Exception as exc:
-        raise ControllerError(f"{task}, seed {seed}, controller setup: {type(exc).__name__}: {exc}") from exc
+        raise ControllerError(
+            f"{task}, seed {seed}, controller setup: {type(exc).__name__}: {exc}",
+            public_message=f"{task}, seed {seed}: make_controller raised an exception",
+        ) from exc
     steps = []
     while True:
         controller_observation = snapshot(observation)
@@ -41,12 +48,17 @@ def run_episode(
         try:
             action = controller(observation)
         except Exception as exc:
-            raise ControllerError(f"{location}: {type(exc).__name__}: {exc}") from exc
+            raise ControllerError(
+                f"{location}: {type(exc).__name__}: {exc}",
+                public_message=f"{location}: controller raised an exception",
+            ) from exc
         try:
             controller_action = simulator.encode_action(action)
             observation, reward, terminated, truncated, info = simulator.step(action)
         except InvalidAction as exc:
-            raise ControllerError(f"{location}: {exc}") from exc
+            raise ControllerError(
+                f"{location}: {exc}", public_message=f"{location}: controller returned an invalid action",
+            ) from exc
         steps.append({
             "observation": controller_observation,
             "action": controller_action,

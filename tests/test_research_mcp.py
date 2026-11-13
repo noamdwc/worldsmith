@@ -10,7 +10,7 @@ import pytest
 from worldsmith import research_lifecycle, research_mcp
 from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
 from worldsmith.research_evaluation import DEV_SEEDS
-from worldsmith.research_feedback import MANISKILL_CONFIG, publish_feedback
+from worldsmith.research_feedback import publish_feedback
 
 RUN = subprocess.run
 
@@ -77,7 +77,13 @@ def maniskill_worker(workspace, monkeypatch):
                     "".join(json.dumps(row) + "\n" for row in episodes),
                 )
                 (task_output / "summary.json").write_text(json.dumps({
-                    **dict.fromkeys(MANISKILL_CONFIG),
+                    "task_id": "PushCube-v1",
+                    "task_version": 1,
+                    "max_episode_steps": 50,
+                    "action_shape": [4],
+                    "sim_backend": "physx_cpu",
+                    "render_backend": "sapien_cpu",
+                    "versions": {"mani-skill-nightly": "private version"},
                     "python": "3.11",
                     "obs_mode": "state_dict",
                     "seeds": list(DEV_SEEDS),
@@ -124,7 +130,14 @@ def make_controller(*, task):
     assert all(row["episodes"] == 8 for row in summary["tasks"].values())
     assert summary["aggregate_score"] == pytest.approx(6 / 11)
     assert summary["tasks"]["interception"]["captures"] == 0
-    assert summary["tasks"]["push_cube"]["configuration"]["obs_mode"] == "state_dict"
+    assert summary["tasks"]["push_cube"]["configuration"] == {
+        "max_episode_steps": 50, "action_shape": [4],
+    }
+    assert set(summary["tasks"]["interception"]["configuration"]) == {"max_episode_steps", "objective"}
+    for term in ("pymunk", "maniskill", "sapien", "physx", "state_dict", "PushCube-v1", "private version"):
+        assert term not in json.dumps(metrics)
+    native = json.loads((owner / "results/maniskill/push_cube/summary.json").read_text())
+    assert native["sim_backend"] == "physx_cpu" and native["versions"]["mani-skill-nightly"] == "private version"
     assert "private_metric" not in summary["tasks"]["push_cube"]
     assert all(row["success_rate_change"] is None for row in summary["tasks"].values())
     record = json.loads((run.parent / "evaluation.json").read_text())
@@ -147,7 +160,11 @@ def make_controller(*, task):
     path = owner / "results/pymunk/interception/episodes.jsonl"
     private = json.loads(path.read_text().splitlines()[0])
     assert intercept["initial_observation"] == private["steps"][0]["observation"]
-    assert intercept["frames"][0]["observation"] == private["steps"][1]["observation"]
+    assert intercept["frames"][0]["observation"] == private["steps"][0]["observation"]
+    assert intercept["frames"][0]["action"] == private["steps"][0]["action"]
+    assert intercept["final_observation"] == private["final_observation"]
+    assert set(intercept) == set(push) | {"captured"}
+    assert intercept["success"] == intercept["captured"]
     assert "state" in private["reset_info"] and "state" not in intercept
     with pytest.raises(ValueError, match="task 'unknown'"):
         research_mcp.get_episode_trace(0, "unknown")
@@ -165,7 +182,7 @@ def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace
 
     metrics = research_mcp.evaluate_controller()
     assert [call[0] for call in maniskill_worker.calls] == ["maniskill"]
-    assert metrics["benchmark"] == "worldsmith-maniskill-v1"
+    assert metrics["benchmark"] == "worldsmith-manipulation-v1"
     assert metrics["episodes"] == 48
     assert set(metrics["tasks"]) == set(TASK_GROUPS["maniskill"])
     assert metrics["aggregate_score"] == 0.75
@@ -244,7 +261,7 @@ def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, 
         return subprocess.CompletedProcess(command, 1)
 
     monkeypatch.setattr(research_mcp.subprocess, "run", fail)
-    with pytest.raises(RuntimeError, match="maniskill/push_cube") as failure:
+    with pytest.raises(RuntimeError, match="while evaluating push_cube") as failure:
         research_mcp.evaluate_controller()
     assert research_mcp.latest_feedback is previous_feedback
     [run] = (workspace / "runs").iterdir()
@@ -252,38 +269,46 @@ def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, 
     assert status["status"] == ("timed_out" if timed_out else "failed")
     assert private_error not in str(failure.value)
     assert private_error not in status["error"]
+    assert "maniskill" not in status["error"]
     assert (research_mcp.OWNER_RUNS / run.name / "maniskill-stderr.txt").read_text() == private_error
     assert (run / "code/autoresearch/controller.py").is_file()
     assert not (run / "results").exists()
 
 
-@pytest.mark.parametrize(("source", "diagnostic"), [
-    ("raise ValueError('import failure')\n", "Controller import: ValueError: import failure"),
+@pytest.mark.parametrize(("source", "diagnostic", "public_message"), [
     (
-        "def make_controller(): raise ValueError('setup failure')\n",
-        "interception, seed 0, controller setup: ValueError: setup failure",
+        "raise ValueError('private pymunk import failure')\n",
+        "Controller import: ValueError: private pymunk import failure",
+        "Could not load controller.py or its make_controller factory",
     ),
     (
-        "def control(observation): raise RuntimeError('action failure')\n"
+        "def make_controller(): raise ValueError('private pymunk setup failure')\n",
+        "interception, seed 0, controller setup: ValueError: private pymunk setup failure",
+        "interception, seed 0: make_controller raised an exception",
+    ),
+    (
+        "def control(observation): raise RuntimeError('private pymunk action failure')\n"
         "def make_controller(): return control\n",
-        "interception, seed 0, step 1: RuntimeError: action failure",
+        "interception, seed 0, step 1: RuntimeError: private pymunk action failure",
+        "interception, seed 0, step 1: controller raised an exception",
     ),
     (
         "from worldsmith.api import Action\n"
         "def make_controller(): return lambda observation: Action(0, 2)\n",
         "interception, seed 0, step 1: Action requires a finite heading and throttle in [0, 1]",
+        "interception, seed 0, step 1: controller returned an invalid action",
     ),
 ], ids=["import", "setup", "action", "invalid-throttle"])
-def test_controller_errors_without_publishing_tracebacks(workspace, source, diagnostic):
+def test_controller_errors_without_publishing_tracebacks(workspace, source, diagnostic, public_message):
     controller = workspace / "controller.py"
     controller.write_text(source)
     with pytest.raises(RuntimeError) as failure:
         research_mcp.evaluate_controller()
     [run] = (workspace / "runs").iterdir()
-    group = "pymunk" if diagnostic.startswith("Controller import") else "pymunk/interception"
-    assert str(failure.value) == f"Evaluation failed: {group}: {diagnostic}. Run: {run.name}"
+    assert str(failure.value) == f"Evaluation failed: {public_message}. Run: {run.name}"
     status = json.loads((run / "evaluation.json").read_text())
     assert status["status"] == "failed"
+    assert status["error"] == f"Evaluation failed: {public_message}"
     assert (run / "code/autoresearch/controller.py").read_bytes() == controller.read_bytes()
     assert not (run / "results").exists()
     owner = research_mcp.OWNER_RUNS / run.name
