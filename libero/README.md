@@ -50,6 +50,6 @@ On the Apple M2 Pro with 16 GB RAM, the starter completed all 24 development epi
 | Bowl on plate | 0 / 8 | 53.0 s | 6.6 s |
 | Two items in basket | 0 / 8 | 72.4 s | 9.1 s |
 
-The same machine ran the existing default suite in 19.6 s (53/88 successes) and ManiSkill-only in 16.8 s (30/48). Adding the optional suite serially would increase each default evaluation from about 20 seconds to nearly four minutes on this machine. The dedicated suite gives its worker five minutes per evaluation.
+The dedicated suite gives its worker five minutes per evaluation. The full 112-episode suite completed in 190.5 s on the same machine in a separate run. It has a six-minute evaluation limit.
 
-The optional suite remains separate from `make autoresearch`. To extend it, pin and verify each task's upstream BDDL and saved states, check that it has enough distinct layouts for the split, document any additional observations, and time the full development slice. Visual perturbations require a working renderer and separate validation. For a future Colab run, validate a Linux CPU lock for state-only evaluation first. A visual evaluation additionally needs a functioning MuJoCo rendering backend.
+To add tasks, pin and verify each task's upstream BDDL and saved states, check that it has enough distinct layouts for the split, document any additional observations, and time the full development slice. Visual perturbations require a working renderer and separate validation. For a future Colab run, validate a Linux CPU lock for state-only evaluation first. A visual evaluation additionally needs a functioning MuJoCo rendering backend.

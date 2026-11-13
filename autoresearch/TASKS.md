@@ -65,7 +65,7 @@ Peg and hole geometry varies across episodes. Peg insertion is measured relative
 
 ## Arm manipulation with varied starting layouts
 
-These tasks run in a separate 24-episode suite. Objects start in different positions across episodes. The arm takes a position, orientation, and gripper command every 0.05 seconds. Each task scores the fraction of episodes that reach its goal within the step limit.
+These tasks run in the full suite and in a dedicated 24-episode suite. Objects start in different positions across episodes. The arm takes a position, orientation, and gripper command every 0.05 seconds. Each task scores the fraction of episodes that reach its goal within the step limit.
 
 | Task | Success criterion | Task observations | Step limit |
 | --- | --- | --- | ---: |
@@ -77,13 +77,13 @@ See [API.md](API.md) for the corresponding observation and action conventions. T
 
 ## Evaluation and splits
 
-`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v1`, has 88 episodes. The tabletop manipulation suite, `worldsmith-manipulation-v1`, has 48. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
+`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v2`, has 112 episodes. The tabletop manipulation suite, `worldsmith-manipulation-v1`, has 48. The arm manipulation suite with varied starting layouts, `worldsmith-arm-position-v1`, has 24. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
 
 `get_episode_trace(seed, task)` accepts task IDs in the active suite and returns public feedback from the latest successful development run. The owner maintains held-out seeds separately. Researchers use development feedback for every candidate decision.
 
 ### Starter development scores
 
-The starter succeeded in 53 of 88 episodes for a `worldsmith-all-v1` score of 60.23%.
+The starter succeeded in 53 of 112 episodes for a `worldsmith-all-v2` score of 47.32%.
 
 | Task | Successes / 8 |
 | --- | ---: |
@@ -98,3 +98,6 @@ The starter succeeded in 53 of 88 episodes for a `worldsmith-all-v1` score of 60
 | `peg_insertion_side` | 0 |
 | `pull_cube` | 8 |
 | `push_t` | 0 |
+| `open_middle_drawer` | 0 |
+| `place_bowl_on_plate` | 0 |
+| `place_two_items_in_basket` | 0 |

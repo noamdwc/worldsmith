@@ -25,15 +25,16 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
     monkeypatch.setattr(research_mcp, "latest_feedback", None)
     monkeypatch.setattr(research_mcp, "retained_summary", None)
-    maniskill_python = tmp_path / "maniskill-python"
-    maniskill_python.symlink_to(sys.executable)
-    monkeypatch.setenv("WORLDSMITH_MANISKILL_PYTHON", str(maniskill_python))
+    for group in ("maniskill", "libero"):
+        interpreter = tmp_path / f"{group}-python"
+        interpreter.symlink_to(sys.executable)
+        monkeypatch.setenv(f"WORLDSMITH_{group.upper()}_PYTHON", str(interpreter))
     return workspace
 
 
 @pytest.fixture
-def maniskill_worker(workspace, monkeypatch):
-    # Standard tests need only Pymunk. The opt-in integration tests run real SAPIEN.
+def native_workers(workspace, monkeypatch):
+    # Standard tests need only Pymunk. The opt-in integration tests run the native simulators.
     class Worker:
         def __init__(self):
             self.calls = []
@@ -52,7 +53,8 @@ def maniskill_worker(workspace, monkeypatch):
                     self.after_pymunk()
                 return result
 
-            for task in TASK_GROUPS["maniskill"]:
+            successes = self.successes if group == "maniskill" else 0
+            for task in TASK_GROUPS[group]:
                 task_output = output / task
                 task_output.mkdir(parents=True)
                 episodes = []
@@ -61,13 +63,13 @@ def maniskill_worker(workspace, monkeypatch):
                     episodes.append({
                         "seed": seed,
                         "length": 1,
-                        "success": seed < self.successes,
+                        "success": seed < successes,
                         "reset_info": {"private_reset": True},
                         "steps": [{
                             "observation": observation,
                             "action": [0.0],
-                            "terminated": seed < self.successes,
-                            "truncated": seed >= self.successes,
+                            "terminated": seed < successes,
+                            "truncated": seed >= successes,
                             "reward": 1.0,
                             "info": {"private_step": True},
                         }],
@@ -88,7 +90,7 @@ def maniskill_worker(workspace, monkeypatch):
                     "obs_mode": "state_dict",
                     "seeds": list(DEV_SEEDS),
                     "episodes": [{key: row[key] for key in ("seed", "length", "success")} for row in episodes],
-                    "success_rate": self.successes / len(DEV_SEEDS),
+                    "success_rate": successes / len(DEV_SEEDS),
                     "private_metric": 123,
                 }))
             return subprocess.CompletedProcess(command, 0)
@@ -98,7 +100,7 @@ def maniskill_worker(workspace, monkeypatch):
     return worker
 
 
-def test_full_suite_snapshot_scoring_and_public_feedback(workspace, maniskill_worker):
+def test_full_suite_snapshot_scoring_and_public_feedback(workspace, native_workers):
     source = '''from worldsmith.api import Action
 
 def make_controller(*, task):
@@ -109,27 +111,30 @@ def make_controller(*, task):
 '''
     controller = workspace / "controller.py"
     controller.write_text(source)
-    maniskill_worker.after_pymunk = lambda: controller.write_text("raise RuntimeError('live edit')\n")
+    native_workers.after_pymunk = lambda: controller.write_text("raise RuntimeError('live edit')\n")
     with pytest.raises(ValueError, match="Run evaluate_controller"):
         research_mcp.get_episode_trace(0)
 
     metrics = research_mcp.evaluate_controller()
     run = workspace / metrics["run_dir"]
     owner = research_mcp.OWNER_RUNS / metrics["run_id"]
-    assert maniskill_worker.calls == [
+    assert native_workers.calls == [
         ("pymunk", sys.executable, owner / "code", source.encode()),
         ("maniskill", str(workspace.parent / "maniskill-python"), owner / "code", source.encode()),
+        ("libero", str(workspace.parent / "libero-python"), owner / "code", source.encode()),
     ]
     assert (run.parent / "code/autoresearch/controller.py").read_text() == source
     summary = json.loads((run / "summary.json").read_text())
-    assert summary["benchmark"] == "worldsmith-all-v1"
+    assert summary["benchmark"] == "worldsmith-all-v2"
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
-    assert summary["episodes"] == 88
+    assert summary["episodes"] == 112
     assert summary["runtime_seconds"] > 0
-    assert set(summary["tasks"]) == set(TASK_GROUPS["pymunk"]) | set(TASK_GROUPS["maniskill"])
+    assert set(summary["tasks"]) == {task for group in TASK_GROUPS.values() for task in group}
     assert all(row["episodes"] == 8 for row in summary["tasks"].values())
-    assert summary["aggregate_score"] == pytest.approx(6 / 11)
+    assert summary["aggregate_score"] == pytest.approx(6 / 14)
     assert summary["tasks"]["interception"]["captures"] == 0
+    assert summary["tasks"]["open_middle_drawer"]["success_rate"] == 0
+    assert not research_mcp.get_episode_trace(0, "open_middle_drawer")["success"]
     assert summary["tasks"]["push_cube"]["configuration"] == {
         "max_episode_steps": 50, "action_shape": [4],
     }
@@ -145,7 +150,7 @@ def make_controller(*, task):
     assert record["status"] == "succeeded"
 
     saved = [json.loads(line) for line in (run / "episodes.jsonl").read_text().splitlines()]
-    assert len(saved) == 88
+    assert len(saved) == 112
     for public in saved:
         assert research_mcp.get_episode_trace(public["seed"], public["task"]) == public
         assert all(set(frame) == {"observation", "action"} for frame in public["frames"])
@@ -176,12 +181,12 @@ def make_controller(*, task):
     assert research_mcp.get_episode_trace(0, "push_cube") == push
 
 
-def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace, maniskill_worker, monkeypatch):
+def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace, native_workers, monkeypatch):
     monkeypatch.setattr(research_mcp, "SUITE", "maniskill")
-    maniskill_worker.successes = 6
+    native_workers.successes = 6
 
     metrics = research_mcp.evaluate_controller()
-    assert [call[0] for call in maniskill_worker.calls] == ["maniskill"]
+    assert [call[0] for call in native_workers.calls] == ["maniskill"]
     assert metrics["benchmark"] == "worldsmith-manipulation-v1"
     assert metrics["episodes"] == 48
     assert set(metrics["tasks"]) == set(TASK_GROUPS["maniskill"])
@@ -191,9 +196,9 @@ def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace
         research_mcp.get_episode_trace(0, "interception")
 
 
-def test_per_task_changes_use_retained_run(workspace, maniskill_worker):
+def test_per_task_changes_use_retained_run(workspace, native_workers):
     baseline = research_mcp.evaluate_controller()
-    maniskill_worker.successes = 6
+    native_workers.successes = 6
     weaker = research_mcp.evaluate_controller()
     tie = research_mcp.evaluate_controller()
     assert weaker["aggregate_score"] < baseline["aggregate_score"]
@@ -202,7 +207,7 @@ def test_per_task_changes_use_retained_run(workspace, maniskill_worker):
     assert tie["tasks"]["interception"]["success_rate_change"] == 0
 
 
-def test_feedback_refuses_incomplete_or_heldout_results(workspace, maniskill_worker, tmp_path):
+def test_feedback_refuses_incomplete_or_heldout_results(workspace, native_workers, tmp_path):
     metrics = research_mcp.evaluate_controller()
     owner_results = research_mcp.OWNER_RUNS / metrics["run_id"] / "results"
     last_trace = owner_results / "maniskill/push_t/episodes.jsonl"
@@ -227,7 +232,7 @@ def test_researcher_cannot_select_heldout_split(workspace):
     assert not (workspace / "runs").exists()
 
 
-def test_archive_and_reset_preserve_both_result_views(workspace, maniskill_worker, tmp_path):
+def test_archive_and_reset_preserve_both_result_views(workspace, native_workers, tmp_path):
     metrics = research_mcp.evaluate_controller()
     public_trace = workspace / metrics["run_dir"] / "episodes.jsonl"
     owner_trace = research_mcp.OWNER_RUNS / metrics["run_id"] / "results/maniskill/push_cube/episodes.jsonl"
@@ -249,7 +254,7 @@ def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, 
     private_error = "ValueError: privileged scenario diagnostic"
 
     def fail(command, *, timeout, stdout, **kwargs):
-        assert 0 < timeout <= research_mcp.EVALUATION_TIMEOUT_SECONDS
+        assert 0 < timeout <= research_mcp.SUITE_TIMEOUT_SECONDS["all"]
         if command[-2] == "pymunk":
             return subprocess.CompletedProcess(command, 0)
         output = Path(command[-1])

@@ -10,8 +10,9 @@ from worldsmith.benchmark.evaluator import evaluate_to_directory
 from worldsmith.benchmark.runner import ControllerError
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
 
+LEGACY_HELDOUT_GROUPS = ("pymunk", "maniskill")
 SUITES = {
-    "all": ("worldsmith-all-v1", ("pymunk", "maniskill")),
+    "all": ("worldsmith-all-v2", tuple(TASK_GROUPS)),
     "maniskill": ("worldsmith-manipulation-v1", ("maniskill",)),
     "libero": ("worldsmith-arm-position-v1", ("libero",)),
 }
@@ -30,7 +31,7 @@ def main() -> None:
     starts = dict.fromkeys(group, DEV_SEEDS[0])
     if args.heldout_seed_file is not None:
         # Preserve the original combined-suite seed file format.
-        groups = SUITES["all"][1] if args.group in SUITES["all"][1] else (args.group,)
+        groups = LEGACY_HELDOUT_GROUPS if args.group in LEGACY_HELDOUT_GROUPS else (args.group,)
         tasks = {task for name in groups for task in TASK_GROUPS[name]}
         starts = json.loads(args.heldout_seed_file.read_text(encoding="utf-8"))
         if not isinstance(starts, dict) or starts.keys() != tasks or any(

@@ -2,7 +2,7 @@
 
 Improve one shared task-aware controller across the tasks in the active development suite using their public observations and reusable Python strategies. Read [TASKS.md](TASKS.md); task descriptions and detailed development traces are available to you. Use only the public files in this workspace and the `worldsmith` MCP tools for evaluation. [AGENTS.md](AGENTS.md) defines the workspace rules.
 
-The launch selects either the full development suite (11 tasks, 88 episodes) or the tabletop manipulation suite (six tasks, 48 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
+The launch selects the full development suite (14 tasks, 112 episodes), tabletop manipulation (six tasks, 48 episodes), or arm manipulation with varied starting layouts (three tasks, 24 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
 
 ## Budget and process
 
@@ -11,5 +11,5 @@ The launch selects either the full development suite (11 tasks, 88 episodes) or 
 
    Before each candidate evaluation, verify that the implementation commands succeeded, the controller passes basic syntax checks, and the candidate's source differs from the retained controller. Do not spend an evaluation on an unchanged or failed edit.
 
-3. Compare each candidate with the best retained controller on the same development split. Keep it if the aggregate score (the equal-weight average of the evaluated task success rates) increases; otherwise reject it, including ties, and undo only that iteration’s code edits. Record each task’s success-rate change and secondary metrics, including any regressions hidden by an aggregate improvement. Keep its journal entry and run artifacts. A controller error or timeout rejects the candidate. The evaluator has a 90-second evaluation limit, and trace lookup continues to use the latest successful run.
+3. Compare each candidate with the best retained controller on the same development split. Keep it if the aggregate score (the equal-weight average of the evaluated task success rates) increases; otherwise reject it, including ties, and undo only that iteration’s code edits. Record each task’s success-rate change and secondary metrics, including any regressions hidden by an aggregate improvement. Keep its journal entry and run artifacts. A controller error or timeout rejects the candidate. The evaluation limit is six minutes for the full suite, 90 seconds for tabletop manipulation, and five minutes for arm manipulation with varied starting layouts. Trace lookup continues to use the latest successful run.
 4. End with the best retained controller and summarize the baseline and final metrics, what you tried, what you learned, and what remains uncertain. The scores are from the same 8 fixed development seeds per task. Do not use held-out episodes during research. Secondary metrics support diagnosis; they do not change the keep-or-reject rule.

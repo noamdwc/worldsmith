@@ -18,9 +18,8 @@ from worldsmith.research_evaluation import SUITES
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, WORKSPACE, copy_entry, research_entries
 
-# The full starter suite takes about 17–19 seconds on an Apple M2 Pro.
 EVALUATION_TIMEOUT_SECONDS = 90
-SUITE_TIMEOUT_SECONDS = {"libero": 300}
+SUITE_TIMEOUT_SECONDS = {"all": 360, "libero": 300}
 OWNER_RUNS = ROOT / "runs" / "owner"
 SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
 if SUITE not in SUITES:
