@@ -30,6 +30,12 @@ Observations are flat dictionaries of NumPy arrays without a batch dimension. Po
 
 Return a floating-point NumPy array of shape `(7,)` with values in `[-1, 1]`. The first three entries command world XYZ displacement, scaled by 0.05 m per axis. The next three entries form a world-frame axis-angle rotation vector, scaled by 0.5 radians per component. The last entry commands the gripper. Negative opens, positive closes, and zero holds the current gripper command.
 
+## Door opening, nut assembly, and hammer handover
+
+Observations are flat dictionaries without a batch dimension. World XYZ positions are in meters and quaternions are in XYZW order. For each arm, `robot0_eef_pos` and `robot0_eef_quat_site` give the tool position and orientation. `robot0_joint_pos` and `robot0_joint_vel` give joint positions and velocities. `robot0_gripper_qpos` and `robot0_gripper_qvel` give finger positions and velocities. The receiving arm in handover uses the same fields prefixed with `robot1_`. See [TASKS.md](TASKS.md) for scene measurements.
+
+Return a floating-point NumPy array with finite entries in `[-1, 1]`. Each arm uses seven consecutive entries `[dx, dy, dz, rx, ry, rz, grip]`. Translation sets a target offset from the current tool position, scaled by 0.05 m per component. Rotation sets a world-frame axis-angle offset, scaled by 0.5 radians per component. Negative gripper commands open the fingers, positive commands close them, and zero holds the current gripper command. Use shape `(7,)` for one arm and `(14,)` for handover, with the pickup arm first and receiving arm second. Commands update at 20 Hz.
+
 ## Development feedback
 
 `evaluate_controller()` returns the benchmark ID, snapshot hash, development seeds and episode counts, success rates and changes from the retained controller, task metrics when available, and elapsed time.

@@ -50,6 +50,6 @@ On the Apple M2 Pro with 16 GB RAM, the starter completed all 24 development epi
 | Bowl on plate | 0 / 8 | 53.0 s | 6.6 s |
 | Two items in basket | 0 / 8 | 72.4 s | 9.1 s |
 
-The dedicated suite gives its worker five minutes per evaluation. The full 112-episode suite completed in 190.5 s on the same machine in a separate run. It has a six-minute evaluation limit.
+The dedicated suite gives its worker five minutes per evaluation. The historical `worldsmith-all-v2` suite completed 112 episodes in 190.5 s on the same machine in a separate run.
 
 To add tasks, pin and verify each task's upstream BDDL and saved states, check that it has enough distinct layouts for the split, document any additional observations, and time the full development slice. Visual perturbations require a working renderer and separate validation. For a future Colab run, validate a Linux CPU lock for state-only evaluation first. A visual evaluation additionally needs a functioning MuJoCo rendering backend.
