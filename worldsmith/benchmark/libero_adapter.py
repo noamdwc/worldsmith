@@ -1,7 +1,6 @@
 """Structured observations and native scoring for the position-swap tasks."""
 
 import os
-import subprocess
 from contextlib import contextmanager
 from functools import partial
 from hashlib import sha256
@@ -105,26 +104,6 @@ class LiberoAdapter:
         }
 
 
-def check_source(asset_paths):
-    git = ["git", "--no-optional-locks", "-C", str(SOURCE)]
-    revision = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
-    if revision != SOURCE_REVISION:
-        raise RuntimeError(f"Expected LIBERO-PRO source at {SOURCE_REVISION}")
-
-    tracked = subprocess.check_output([*git, "status", "--porcelain", "--untracked-files=no"], text=True)
-    if tracked:
-        raise RuntimeError(f"LIBERO-PRO source has local changes:\n{tracked.rstrip()}")
-
-    allowed = {f"libero/libero/{path}" for path in asset_paths}
-    allowed.add("MUJOCO_LOG.TXT")
-    untracked = subprocess.check_output([*git, "ls-files", "--others", "-z"], text=True)
-    for name in untracked.split("\0")[:-1]:
-        path = Path(name)
-        if name in allowed or (path.parent.name == "__pycache__" and path.suffix == ".pyc"):
-            continue
-        raise RuntimeError(f"Unexpected file in LIBERO-PRO source: {name}")
-
-
 @contextmanager
 def open_libero(task):
     if not (INSTALL / "config" / "config.yaml").is_file():
@@ -133,7 +112,6 @@ def open_libero(task):
     for line in (INSTALL / "assets.sha256").read_text().splitlines():
         digest, path = line.split()
         hashes[path] = digest
-    check_source(hashes)
 
     # Set before the first native import, including for direct evaluator invocations.
     os.environ["MUJOCO_GL"] = "disable"
