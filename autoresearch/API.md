@@ -24,6 +24,12 @@ Observations are nested dictionaries of tensors with a leading batch dimension o
 
 Return a NumPy `float32` array with entries in `[-1, 1]`. The first three entries command XYZ displacement in the robot base frame, with 0.1 m per axis at full scale. For the peg task, the next three entries form an XYZ rotation command in the robot base frame. The command vector is clipped to unit length, then multiplied by −0.1 to obtain XYZ Euler increments in radians. On tasks with a gripper, the last entry commands it, with `-1` closing and `+1` opening. PushT uses a stick and takes only XYZ commands.
 
+## Arm manipulation with varied starting layouts
+
+Observations are flat dictionaries of NumPy arrays without a batch dimension. Positions are world XYZ in meters and quaternions use XYZW order. `robot0_eef_pos` and `robot0_eef_quat` describe the tool pose. `robot0_joint_pos`, `robot0_joint_vel`, `robot0_gripper_qpos`, and `robot0_gripper_qvel` provide joint readings. Movable objects have `<name>_pos` and `<name>_quat` fields in world coordinates, and `<name>_to_robot0_eef_pos` and `<name>_to_robot0_eef_quat` fields in the tool frame. The drawer task also gives a world-space handle position and a scalar slide displacement in meters. See [TASKS.md](TASKS.md) for object names.
+
+Return a floating-point NumPy array of shape `(7,)` with values in `[-1, 1]`. The first three entries command world XYZ displacement, scaled by 0.05 m per axis. The next three entries form a world-frame axis-angle rotation vector, scaled by 0.5 radians per component. The last entry commands the gripper. Negative opens, positive closes, and zero holds the current gripper command.
+
 ## Development feedback
 
 `evaluate_controller()` returns the benchmark ID, snapshot hash, development seeds and episode counts, success rates and changes from the retained controller, task metrics when available, and elapsed time.

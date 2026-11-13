@@ -47,6 +47,8 @@ For interception, the robot and target move in an obstacle-free plane. The robot
 
 Run `make autoresearch` from the repo root for all 11 tasks, or `make autoresearch-maniskill` for the six ManiSkill tasks. The [launcher script](scripts/run-autoresearch.sh) also accepts `all` or `maniskill`. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
 
+Run `./libero/setup.sh` then `make autoresearch-libero` for the three optional LIBERO-PRO tasks. The default suite retains its 11 tasks. The [LIBERO-PRO setup and evaluation notes](libero/README.md) cover the pinned runtime, measured cost, and owner evaluation.
+
 On Apple Silicon, prepare the pinned Python 3.11 environment and Vulkan loader using the [ManiSkill setup](maniskill/README.md). Export `VK_ICD_FILENAMES` and `DYLD_LIBRARY_PATH` as shown there before launching Codex. The MCP server runs Pymunk under its Python 3.12 interpreter and defaults to `maniskill/.venv/bin/python` for ManiSkill. Set `WORLDSMITH_MANISKILL_PYTHON` to an absolute interpreter path to use another installation of the pinned environment.
 
 ### Session lifecycle
@@ -71,7 +73,7 @@ For a manual ManiSkill-only session, export `WORLDSMITH_RESEARCH_SUITE=maniskill
 
 ### Evaluation feedback and owner results
 
-Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite. The default `worldsmith-all-v1` suite evaluates 88 episodes across Pymunk and ManiSkill with the same controller snapshot. `worldsmith-manipulation-v1` evaluates 48 episodes using the ManiSkill runtime. Earlier ManiSkill-only archives use the ID `worldsmith-maniskill-v1` for the same task set and scoring. Both current suites use the same evaluator and runner and score the equal-weight mean of their task success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
+Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite. The default `worldsmith-all-v1` suite evaluates 88 episodes across Pymunk and ManiSkill with the same controller snapshot. `worldsmith-manipulation-v1` evaluates 48 episodes using the ManiSkill runtime. Earlier ManiSkill-only archives use the ID `worldsmith-maniskill-v1` for the same task set and scoring. All suites use the same evaluator and runner and score the equal-weight mean of their task success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
 
 `get_episode_trace(seed, task)` selects an episode from the latest successful MCP evaluation. With no task specified, it returns `interception` for the full suite or `push_cube` for ManiSkill-only. Each run writes two views with the same run ID:
 

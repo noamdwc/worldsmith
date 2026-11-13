@@ -8,11 +8,12 @@ from pathlib import Path
 
 from worldsmith.benchmark.evaluator import evaluate_to_directory
 from worldsmith.benchmark.runner import ControllerError
-from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
+from worldsmith.benchmark.task_catalog import TASK_GROUPS
 
 SUITES = {
-    "all": ("worldsmith-all-v1", tuple(TASK_GROUPS)),
+    "all": ("worldsmith-all-v1", ("pymunk", "maniskill")),
     "maniskill": ("worldsmith-manipulation-v1", ("maniskill",)),
+    "libero": ("worldsmith-arm-position-v1", ("libero",)),
 }
 DEV_SEEDS = tuple(range(8))
 CONTROLLER = "autoresearch.controller:make_controller"
@@ -28,14 +29,17 @@ def main() -> None:
     group = TASK_GROUPS[args.group]
     starts = dict.fromkeys(group, DEV_SEEDS[0])
     if args.heldout_seed_file is not None:
+        # Preserve the original combined-suite seed file format.
+        groups = SUITES["all"][1] if args.group in SUITES["all"][1] else (args.group,)
+        tasks = {task for name in groups for task in TASK_GROUPS[name]}
         starts = json.loads(args.heldout_seed_file.read_text(encoding="utf-8"))
-        if not isinstance(starts, dict) or starts.keys() != TASK_CATALOG.keys() or any(
+        if not isinstance(starts, dict) or starts.keys() != tasks or any(
             type(seed) is not int or not len(DEV_SEEDS) <= seed <= 2**32 - len(DEV_SEEDS)
             for seed in starts.values()
         ):
-            parser.error("Provide one non-development seed start per catalog task")
+            parser.error("Provide one non-development seed start per task in the owner seed file")
         seeds = {seed + offset for seed in starts.values() for offset in DEV_SEEDS}
-        if len(seeds) != len(TASK_CATALOG) * len(DEV_SEEDS):
+        if len(seeds) != len(tasks) * len(DEV_SEEDS):
             parser.error("Held-out seed ranges must be distinct for every task")
 
     output.mkdir(parents=True)

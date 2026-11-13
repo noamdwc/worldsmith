@@ -25,6 +25,13 @@ _PYMUNK_TASKS = {
     "object_pushing": partial(_load, _PYMUNK, "object_pushing"),
 }
 
+_LIBERO = "worldsmith.benchmark.libero_adapter"
+_LIBERO_TASKS = {
+    "open_middle_drawer": partial(_load, _LIBERO, "open_middle_drawer"),
+    "place_bowl_on_plate": partial(_load, _LIBERO, "place_bowl_on_plate"),
+    "place_two_items_in_basket": partial(_load, _LIBERO, "place_two_items_in_basket"),
+}
+
 # Load only the adapters available in each pinned Python environment.
-TASK_GROUPS = {"pymunk": _PYMUNK_TASKS, "maniskill": _MANISKILL_TASKS}
-TASK_CATALOG = {**_MANISKILL_TASKS, **_PYMUNK_TASKS}
+TASK_GROUPS = {"pymunk": _PYMUNK_TASKS, "maniskill": _MANISKILL_TASKS, "libero": _LIBERO_TASKS}
+TASK_CATALOG = {**_MANISKILL_TASKS, **_PYMUNK_TASKS, **_LIBERO_TASKS}

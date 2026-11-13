@@ -8,7 +8,7 @@ from time import monotonic
 import pytest
 
 from worldsmith import research_lifecycle, research_mcp
-from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
+from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_evaluation import DEV_SEEDS
 from worldsmith.research_feedback import publish_feedback
 
@@ -126,7 +126,7 @@ def make_controller(*, task):
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
     assert summary["episodes"] == 88
     assert summary["runtime_seconds"] > 0
-    assert set(summary["tasks"]) == set(TASK_CATALOG)
+    assert set(summary["tasks"]) == set(TASK_GROUPS["pymunk"]) | set(TASK_GROUPS["maniskill"])
     assert all(row["episodes"] == 8 for row in summary["tasks"].values())
     assert summary["aggregate_score"] == pytest.approx(6 / 11)
     assert summary["tasks"]["interception"]["captures"] == 0

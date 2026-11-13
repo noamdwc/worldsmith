@@ -1,6 +1,6 @@
 # Worldsmith development tasks
 
-One shared `make_controller(task=...)` handles all 11 tasks. Use the task ID to select behavior and the public observations to choose actions.
+One shared `make_controller(task=...)` handles the tasks in the active suite. Use the task ID to select behavior and the public observations to choose actions.
 
 ## Planar movement
 
@@ -62,6 +62,18 @@ Each task exposes the tool center point as `extra["tcp_pose"]` and uses the acti
 | `push_t` | The T covers at least 90% of the goal outline | `obj_pose`, `goal_pos` | XYZ | 100 |
 
 Peg and hole geometry varies across episodes. Peg insertion is measured relative to the hole’s axes. PushT requires both position and orientation alignment. Its goal observation provides a position.
+
+## Arm manipulation with varied starting layouts
+
+These tasks run in a separate 24-episode suite. Objects start in different positions across episodes. The arm takes a position, orientation, and gripper command every 0.05 seconds. Each task scores the fraction of episodes that reach its goal within the step limit.
+
+| Task | Success criterion | Task observations | Step limit |
+| --- | --- | --- | ---: |
+| `open_middle_drawer` | Pull the middle drawer open more than 0.14 m along its slide | `drawer_handle_pos`, `drawer_slide` (negative when pulled open) | 300 |
+| `place_bowl_on_plate` | Place the black bowl identified between the plate and the ramekin onto the plate | `akita_black_bowl_1_pos`, `akita_black_bowl_2_pos`, `plate_1_pos`, `glazed_rim_porcelain_ramekin_1_pos` | 220 |
+| `place_two_items_in_basket` | Put both the alphabet soup and the tomato sauce inside the basket | `alphabet_soup_1_pos`, `tomato_sauce_1_pos`, `basket_1_pos` | 520 |
+
+See [API.md](API.md) for the corresponding observation and action conventions. The starter holds position with the gripper open on these three tasks.
 
 ## Evaluation and splits
 

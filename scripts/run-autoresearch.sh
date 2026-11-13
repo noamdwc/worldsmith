@@ -6,7 +6,8 @@ CDPATH= cd "$(dirname "$0")/.."
 case "${1:-all}" in
     all) suite=all; tasks="the full development suite" ;;
     maniskill) suite=maniskill; tasks="the six tabletop manipulation tasks" ;;
-    *) printf 'Usage: %s [all|maniskill]\n' "$0" >&2; exit 2 ;;
+    libero) suite=libero; tasks="the three arm manipulation tasks with varied starting layouts" ;;
+    *) printf 'Usage: %s [all|maniskill|libero]\n' "$0" >&2; exit 2 ;;
 esac
 export WORLDSMITH_RESEARCH_SUITE="$suite"
 

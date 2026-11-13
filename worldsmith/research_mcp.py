@@ -13,16 +13,18 @@ from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
 
+from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_evaluation import SUITES
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, WORKSPACE, copy_entry, research_entries
 
 # The full starter suite takes about 17–19 seconds on an Apple M2 Pro.
 EVALUATION_TIMEOUT_SECONDS = 90
+SUITE_TIMEOUT_SECONDS = {"libero": 300}
 OWNER_RUNS = ROOT / "runs" / "owner"
 SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
 if SUITE not in SUITES:
-    raise ValueError("WORLDSMITH_RESEARCH_SUITE must be 'all' or 'maniskill'")
+    raise ValueError(f"WORLDSMITH_RESEARCH_SUITE must be one of {', '.join(SUITES)}")
 
 mcp = FastMCP("worldsmith")
 latest_feedback: ResearchFeedback | None = None
@@ -91,7 +93,8 @@ def evaluate_controller() -> dict[str, object]:
     """Evaluate the shared controller on this session's development suite and save the run."""
     global latest_feedback, retained_summary
     started = monotonic()
-    deadline = started + EVALUATION_TIMEOUT_SECONDS
+    timeout = SUITE_TIMEOUT_SECONDS.get(SUITE, EVALUATION_TIMEOUT_SECONDS)
+    deadline = started + timeout
     run_id = f"mcp-{uuid4().hex}"
     output = WORKSPACE / "runs" / run_id
     owner_run = OWNER_RUNS / run_id
@@ -109,29 +112,29 @@ def evaluate_controller() -> dict[str, object]:
 
     code = owner_run / "code"
     owner_results = owner_run / "results"
-    maniskill_python = Path(os.environ.get(
-        "WORLDSMITH_MANISKILL_PYTHON", ROOT / "maniskill/.venv/bin/python",
-    )).expanduser()
     try:
         save_status("preparing")
         snapshot_code(code / "autoresearch")
         copy_entry(code, output / "code", skip_cache=True)
         digest = snapshot_hash(code)
         save_status("running")
-        if not maniskill_python.is_absolute() or not os.access(maniskill_python, os.X_OK):
-            raise EvaluationFailure("Evaluation environment is unavailable") from ValueError(
-                "Set WORLDSMITH_MANISKILL_PYTHON to the absolute path of the pinned Python 3.11 interpreter"
-            )
-        runtimes = {"pymunk": sys.executable, "maniskill": str(maniskill_python)}
         _, groups = SUITES[SUITE]
         for group in groups:
+            python = Path(sys.executable)
+            if group != "pymunk":
+                variable = f"WORLDSMITH_{group.upper()}_PYTHON"
+                python = Path(os.environ.get(variable, ROOT / group / ".venv/bin/python")).expanduser()
+                if not python.is_absolute() or not os.access(python, os.X_OK):
+                    raise EvaluationFailure("Evaluation environment is unavailable") from ValueError(
+                        f"Set {variable} to the absolute path of the pinned interpreter"
+                    )
             group_results = owner_results / group
             try:
-                run_group(group, runtimes[group], code, group_results, deadline)
+                run_group(group, str(python), code, group_results, deadline)
             except subprocess.TimeoutExpired:
                 marker = group_results / "task.txt"
                 (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
-                message = f"Evaluation timed out after {EVALUATION_TIMEOUT_SECONDS} seconds"
+                message = f"Evaluation timed out after {timeout} seconds"
                 if marker.is_file():
                     message += f" while evaluating {marker.read_text(encoding='utf-8')}"
                 save_status("timed_out", error=message, ended_at=now())
@@ -169,7 +172,7 @@ def get_episode_trace(seed: int, task: str | None = None) -> dict[str, object]:
     if latest_feedback is None:
         raise ValueError("Run evaluate_controller() first.")
     if task is None:
-        task = "push_cube" if SUITE == "maniskill" else "interception"
+        task = next(iter(TASK_GROUPS[SUITES[SUITE][1][0]]))
     return latest_feedback.episode(seed, task)
 
 
