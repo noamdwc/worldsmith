@@ -1,0 +1,25 @@
+[project]
+name = "worldsmith-libero"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "bddl==1.0.1",
+    "cloudpickle==3.1.2",
+    "easydict==1.13",
+    "future==1.0.0",
+    "gym==0.25.2",
+    "matplotlib==3.11.2",
+    "mujoco==2.3.7",
+    "numpy==1.26.4",
+    "pyyaml==6.0.3",
+    "robosuite==1.4.0",
+    "termcolor==3.3.0",
+    "torch==2.7.1",
+]
+
+[dependency-groups]
+dev = ["pytest==9.2.0"]
+
+[tool.uv]
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]

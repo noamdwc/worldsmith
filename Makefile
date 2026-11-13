@@ -1,4 +1,4 @@
-.PHONY: chase lead autoresearch autoresearch-maniskill clear-autoresearch
+.PHONY: chase lead autoresearch autoresearch-maniskill autoresearch-libero clear-autoresearch
 
 OUTPUT ?= runs/$@-dev-$(shell date -u +%Y%m%dT%H%M%SZ)
 
@@ -10,6 +10,9 @@ autoresearch:
 
 autoresearch-maniskill:
 	@./scripts/run-autoresearch.sh maniskill
+
+autoresearch-libero:
+	@./scripts/run-autoresearch.sh libero
 
 clear-autoresearch:
 	@archive_id=$$(uv run --locked python -m worldsmith.research_lifecycle archive) && \
