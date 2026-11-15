@@ -47,13 +47,15 @@ class RobosuiteAdapter:
                 observation[f"{name}_nut_quat"] = native[f"{nut.name}_quat"]
                 observation[f"{name}_nut_handle_pos"] = data.get_site_xpos(nut.important_sites["handle"]).copy()
                 observation[f"{name}_peg_pos"] = data.body_xpos[peg].copy()
-        else:
+        elif self.native_task == "TwoArmHandover":
             observation.update(
                 hammer_pos=native["hammer_pos"],
                 hammer_quat=native["hammer_quat"],
                 hammer_handle_pos=native["handle_xpos"],
                 table_height=float(data.site_xpos[env.table_top_id][2]),
             )
+        else:
+            raise ValueError(f"Unsupported native task: {self.native_task!r}")
         return observation
 
     def reset(self, seed):
