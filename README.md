@@ -45,8 +45,10 @@ For interception, the robot and target move in an obstacle-free plane. The robot
 
 ### Parallel evaluation
 
-The shared benchmark CLI, the Pymunk split CLI, and the owner group CLI accept
-`--workers N`. The default is `1`. Run each simulator with its pinned Python.
+The shared benchmark CLI, the Pymunk split CLI, the owner group CLI, and
+AutoResearch default to **1 worker** for Pymunk and ManiSkill and **2 workers**
+for LIBERO-PRO and Robosuite. The full AutoResearch suite uses each group's
+default, just as dedicated suites do. Run each simulator with its pinned Python.
 
 ```sh
 uv run --locked python -m worldsmith evaluate --task all --workers 2 --output runs/combined-parallel
@@ -54,10 +56,12 @@ libero/.venv/bin/python -m worldsmith.benchmark.evaluator \
   --task open_middle_drawer --episodes 8 --workers 4 --output runs/drawer-parallel
 robosuite/.venv/bin/python -B -m worldsmith.research_evaluation \
   robosuite runs/robosuite-parallel --workers 4
-WORLDSMITH_EVALUATION_WORKERS=2 make autoresearch-robosuite
+WORLDSMITH_EVALUATION_WORKERS=2 make autoresearch
 ```
 
-`WORLDSMITH_EVALUATION_WORKERS` sets the count for the AutoResearch session.
+`--workers N` overrides the default in the evaluation CLIs.
+`WORLDSMITH_EVALUATION_WORKERS` overrides the count for every group in an
+AutoResearch session, including the full suite.
 The MCP tool still evaluates the development split. Owner commands accept the
 same held-out seed options as before. The suite deadlines also apply to
 parallel runs.
@@ -71,8 +75,7 @@ pass `workers=N` to `evaluate_to_directory` with a picklable, importable
 adapter opener and controller factory. The factory can still return a closure.
 Use the standard `if __name__ == "__main__":` guard in calling scripts.
 
-Start with one worker for Pymunk and ManiSkill, and two for LIBERO-PRO and
-Robosuite. Add workers if the workload benefits and the machine can fit the
+Add workers if the workload benefits and the machine can fit the
 additional simulator memory. ManiSkill uses CPU physics and initializes
 Vulkan on macOS. It now rebuilds the physics scene for every seed to discard
 prior contacts. This fix can change earlier exploratory results. LIBERO-PRO

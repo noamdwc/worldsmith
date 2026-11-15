@@ -16,7 +16,7 @@ from uuid import uuid4
 from mcp.server.fastmcp import FastMCP
 
 from worldsmith.benchmark.evaluator import worker_count
-from worldsmith.benchmark.task_catalog import TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, TASK_GROUPS
 from worldsmith.research_evaluation import SUITES
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, WORKSPACE, copy_entry, research_entries
@@ -27,7 +27,8 @@ OWNER_RUNS = ROOT / "runs" / "owner"
 SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
 if SUITE not in SUITES:
     raise ValueError(f"WORLDSMITH_RESEARCH_SUITE must be one of {', '.join(SUITES)}")
-WORKERS = worker_count(os.environ.get("WORLDSMITH_EVALUATION_WORKERS", "1"))
+_worker_override = os.environ.get("WORLDSMITH_EVALUATION_WORKERS")
+WORKER_OVERRIDE = None if _worker_override is None else worker_count(_worker_override)
 
 mcp = FastMCP("worldsmith")
 latest_feedback: ResearchFeedback | None = None
@@ -78,11 +79,12 @@ def run_group_process(command: list[str], *, timeout: float, **options) -> subpr
 
 
 def run_group(group: str, python: str, code: Path, output: Path, deadline: float):
+    workers = DEFAULT_WORKERS[group] if WORKER_OVERRIDE is None else WORKER_OVERRIDE
     log = output.parent.parent / f"{group}-stderr.txt"
     with log.open("w", encoding="utf-8") as stderr:
         result = run_group_process(
             [python, "-B", "-m", "worldsmith.research_evaluation",
-             "--workers", str(WORKERS), group, str(output)],
+             "--workers", str(workers), group, str(output)],
             cwd=code,
             env={**os.environ, "PYTHONPATH": str(ROOT)},
             stdout=stderr,

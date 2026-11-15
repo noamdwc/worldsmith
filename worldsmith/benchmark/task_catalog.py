@@ -47,3 +47,4 @@ TASK_GROUPS = {
     "robosuite": _ROBOSUITE_TASKS,
 }
 TASK_CATALOG = {task: load for group in TASK_GROUPS.values() for task, load in group.items()}
+DEFAULT_WORKERS = {"pymunk": 1, "maniskill": 1, "libero": 2, "robosuite": 2}

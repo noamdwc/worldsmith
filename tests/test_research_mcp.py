@@ -23,7 +23,7 @@ def workspace(tmp_path, monkeypatch):
     shutil.copyfile(research_lifecycle.BASELINE / "controller.py", workspace / "controller.py")
     monkeypatch.setattr(research_mcp, "WORKSPACE", workspace)
     monkeypatch.setattr(research_mcp, "SUITE", "all")
-    monkeypatch.setattr(research_mcp, "WORKERS", 1)
+    monkeypatch.setattr(research_mcp, "WORKER_OVERRIDE", None)
     monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
     monkeypatch.setattr(research_mcp, "latest_feedback", None)
     monkeypatch.setattr(research_mcp, "retained_summary", None)
@@ -40,14 +40,15 @@ def native_workers(workspace, monkeypatch):
     class Worker:
         def __init__(self):
             self.calls = []
+            self.worker_counts = {}
             self.successes = 8
             self.after_pymunk = None
 
         def run(self, command, *, cwd, **kwargs):
             if "worldsmith.research_evaluation" not in command:
                 return RUN(command, cwd=cwd, **kwargs)
-            assert command[command.index("--workers") + 1] == str(research_mcp.WORKERS)
             group, directory = command[-2:]
+            self.worker_counts[group] = int(command[command.index("--workers") + 1])
             output = Path(directory)
             self.calls.append((group, command[0], cwd, (cwd / "autoresearch/controller.py").read_bytes()))
             if group == "pymunk":
@@ -103,9 +104,9 @@ def native_workers(workspace, monkeypatch):
     return worker
 
 
-@pytest.mark.parametrize("workers", [1, 2])
+@pytest.mark.parametrize("workers", [None, 3])
 def test_full_suite_snapshot_scoring_and_public_feedback(workspace, native_workers, monkeypatch, workers):
-    monkeypatch.setattr(research_mcp, "WORKERS", workers)
+    monkeypatch.setattr(research_mcp, "WORKER_OVERRIDE", workers)
     source = '''from worldsmith.api import Action
 
 def make_controller(*, task):
@@ -121,6 +122,10 @@ def make_controller(*, task):
         research_mcp.get_episode_trace(0)
 
     metrics = research_mcp.evaluate_controller()
+    expected_counts = {"pymunk": 1, "maniskill": 1, "libero": 2, "robosuite": 2}
+    if workers is not None:
+        expected_counts = dict.fromkeys(expected_counts, workers)
+    assert native_workers.worker_counts == expected_counts
     run = workspace / metrics["run_dir"]
     owner = research_mcp.OWNER_RUNS / metrics["run_id"]
     assert native_workers.calls == [
@@ -193,6 +198,7 @@ def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace
 
     metrics = research_mcp.evaluate_controller()
     assert [call[0] for call in native_workers.calls] == ["maniskill"]
+    assert native_workers.worker_counts == {"maniskill": 1}
     assert metrics["benchmark"] == "worldsmith-manipulation-v1"
     assert metrics["episodes"] == 48
     assert set(metrics["tasks"]) == set(TASK_GROUPS["maniskill"])
@@ -210,6 +216,7 @@ def test_arm_suite_dispatch_and_public_feedback(workspace, native_workers, monke
     monkeypatch.setattr(research_mcp, "SUITE", suite)
     metrics = research_mcp.evaluate_controller()
     assert [call[0] for call in native_workers.calls] == [suite]
+    assert native_workers.worker_counts == {suite: 2}
     assert metrics["benchmark"] == benchmark
     assert metrics["episodes"] == 24
     assert set(metrics["tasks"]) == set(TASK_GROUPS[suite])

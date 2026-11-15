@@ -5,8 +5,10 @@ from contextlib import contextmanager, nullcontext
 
 import pytest
 
+from worldsmith import research_evaluation
+from worldsmith.benchmark import evaluator
 from worldsmith.benchmark.evaluator import evaluate, evaluate_to_directory, main
-from worldsmith.benchmark.task_catalog import TASK_CATALOG
+from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
 
 
 class CounterAdapter:
@@ -148,6 +150,36 @@ def test_cli_selects_adapter_and_default_controller_from_catalog(monkeypatch, tm
     assert summary["task_id"] == "counter"
     assert summary["controller"].endswith(".controller_factory")
     assert summary["episodes"] == [{"seed": 7, "length": 1, "points": 21}]
+
+
+@pytest.mark.parametrize(("group", "default"), [
+    ("pymunk", 1), ("maniskill", 1), ("libero", 2), ("robosuite", 2),
+])
+@pytest.mark.parametrize("override", [None, 3])
+def test_cli_worker_defaults_and_override(monkeypatch, tmp_path, group, default, override):
+    task = next(iter(TASK_GROUPS[group]))
+    def load():
+        return None, None
+
+    monkeypatch.setitem(TASK_CATALOG, task, load)
+    monkeypatch.setitem(TASK_GROUPS, group, {task: load})
+    counts = []
+
+    def record_workers(*args, workers, **kwargs):
+        counts.append(workers)
+        return {}
+
+    flags = [] if override is None else ["--workers", str(override)]
+    for module, args in (
+        (evaluator, ["--task", task, "--output", str(tmp_path / "task")]),
+        (research_evaluation, [group, str(tmp_path / "group")]),
+    ):
+        monkeypatch.setattr(module, "evaluate_to_directory", record_workers)
+        monkeypatch.setattr(sys, "argv", ["evaluator", *args, *flags])
+        module.main()
+
+    expected = default if override is None else override
+    assert counts == [expected, expected]
 
 
 def test_v1_task_uses_standard_artifacts_from_unified_cli(tmp_path):

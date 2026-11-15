@@ -8,7 +8,7 @@ from pathlib import Path
 
 from worldsmith.benchmark.evaluator import evaluate_to_directory, worker_count
 from worldsmith.benchmark.runner import ControllerError
-from worldsmith.benchmark.task_catalog import TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, TASK_GROUPS
 
 LEGACY_HELDOUT_GROUPS = ("pymunk", "maniskill")
 SUITES = {
@@ -26,10 +26,11 @@ def main() -> None:
     parser.add_argument("group", choices=TASK_GROUPS)
     parser.add_argument("output", type=Path)
     parser.add_argument("--heldout-seed-file", type=Path, help="Owner file mapping each task to its first held-out seed")
-    parser.add_argument("--workers", type=worker_count, default=1, help="Episode workers per task (default: 1)")
+    parser.add_argument("--workers", type=worker_count, help="Episode workers per task (default depends on simulator)")
     args = parser.parse_args()
     output = args.output.resolve()
     group = TASK_GROUPS[args.group]
+    workers = DEFAULT_WORKERS[args.group] if args.workers is None else args.workers
     starts = dict.fromkeys(group, DEV_SEEDS[0])
     if args.heldout_seed_file is not None:
         # Preserve the original combined-suite seed file format.
@@ -63,7 +64,7 @@ def main() -> None:
             factory = partial(make_controller, task=task) if "task" in parameters else make_controller
             evaluate_to_directory(
                 open_adapter, factory, len(DEV_SEEDS), starts[task], output / task, task=task,
-                workers=args.workers,
+                workers=workers,
             )
     except ControllerError as exc:
         (output / "controller_error.txt").write_text(str(exc) + "\n", encoding="utf-8")

@@ -14,7 +14,7 @@ from worldsmith.benchmark.results import (
     TaskEvaluation, record_episodes, write_scored_episode, write_summary,
 )
 from worldsmith.benchmark.runner import ControllerFactory, EvaluationAdapter, run_scored_episode
-from worldsmith.benchmark.task_catalog import TASK_CATALOG
+from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, TASK_CATALOG, TASK_GROUPS
 
 
 def worker_count(value: str) -> int:
@@ -120,9 +120,14 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0, help="First seed in a consecutive sequence")
     parser.add_argument("--output", type=Path, required=True, help="New run directory")
-    parser.add_argument("--workers", type=worker_count, default=1, help="Episode workers per task (default: 1)")
+    parser.add_argument("--workers", type=worker_count, help="Episode workers (default depends on simulator)")
     args = parser.parse_args()
 
+    workers = args.workers
+    if workers is None:
+        workers = next(
+            (DEFAULT_WORKERS[group] for group, tasks in TASK_GROUPS.items() if args.task in tasks), 1,
+        )
     open_adapter, factory = TASK_CATALOG[args.task]()
     if args.controller is not None:
         module, _, name = args.controller.partition(":")
@@ -133,7 +138,7 @@ def main() -> None:
             parser.error("--controller must name a callable factory")
 
     summary = evaluate_to_directory(
-        open_adapter, factory, args.episodes, args.seed, args.output, task=args.task, workers=args.workers,
+        open_adapter, factory, args.episodes, args.seed, args.output, task=args.task, workers=workers,
     )
     print(json.dumps(summary, indent=2))
 
