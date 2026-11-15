@@ -1,3 +1,4 @@
+import fcntl
 import json
 import shutil
 import subprocess
@@ -22,6 +23,7 @@ def workspace(tmp_path, monkeypatch):
     shutil.copyfile(research_lifecycle.BASELINE / "controller.py", workspace / "controller.py")
     monkeypatch.setattr(research_mcp, "WORKSPACE", workspace)
     monkeypatch.setattr(research_mcp, "SUITE", "all")
+    monkeypatch.setattr(research_mcp, "WORKERS", 1)
     monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
     monkeypatch.setattr(research_mcp, "latest_feedback", None)
     monkeypatch.setattr(research_mcp, "retained_summary", None)
@@ -44,6 +46,7 @@ def native_workers(workspace, monkeypatch):
         def run(self, command, *, cwd, **kwargs):
             if "worldsmith.research_evaluation" not in command:
                 return RUN(command, cwd=cwd, **kwargs)
+            assert command[command.index("--workers") + 1] == str(research_mcp.WORKERS)
             group, directory = command[-2:]
             output = Path(directory)
             self.calls.append((group, command[0], cwd, (cwd / "autoresearch/controller.py").read_bytes()))
@@ -96,11 +99,13 @@ def native_workers(workspace, monkeypatch):
             return subprocess.CompletedProcess(command, 0)
 
     worker = Worker()
-    monkeypatch.setattr(research_mcp.subprocess, "run", worker.run)
+    monkeypatch.setattr(research_mcp, "run_group_process", worker.run)
     return worker
 
 
-def test_full_suite_snapshot_scoring_and_public_feedback(workspace, native_workers):
+@pytest.mark.parametrize("workers", [1, 2])
+def test_full_suite_snapshot_scoring_and_public_feedback(workspace, native_workers, monkeypatch, workers):
+    monkeypatch.setattr(research_mcp, "WORKERS", workers)
     source = '''from worldsmith.api import Action
 
 def make_controller(*, task):
@@ -284,7 +289,7 @@ def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, 
             raise subprocess.TimeoutExpired(command, timeout)
         return subprocess.CompletedProcess(command, 1)
 
-    monkeypatch.setattr(research_mcp.subprocess, "run", fail)
+    monkeypatch.setattr(research_mcp, "run_group_process", fail)
     with pytest.raises(RuntimeError, match="while evaluating push_cube") as failure:
         research_mcp.evaluate_controller()
     assert research_mcp.latest_feedback is previous_feedback
@@ -344,9 +349,32 @@ def test_interrupted_evaluation_keeps_snapshot(workspace, monkeypatch):
     def interrupt(*args, **kwargs):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(subprocess, "run", interrupt)
+    monkeypatch.setattr(research_mcp, "run_group_process", interrupt)
     with pytest.raises(KeyboardInterrupt):
         research_mcp.evaluate_controller()
     [run] = (workspace / "runs").iterdir()
     assert json.loads((run / "evaluation.json").read_text())["status"] == "running"
     assert (run / "code/autoresearch/controller.py").is_file()
+
+
+def test_group_timeout_stops_descendants(tmp_path):
+    lock = tmp_path / "worker.lock"
+    descendant = """
+import fcntl
+import sys
+import time
+
+with open(sys.argv[1], "w") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    lock.write("ready")
+    lock.flush()
+    time.sleep(30)
+"""
+    group = "import subprocess, sys; subprocess.run([sys.executable, '-c', *sys.argv[1:]], check=True)"
+    with pytest.raises(subprocess.TimeoutExpired):
+        research_mcp.run_group_process(
+            [sys.executable, "-c", group, descendant, str(lock)], timeout=2,
+        )
+    assert lock.read_text() == "ready"
+    with lock.open("r+") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)

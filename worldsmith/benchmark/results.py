@@ -1,6 +1,7 @@
 """Snapshots and JSON artifacts shared by benchmark evaluations."""
 
 import json
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import NamedTuple, TextIO
@@ -9,6 +10,18 @@ from typing import NamedTuple, TextIO
 class TaskEvaluation(NamedTuple):
     episodes: list[dict]
     metrics: dict
+
+
+def record_episodes(
+    episodes: Iterable[tuple[dict, dict]], record: Callable[[dict, dict], None],
+) -> tuple[list[dict], list[dict]]:
+    rows = []
+    scores = []
+    for episode, metrics in episodes:
+        record(episode, metrics)
+        rows.append({"seed": episode["seed"], "length": episode["length"], **metrics})
+        scores.append(metrics)
+    return rows, scores
 
 
 def snapshot(value):

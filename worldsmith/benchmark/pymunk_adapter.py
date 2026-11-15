@@ -1,6 +1,7 @@
 """Adapt V1 Pymunk scenes and task scoring to the common evaluation protocol."""
 
 from contextlib import nullcontext
+from functools import partial
 from typing import TextIO
 
 from worldsmith.api import INTERCEPTION_GOAL, Action
@@ -96,10 +97,12 @@ def summarize_research(results: dict[str, TaskEvaluation], *, combined: bool) ->
     }
 
 
-def evaluation_setup(task_name: str):
-    def open_adapter():
-        return nullcontext(PymunkAdapter(TASKS[task_name]()))
+def open_pymunk(task_name: str):
+    return nullcontext(PymunkAdapter(TASKS[task_name]()))
 
+
+def evaluation_setup(task_name: str):
+    open_adapter = partial(open_pymunk, task_name)
     if task_name == INTERCEPTION_GOAL:
         return open_adapter, Chase
 

@@ -22,7 +22,7 @@ The optional ManiSkill environment pins ManiSkill nightly `2026.8.2.400`, SAPIEN
 
 ## Tasks
 
-All tasks use one environment, `state_dict` observations, PhysX CPU simulation, the SAPIEN CPU render backend, and `render_mode=None`. The pinned packages supply the robot and scene assets for all six tasks. PegInsertionSide rebuilds the scene at each reset to sample its peg and hole geometry, following the native single-environment default.
+Each evaluation worker uses one environment with `state_dict` observations, PhysX CPU simulation, the SAPIEN CPU render backend, and `render_mode=None`. The pinned packages supply the robot and scene assets for all six tasks. Worldsmith rebuilds the physics scene at every reset to make each seed independent of prior episodes. This fixes a historical bug where a reset that reused the scene could report stale contacts. For example, PickCube could report an initial grasp after a successful previous episode. Earlier exploratory traces, episode lengths, and results can differ from runs with clean resets. PegInsertionSide continues to sample its peg and hole geometry from the episode seed. [ManiSkill reset implementation](https://github.com/mani-skill/ManiSkill/blob/main/mani_skill/envs/sapien_env.py)
 
 | CLI task | Official environment | Robot | Control mode | Action size | Step limit | Scripted baseline |
 | --- | --- | --- | --- | ---: | ---: | --- |

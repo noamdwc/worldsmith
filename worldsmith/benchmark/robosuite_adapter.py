@@ -134,10 +134,14 @@ def open_robosuite(task):
         adapter.close()
 
 
+def idle(observation, *, arms):
+    return np.tile([0., 0., 0., 0., 0., 0., -1.], arms)
+
+
+def idle_controller(*, arms):
+    return partial(idle, arms=arms)
+
+
 def evaluation_setup(task):
     _, arms, _ = TASKS[task]
-
-    def idle(observation):
-        return np.tile([0., 0., 0., 0., 0., 0., -1.], arms)
-
-    return partial(open_robosuite, task), lambda: idle
+    return partial(open_robosuite, task), partial(idle_controller, arms=arms)

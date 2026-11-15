@@ -29,6 +29,19 @@ class Simulator(Protocol):
     def step(self, action: Any) -> tuple[Any, float | None, bool, bool, dict]: ...
 
 
+class EvaluationAdapter(Simulator, Protocol):
+    """Provide task metadata, episode metrics, and their native aggregation."""
+
+    def metadata(self) -> dict: ...
+    def score(self, episode: dict) -> dict: ...
+    def summarize(self, episodes: list[dict]) -> dict: ...
+
+
+def run_scored_episode(adapter: EvaluationAdapter, factory: ControllerFactory, seed: int, task: str):
+    episode = run_episode(adapter, factory, seed, task=task)
+    return episode, adapter.score(episode)
+
+
 def run_episode(
     simulator: Simulator, controller_factory: ControllerFactory, seed: int, *, task: str = "task",
 ) -> dict:

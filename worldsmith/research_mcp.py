@@ -2,8 +2,10 @@
 
 import json
 import os
+import signal
 import subprocess
 import sys
+from contextlib import suppress
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -13,6 +15,7 @@ from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
 
+from worldsmith.benchmark.evaluator import worker_count
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_evaluation import SUITES
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
@@ -24,6 +27,7 @@ OWNER_RUNS = ROOT / "runs" / "owner"
 SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
 if SUITE not in SUITES:
     raise ValueError(f"WORLDSMITH_RESEARCH_SUITE must be one of {', '.join(SUITES)}")
+WORKERS = worker_count(os.environ.get("WORLDSMITH_EVALUATION_WORKERS", "1"))
 
 mcp = FastMCP("worldsmith")
 latest_feedback: ResearchFeedback | None = None
@@ -61,11 +65,24 @@ def snapshot_hash(code: Path) -> str:
     return digest.hexdigest()
 
 
+def run_group_process(command: list[str], *, timeout: float, **options) -> subprocess.CompletedProcess:
+    with subprocess.Popen(command, start_new_session=True, **options) as process:
+        try:
+            returncode = process.wait(timeout=timeout)
+        except BaseException:
+            # The suite deadline also covers spawned episode workers and native code.
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            raise
+    return subprocess.CompletedProcess(command, returncode)
+
+
 def run_group(group: str, python: str, code: Path, output: Path, deadline: float):
     log = output.parent.parent / f"{group}-stderr.txt"
     with log.open("w", encoding="utf-8") as stderr:
-        result = subprocess.run(
-            [python, "-B", "-m", "worldsmith.research_evaluation", group, str(output)],
+        result = run_group_process(
+            [python, "-B", "-m", "worldsmith.research_evaluation",
+             "--workers", str(WORKERS), group, str(output)],
             cwd=code,
             env={**os.environ, "PYTHONPATH": str(ROOT)},
             stdout=stderr,

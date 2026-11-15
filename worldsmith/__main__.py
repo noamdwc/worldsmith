@@ -7,9 +7,9 @@ from functools import partial
 from importlib import import_module
 from pathlib import Path
 
-from worldsmith.benchmark.evaluator import evaluate
+from worldsmith.benchmark.evaluator import evaluate_task, worker_count
 from worldsmith.benchmark.pymunk_adapter import (
-    PymunkAdapter, summarize_research, write_research_episode,
+    open_pymunk, summarize_research, write_research_episode,
 )
 from worldsmith.benchmark.runner import ControllerError
 from worldsmith.benchmark.tasks.constants import (
@@ -34,6 +34,7 @@ def main():
     selection.add_argument("--seed", type=int, help="Replay a single scenario seed")
     evaluation.add_argument("--output", required=True, type=Path, help="New directory for run files")
     evaluation.add_argument("--wandb", choices=("disabled", "offline", "online"), default="disabled")
+    evaluation.add_argument("--workers", type=worker_count, default=1, help="Episode workers per task (default: 1)")
     args = parser.parse_args()
 
     if args.controller is None:
@@ -82,11 +83,13 @@ def main():
             if not callable(factory):
                 raise ControllerError(f"{args.controller} is not a callable controller factory")
         with (args.output / "episodes.jsonl").open("w", encoding="utf-8") as trace:
-            metrics = evaluate(
-                {name: PymunkAdapter(TASKS[name]()) for name in task_names},
-                factory, seeds, partial(write_research_episode, trace),
-                summarize=partial(summarize_research, combined=combined),
-            )
+            record = partial(write_research_episode, trace)
+            results = {}
+            for task in task_names:
+                results[task], _ = evaluate_task(
+                    partial(open_pymunk, task), factory, seeds, record, task=task, workers=args.workers,
+                )
+            metrics = summarize_research(results, combined=combined)
     except ControllerError as exc:
         # Keep the controller diagnostic separate from the private traceback.
         (args.output / "controller_error.txt").write_text(str(exc) + "\n", encoding="utf-8")

@@ -12,7 +12,7 @@ import pytest
 
 from worldsmith.benchmark.evaluator import evaluate_to_directory
 from worldsmith.benchmark.results import snapshot
-from worldsmith.benchmark.runner import ControllerError
+from worldsmith.benchmark.runner import ControllerError, run_scored_episode
 from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
 from worldsmith.research_baseline.controller import make_controller
 
@@ -26,6 +26,26 @@ TASKS = [
     ("pull_cube", "PullCube-v1", "panda", "pd_ee_delta_pos", 4, 50, "obj_pose", "success"),
     ("push_t", "PushT-v1", "panda_stick", "pd_ee_delta_pos", 3, 100, "obj_pose", "success"),
 ]
+
+
+def test_pick_cube_reset_discards_previous_grasp_and_rollout():
+    task = "pick_cube"
+    open_adapter, _ = TASK_CATALOG[task]()
+    factory = partial(make_controller, task=task)
+    with open_adapter() as adapter:
+        first, expected = run_scored_episode(adapter, factory, 1, task)
+        prior, prior_score = run_scored_episode(adapter, factory, 0, task)
+        assert prior_score["success"]
+        assert prior["steps"][-1]["info"]["is_grasped"] == [True]
+
+        repeated, actual = run_scored_episode(adapter, factory, 1, task)
+        assert repeated["steps"][0]["observation"]["extra"]["is_grasped"] == [False]
+        assert actual == expected
+        assert repeated == first
+
+
+def test_pick_cube_parallel_artifacts(check_native_parallel_artifacts):
+    check_native_parallel_artifacts("pick_cube")
 
 
 @pytest.mark.parametrize(
@@ -106,6 +126,7 @@ def test_native_manipulation(
     assert summary["sim_backend"] == "physx_cpu"
     assert summary["render_backend"] == "sapien_cpu"
     assert summary["render_mode"] is None
+    assert summary["reconfiguration_freq"] == 1
     assert summary["max_episode_steps"] == limit
     assert summary["controller"] == "hold_policy.make_controller"
     assert summary["seeds"] == [42]
