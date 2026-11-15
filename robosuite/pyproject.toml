@@ -1,0 +1,15 @@
+[project]
+name = "worldsmith-robosuite"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mujoco==3.3.7",
+    "robosuite==1.5.2",
+]
+
+[dependency-groups]
+dev = ["pytest==9.2.0"]
+
+[tool.uv]
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]

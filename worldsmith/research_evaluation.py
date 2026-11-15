@@ -12,9 +12,10 @@ from worldsmith.benchmark.task_catalog import TASK_GROUPS
 
 LEGACY_HELDOUT_GROUPS = ("pymunk", "maniskill")
 SUITES = {
-    "all": ("worldsmith-all-v2", tuple(TASK_GROUPS)),
+    "all": ("worldsmith-all-v3", tuple(TASK_GROUPS)),
     "maniskill": ("worldsmith-manipulation-v1", ("maniskill",)),
     "libero": ("worldsmith-arm-position-v1", ("libero",)),
+    "robosuite": ("worldsmith-arm-skills-v1", ("robosuite",)),
 }
 DEV_SEEDS = tuple(range(8))
 CONTROLLER = "autoresearch.controller:make_controller"

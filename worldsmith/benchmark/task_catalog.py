@@ -32,6 +32,18 @@ _LIBERO_TASKS = {
     "place_two_items_in_basket": partial(_load, _LIBERO, "place_two_items_in_basket"),
 }
 
+_ROBOSUITE = "worldsmith.benchmark.robosuite_adapter"
+_ROBOSUITE_TASKS = {
+    "open_latched_door": partial(_load, _ROBOSUITE, "open_latched_door"),
+    "assemble_nuts": partial(_load, _ROBOSUITE, "assemble_nuts"),
+    "handover_hammer": partial(_load, _ROBOSUITE, "handover_hammer"),
+}
+
 # Load only the adapters available in each pinned Python environment.
-TASK_GROUPS = {"pymunk": _PYMUNK_TASKS, "maniskill": _MANISKILL_TASKS, "libero": _LIBERO_TASKS}
-TASK_CATALOG = {**_MANISKILL_TASKS, **_PYMUNK_TASKS, **_LIBERO_TASKS}
+TASK_GROUPS = {
+    "pymunk": _PYMUNK_TASKS,
+    "maniskill": _MANISKILL_TASKS,
+    "libero": _LIBERO_TASKS,
+    "robosuite": _ROBOSUITE_TASKS,
+}
+TASK_CATALOG = {task: load for group in TASK_GROUPS.values() for task, load in group.items()}

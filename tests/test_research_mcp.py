@@ -25,7 +25,7 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
     monkeypatch.setattr(research_mcp, "latest_feedback", None)
     monkeypatch.setattr(research_mcp, "retained_summary", None)
-    for group in ("maniskill", "libero"):
+    for group in ("maniskill", "libero", "robosuite"):
         interpreter = tmp_path / f"{group}-python"
         interpreter.symlink_to(sys.executable)
         monkeypatch.setenv(f"WORLDSMITH_{group.upper()}_PYTHON", str(interpreter))
@@ -122,16 +122,17 @@ def make_controller(*, task):
         ("pymunk", sys.executable, owner / "code", source.encode()),
         ("maniskill", str(workspace.parent / "maniskill-python"), owner / "code", source.encode()),
         ("libero", str(workspace.parent / "libero-python"), owner / "code", source.encode()),
+        ("robosuite", str(workspace.parent / "robosuite-python"), owner / "code", source.encode()),
     ]
     assert (run.parent / "code/autoresearch/controller.py").read_text() == source
     summary = json.loads((run / "summary.json").read_text())
-    assert summary["benchmark"] == "worldsmith-all-v2"
+    assert summary["benchmark"] == "worldsmith-all-v3"
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
-    assert summary["episodes"] == 112
+    assert summary["episodes"] == 136
     assert summary["runtime_seconds"] > 0
     assert set(summary["tasks"]) == {task for group in TASK_GROUPS.values() for task in group}
     assert all(row["episodes"] == 8 for row in summary["tasks"].values())
-    assert summary["aggregate_score"] == pytest.approx(6 / 14)
+    assert summary["aggregate_score"] == pytest.approx(6 / 17)
     assert summary["tasks"]["interception"]["captures"] == 0
     assert summary["tasks"]["open_middle_drawer"]["success_rate"] == 0
     assert not research_mcp.get_episode_trace(0, "open_middle_drawer")["success"]
@@ -139,7 +140,7 @@ def make_controller(*, task):
         "max_episode_steps": 50, "action_shape": [4],
     }
     assert set(summary["tasks"]["interception"]["configuration"]) == {"max_episode_steps", "objective"}
-    for term in ("pymunk", "maniskill", "sapien", "physx", "state_dict", "PushCube-v1", "private version"):
+    for term in ("pymunk", "maniskill", "robosuite", "sapien", "physx", "state_dict", "PushCube-v1", "private version"):
         assert term not in json.dumps(metrics)
     native = json.loads((owner / "results/maniskill/push_cube/summary.json").read_text())
     assert native["sim_backend"] == "physx_cpu" and native["versions"]["mani-skill-nightly"] == "private version"
@@ -150,7 +151,7 @@ def make_controller(*, task):
     assert record["status"] == "succeeded"
 
     saved = [json.loads(line) for line in (run / "episodes.jsonl").read_text().splitlines()]
-    assert len(saved) == 112
+    assert len(saved) == 136
     for public in saved:
         assert research_mcp.get_episode_trace(public["seed"], public["task"]) == public
         assert all(set(frame) == {"observation", "action"} for frame in public["frames"])
@@ -194,6 +195,24 @@ def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace
     assert research_mcp.get_episode_trace(0) == research_mcp.get_episode_trace(0, "push_cube")
     with pytest.raises(ValueError, match="task 'interception'"):
         research_mcp.get_episode_trace(0, "interception")
+
+
+@pytest.mark.parametrize(("suite", "benchmark", "first_task"), [
+    ("libero", "worldsmith-arm-position-v1", "open_middle_drawer"),
+    ("robosuite", "worldsmith-arm-skills-v1", "open_latched_door"),
+])
+def test_arm_suite_dispatch_and_public_feedback(workspace, native_workers, monkeypatch, suite, benchmark, first_task):
+    monkeypatch.setattr(research_mcp, "SUITE", suite)
+    metrics = research_mcp.evaluate_controller()
+    assert [call[0] for call in native_workers.calls] == [suite]
+    assert metrics["benchmark"] == benchmark
+    assert metrics["episodes"] == 24
+    assert set(metrics["tasks"]) == set(TASK_GROUPS[suite])
+    assert suite not in json.dumps(metrics)
+    episode = research_mcp.get_episode_trace(0)
+    assert episode == research_mcp.get_episode_trace(0, first_task)
+    assert "private_step" not in json.dumps(episode)
+    assert "reset_info" not in episode
 
 
 def test_per_task_changes_use_retained_run(workspace, native_workers):
