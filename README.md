@@ -132,8 +132,8 @@ For a manually launched session, run these lifecycle commands from the repo root
 
 ```sh
 uv run --locked python -m worldsmith.research_lifecycle start
-# Run this command from the autoresearch directory, then wait for it to exit.
-(cd autoresearch && codex "Run the three-iteration AutoResearch session in RESEARCH.md.")
+# Use the same low reasoning effort as make autoresearch.
+(cd autoresearch && codex -c 'model_reasoning_effort="low"' "Run the three-iteration AutoResearch session in RESEARCH.md.")
 archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
 uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 ```

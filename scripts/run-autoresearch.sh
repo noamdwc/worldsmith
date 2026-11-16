@@ -19,7 +19,7 @@ lifecycle() {
 lifecycle start
 status=0
 (
-    cd autoresearch && exec codex exec --sandbox workspace-write \
+    cd autoresearch && exec codex exec -c 'model_reasoning_effort="low"' --sandbox workspace-write \
         "Run the three-iteration AutoResearch session in RESEARCH.md on $tasks and summarize your findings."
 ) || status=$?
 
