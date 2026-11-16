@@ -8,7 +8,7 @@ import pytest
 from worldsmith import research_evaluation
 from worldsmith.benchmark import evaluator
 from worldsmith.benchmark.evaluator import evaluate, evaluate_to_directory, main
-from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEV_TASK_GROUPS, TASK_CATALOG, TASK_GROUPS
 
 
 class CounterAdapter:
@@ -162,7 +162,7 @@ def test_cli_worker_defaults_and_override(monkeypatch, tmp_path, group, default,
         return None, None
 
     monkeypatch.setitem(TASK_CATALOG, task, load)
-    monkeypatch.setitem(TASK_GROUPS, group, {task: load})
+    monkeypatch.setitem(DEV_TASK_GROUPS, group, {task: load})
     counts = []
 
     def record_workers(*args, workers, **kwargs):

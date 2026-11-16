@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
 
-from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
-from worldsmith.research_evaluation import CONTROLLER, DEV_SEEDS, SUITES
+from worldsmith.benchmark.task_catalog import DEV_SEEDS, DEV_TASK_GROUPS, TASK_CATALOG
+from worldsmith.research_evaluation import CONTROLLER, SUITES
 
 TASK_METRICS = {
     "interception": ("captures", "capture_rate", "mean_closest_distance"),
@@ -98,7 +98,7 @@ def publish_feedback(
     seeds = list(DEV_SEEDS)
     benchmark, groups = SUITES[suite]
     for group in groups:
-        selected_tasks = (suite,) if suite in TASK_CATALOG else TASK_GROUPS[group]
+        selected_tasks = (suite,) if suite in TASK_CATALOG else DEV_TASK_GROUPS[group]
         for task in selected_tasks:
             task_results = owner_results / group / task
             native = json.loads((task_results / "summary.json").read_text(encoding="utf-8"))

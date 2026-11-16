@@ -2,9 +2,9 @@
 
 Improve one shared task-aware controller across the tasks in the active development suite using their public observations and reusable Python strategies. Read [TASKS.md](TASKS.md); task descriptions and detailed development traces are available to you. Use only the public files in this workspace and the `worldsmith` MCP tools for evaluation. [AGENTS.md](AGENTS.md) defines the workspace rules.
 
-The launch selects the full development suite (20 tasks, 160 episodes), tabletop manipulation and quadruped locomotion (eight tasks, 64 episodes), arm manipulation with varied starting layouts (three tasks, 24 episodes), or arm skills including surface wiping (four tasks, 32 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
+The launch selects the full development suite (16 tasks, 128 episodes), tabletop manipulation and quadruped locomotion (seven tasks, 56 episodes), arm manipulation with varied starting layouts (two tasks, 16 episodes), or arm skills (three tasks, 24 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
 
-For a single-task run, set `WORLDSMITH_RESEARCH_SUITE` to the task ID before starting a new MCP server. The run uses the same eight development seeds as the full suite. The owner can set `WORLDSMITH_RESEARCH_WORKSPACE` on the server to point to a separate directory containing a fresh starter controller, journal, and public guides. Give each experiment its own directory and MCP server so it has its own retained score and traces.
+For a single-task run, set `WORLDSMITH_RESEARCH_SUITE` to a task ID from the development suite before starting a new MCP server. The run uses the same eight development seeds as the full suite. The owner can set `WORLDSMITH_RESEARCH_WORKSPACE` on the server to point to a separate directory containing a fresh starter controller, journal, and public guides. Give each experiment its own directory and MCP server so it has its own retained score and traces.
 
 ## Budget and process
 

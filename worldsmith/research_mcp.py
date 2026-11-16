@@ -16,7 +16,7 @@ from uuid import uuid4
 from mcp.server.fastmcp import FastMCP
 
 from worldsmith.benchmark.evaluator import worker_count
-from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, TASK_CATALOG, TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, DEV_TASK_GROUPS, TASK_CATALOG
 from worldsmith.research_evaluation import SUITES
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, WORKSPACE as DEFAULT_WORKSPACE
@@ -195,7 +195,7 @@ def get_episode_trace(seed: int, task: str | None = None) -> dict[str, object]:
     if latest_feedback is None:
         raise ValueError("Run evaluate_controller() first.")
     if task is None:
-        task = SUITE if SUITE in TASK_CATALOG else next(iter(TASK_GROUPS[SUITES[SUITE][1][0]]))
+        task = SUITE if SUITE in TASK_CATALOG else next(iter(DEV_TASK_GROUPS[SUITES[SUITE][1][0]]))
     return latest_feedback.episode(seed, task)
 
 

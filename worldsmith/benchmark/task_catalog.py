@@ -51,3 +51,17 @@ TASK_GROUPS = {
 }
 TASK_CATALOG = {task: load for group in TASK_GROUPS.values() for task, load in group.items()}
 DEFAULT_WORKERS = {"pymunk": 1, "maniskill": 1, "libero": 2, "robosuite": 2}
+
+VALIDATION_ONLY_TASKS = {
+    "rendezvous",
+    "peg_insertion_side",
+    "place_bowl_on_plate",
+    "wipe_table",
+}
+DEV_SEEDS = range(0, 8)
+VALIDATION_SEEDS = range(8, 16)
+
+DEV_TASK_GROUPS = {
+    group: {task: load for task, load in tasks.items() if task not in VALIDATION_ONLY_TASKS}
+    for group, tasks in TASK_GROUPS.items()
+}
