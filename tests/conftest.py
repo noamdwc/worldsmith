@@ -1,4 +1,7 @@
+import subprocess
+import sys
 from functools import partial
+from pathlib import Path
 
 import pytest
 
@@ -18,3 +21,18 @@ def research_metrics():
         )
 
     return run
+
+
+@pytest.fixture
+def check_native_parallel_artifacts(tmp_path):
+    def check(task):
+        for workers in (1, 2):
+            subprocess.run(
+                [sys.executable, "-B", "-m", "worldsmith.benchmark.evaluator", "--task", task,
+                 "--episodes", "2", "--workers", str(workers), "--output", str(tmp_path / str(workers))],
+                cwd=Path(__file__).resolve().parents[1], stdout=subprocess.DEVNULL, check=True, timeout=120,
+            )
+        for name in ("summary.json", "episodes.jsonl"):
+            assert (tmp_path / "1" / name).read_bytes() == (tmp_path / "2" / name).read_bytes()
+
+    return check

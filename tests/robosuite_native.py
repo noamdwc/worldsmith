@@ -10,6 +10,10 @@ from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_feedback import public_episode
 
 
+def test_parallel_native_artifacts(check_native_parallel_artifacts):
+    check_native_parallel_artifacts("handover_hammer")
+
+
 @pytest.mark.parametrize(("task", "native_task", "object_key", "size", "horizon"), [
     ("open_latched_door", "Door", "handle_pos", 7, 300),
     ("assemble_nuts", "NutAssembly", "square_nut_pos", 7, 450),

@@ -38,6 +38,10 @@ def test_native_reset_and_action():
         env.close()
 
 
+def test_parallel_native_artifacts(check_native_parallel_artifacts):
+    check_native_parallel_artifacts("push_cube")
+
+
 def test_complete_episodes_and_artifacts(tmp_path):
     output = tmp_path / "evaluation"
     subprocess.run(

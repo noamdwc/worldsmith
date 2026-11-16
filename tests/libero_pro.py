@@ -13,6 +13,10 @@ from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_feedback import public_episode
 
 
+def test_parallel_native_artifacts(check_native_parallel_artifacts):
+    check_native_parallel_artifacts("open_middle_drawer")
+
+
 def test_pinned_source_checkout():
     git = ["git", "--no-optional-locks", "-C", str(SOURCE)]
     revision = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()

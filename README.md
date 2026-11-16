@@ -23,7 +23,7 @@ Python callers migrating from `worldsmith.benchmark.evaluate` use
 `worldsmith.benchmark.evaluator.evaluate` with an ordered mapping of task names
 to open adapters, a controller factory, explicit seeds, and a trace recorder.
 The research CLI supplies its recording and summary policies from
-`worldsmith.benchmark.pymunk_adapter`, which also defines `ControllerError`.
+`worldsmith.benchmark.pymunk_adapter`.
 
 ```sh
 uv sync --locked
@@ -42,6 +42,77 @@ The combined benchmark (`worldsmith-v3`) uses 8 fixed seeds per task, 40 episode
 Use `--split heldout` for owner comparisons after development, or `--seed 0` to replay a scenario (one episode per task with `--task all`). Development seeds are 0–7 and held-out seeds are 1000–1007 for the combined benchmark and independent navigation, rendezvous, bouncing interception, and object pushing. Independent interception retains its original 32-seed splits (0–31 and 1000–1031) and benchmark ID `interception-v2`.
 
 For interception, the robot and target move in an obstacle-free plane. The robot commands heading and throttle. The target moves at constant velocity sampled for each episode. Capture means coming within 0.3 simulation units of the target within 45 steps. `chase` aims at the latest measurement. `lead` estimates motion from recent measurements and aims ahead.
+
+### Parallel evaluation
+
+The shared benchmark CLI, the Pymunk split CLI, the owner group CLI, and
+AutoResearch default to **1 worker** for Pymunk and ManiSkill and **2 workers**
+for LIBERO-PRO and Robosuite. The full AutoResearch suite uses each group's
+default, just as dedicated suites do. Run each simulator with its pinned Python.
+
+```sh
+uv run --locked python -m worldsmith evaluate --task all --workers 2 --output runs/combined-parallel
+libero/.venv/bin/python -m worldsmith.benchmark.evaluator \
+  --task open_middle_drawer --episodes 8 --workers 4 --output runs/drawer-parallel
+robosuite/.venv/bin/python -B -m worldsmith.research_evaluation \
+  robosuite runs/robosuite-parallel --workers 4
+WORLDSMITH_EVALUATION_WORKERS=2 make autoresearch
+```
+
+`--workers N` overrides the default in the evaluation CLIs.
+`WORLDSMITH_EVALUATION_WORKERS` overrides the count for every group in an
+AutoResearch session, including the full suite.
+The MCP tool still evaluates the development split. Owner commands accept the
+same held-out seed options as before. The suite deadlines also apply to
+parallel runs.
+
+Workers use fresh Python processes and own their simulator instances. Each
+task uses at most one worker per episode, and tasks run in the established
+order. The evaluator assigns the original seeds and writes traces and
+aggregates scores in seed order. Controllers should use episode-local state
+and deterministic logic for reproducible comparisons. Python callers can
+pass `workers=N` to `evaluate_to_directory` with a picklable, importable
+adapter opener and controller factory. The factory can still return a closure.
+Use the standard `if __name__ == "__main__":` guard in calling scripts.
+
+Add workers if the workload benefits and the machine can fit the
+additional simulator memory. ManiSkill uses CPU physics and initializes
+Vulkan on macOS. It now rebuilds the physics scene for every seed to discard
+prior contacts. This fix can change earlier exploratory results. LIBERO-PRO
+and Robosuite run with rendering disabled. Robosuite rebuilds the model for
+each seed to preserve its seeded geometry.
+
+An unexpected worker exit or a ten-minute wait for a worker response aborts
+the owner task and cleans up its workers. AutoResearch applies its existing,
+shorter suite deadlines to the entire process group. Failed runs can leave
+partial owner traces without a completed summary.
+
+#### Local timings
+
+These runs used the pinned environments on an Apple M2 Pro with 16 GiB of
+RAM and macOS 27.2.1.
+Wall times include process startup, simulator initialization, rollouts, and
+owner artifact writing. Speedup is relative to one worker in the same row.
+
+| Workload | Episodes | 1 worker | 2 workers | 4 workers |
+| --- | ---: | ---: | ---: | ---: |
+| Pymunk object pushing, seeds 0–31 | 32 | 0.41 s | 0.43 s (0.95×) | 0.43 s (0.95×) |
+| ManiSkill full development group, with clean resets | 48 | 19.52 s | 33.75 s (0.58×) | 31.83 s (0.61×) |
+| LIBERO-PRO drawer opening, seeds 0–7 | 8 | 48.31 s | 26.96 s (1.79×) | 16.28 s (2.97×) |
+| Robosuite full development group | 24 | 67.09 s | 39.49 s (1.70×) | 24.90 s (2.69×) |
+
+For each workload, the three runs produced byte-identical owner summaries
+and episode traces, including lengths, native outcomes, and scores. The
+ManiSkill comparison uses clean resets at every worker count.
+
+In fresh Python processes, loading the task adapter and reaching the first
+seeded reset took approximately 0.15 s for object pushing, 3.04 s for
+ManiSkill PushCube, 6.45 s for the LIBERO-PRO drawer, and 2.42 s for the
+Robosuite door. Each spawned worker pays startup costs for its task.
+ManiSkill's short rollouts and native startup made extra workers slower on
+this machine. The measurements cover the pinned state-only runtimes on
+macOS. GPU physics, camera observations, and other platforms were outside
+this validation.
 
 ## AutoResearch workspace
 

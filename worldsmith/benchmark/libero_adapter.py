@@ -148,5 +148,9 @@ def idle(observation):
     return np.array([0., 0., 0., 0., 0., 0., -1.])
 
 
+def idle_controller():
+    return idle
+
+
 def evaluation_setup(task):
-    return partial(open_libero, task), lambda: idle
+    return partial(open_libero, task), idle_controller

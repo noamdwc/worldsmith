@@ -20,6 +20,8 @@ def make_env(task_id: str, robot: str, control_mode: str) -> gym.Env:
         sim_backend="cpu",
         render_backend="cpu",
         render_mode=None,
+        # Pose resets alone leave PhysX contacts from the previous rollout.
+        reconfiguration_freq=1,
     )
 
 
