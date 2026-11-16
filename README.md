@@ -175,7 +175,7 @@ output="$repo/runs/validation/$selected_run"
 )
 ```
 
-Validation uses seeds 8–15 for all 20 tasks. Read the shared-task summaries for seed generalization and the four validation-only task summaries for task generalization. The validation-only tasks are `rendezvous`, `peg_insertion_side`, `place_bowl_on_plate`, and `wipe_table`. The separation applies to new research sessions. Earlier benchmark runs included these tasks.
+Validation uses seeds 8–15 for all 20 tasks. Read the shared-task summaries for seed generalization and the four validation-only task summaries for task generalization. The validation-only tasks are `rendezvous`, `peg_insertion_side`, `place_bowl_on_plate`, and `wipe_table`. The separation applies to new research sessions. Earlier benchmark runs included these tasks. [Owner task reference](BENCHMARKS.md#owner-reference-for-validation-only-tasks)
 
 Final validation writes raw per-task summaries and traces to the owner output directories. The research MCP uses the development partition for every candidate evaluation. For debugging, `worldsmith.benchmark.evaluator` accepts any catalog task with an explicit seed and episode count. Historical replays can still use `--heldout-seed-file` with the owner group CLI or `--split heldout` with the Pymunk CLI.
 

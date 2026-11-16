@@ -1,6 +1,6 @@
 # Worldsmith v2 benchmark inventory
 
-Worldsmith v2 has 20 tasks across four CPU simulator families. The rows identify physical and control differences that can inform task-level splits in PR21. The phase column describes a typical solution, including cases where native scoring checks only the final state.
+Worldsmith v2 has 20 tasks across four CPU simulator families. The phase column describes a typical solution, including cases where native scoring checks only the final state.
 
 | Task | Simulator | Embodiment and control | Observation | Physical interaction and phases |
 | --- | --- | --- | --- | --- |
@@ -25,6 +25,24 @@ Worldsmith v2 has 20 tasks across four CPU simulator families. The rows identify
 | `handover_hammer` | Robosuite | Two Pandas with fingers, a world pose delta and gripper command per arm | Both arms' joint/tool measurements, hammer pose and handle | Pickup, coordinated contact transfer, and release |
 | `wipe_table` | Robosuite | Panda with passive wiper, world pose delta | Joint/tool, binary contact and remaining-dirt summary | Make and sustain surface contact while clearing distributed targets |
 
-The shared runner creates a fresh controller per episode and reports native success for the 3D tasks. AutoResearch compares controllers on eight fixed development seeds per task and averages the task success rates with equal weight. Keep owner held-out seeds private and use the same suite ID and split when comparing runs. See the [public task guide](autoresearch/TASKS.md) and [controller API](autoresearch/API.md) for field names, action limits, and horizons.
+The shared runner creates a fresh controller per episode and reports native success for the 3D tasks. AutoResearch compares controllers on the 16 shared tasks with eight fixed development seeds per task and averages task success rates with equal weight. Owner validation includes all 20 tasks on seeds 8–15. Use the same suite ID and split when comparing runs. The development guides cover shared task field names, action limits, and horizons. [Development tasks](autoresearch/TASKS.md) · [Controller API](autoresearch/API.md)
 
-The 3D tasks use structured state observations with no cameras. Most still use fixed-base arms. Controllers are Python code evaluated in the simulator process. The observation and feedback interfaces filter private diagnostics, and process isolation remains outside their scope. The suite measures simulation performance and currently separates development and evaluation by seed within each task. PR21 will introduce task-level separation before the v3 online-agent work.
+The 3D tasks use structured state observations with no cameras. Most still use fixed-base arms. Controllers are Python code evaluated in the simulator process. The observation and feedback interfaces filter private diagnostics, and process isolation remains outside their scope.
+
+## Owner reference for validation-only tasks
+
+### Pymunk `rendezvous`
+
+Approach `target` and remain within 0.6 units for 20 consecutive control steps (2 seconds) in a 100-step episode. Leaving the radius resets the consecutive-step count. The count starts with the first control step. Targets start 3–5 units away and move at 0.8–1.7 units per second in a sampled direction. The robot is faster than the target. Estimating target velocity can help the robot match speed and avoid a persistent tracking lag. Metrics include success rate, mean longest tracking duration, mean distance over control steps, and mean final distance.
+
+### ManiSkill `peg_insertion_side`
+
+Insert the peg within 100 steps. In the hole frame, the peg head must reach X ≥ −0.015 m, with Y and Z within the hole radius. Peg and hole geometry varies by episode. `extra` includes `peg_pose`, `peg_half_size`, `box_hole_pose`, and `box_hole_radius` alongside the tool pose. Return a seven-entry `float32` action with XYZ translation, three base-frame rotation commands, and a gripper command. The rotation vector is clipped to unit length and multiplied by −0.1 to obtain XYZ Euler increments in radians.
+
+### LIBERO-PRO `place_bowl_on_plate`
+
+Place the designated black bowl between the plate and the ramekin onto the plate within 220 steps. The observation includes `akita_black_bowl_1_pos`, `akita_black_bowl_2_pos`, `plate_1_pos`, and `glazed_rim_porcelain_ramekin_1_pos`. It uses the same world-frame pose and gripper commands as the other LIBERO-PRO tasks.
+
+### Robosuite `wipe_table`
+
+Clear all dirt marks with the passive wiping tool within 300 steps. Arm collisions and joint limits can end the episode early. The observation includes joint and tool readings, binary `robot0_contact`, `wipe_centroid` in world XYZ, `wipe_radius` to the furthest remaining mark from the centroid, and `proportion_wiped`. Return six entries using the standard Robosuite translation and rotation conventions for the wiping tool.
