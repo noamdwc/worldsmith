@@ -8,7 +8,8 @@ from time import monotonic
 
 import pytest
 
-from worldsmith import research_lifecycle, research_mcp
+from worldsmith import research_lifecycle
+from worldsmith.research_mcp import research_mcp
 from worldsmith.benchmark.task_catalog import DEV_SEEDS, TASK_GROUPS, VALIDATION_ONLY_TASKS, VALIDATION_SEEDS
 from worldsmith.research_feedback import publish_feedback
 

@@ -7,16 +7,17 @@ from time import monotonic
 
 import pytest
 
-from worldsmith import owner_evaluation, research_mcp
+from worldsmith import owner_evaluation
 from worldsmith.benchmark.task_catalog import (
     DEV_SEEDS, TASK_CATALOG, TASK_GROUPS, VALIDATION_ONLY_TASKS, VALIDATION_SEEDS,
 )
 from worldsmith.research_feedback import publish_feedback
+from worldsmith.research_mcp.constant import SUITES
 
 
 def test_task_and_seed_partitions():
     assert VALIDATION_ONLY_TASKS <= TASK_CATALOG.keys()
-    assert VALIDATION_ONLY_TASKS.isdisjoint(research_mcp.SUITES)
+    assert VALIDATION_ONLY_TASKS.isdisjoint(SUITES)
     assert set(DEV_SEEDS).isdisjoint(VALIDATION_SEEDS)
     assert list(DEV_SEEDS) == list(range(8))
     assert list(VALIDATION_SEEDS) == list(range(8, 16))
