@@ -56,7 +56,7 @@ default, just as dedicated suites do. Run each simulator with its pinned Python.
 uv run --locked python -m worldsmith evaluate --task all --workers 2 --output runs/combined-parallel
 libero/.venv/bin/python -m worldsmith.benchmark.evaluator \
   --task open_middle_drawer --episodes 8 --workers 4 --output runs/drawer-parallel
-robosuite/.venv/bin/python -B -m worldsmith.research_evaluation \
+robosuite/.venv/bin/python -B -m worldsmith.owner_evaluation \
   robosuite runs/robosuite-parallel --workers 4
 WORLDSMITH_EVALUATION_WORKERS=2 make autoresearch
 ```
@@ -168,9 +168,9 @@ output="$repo/runs/validation/$selected_run"
 (
   cd "$repo/runs/owner/$selected_run/code" || exit 1
   export PYTHONPATH="$repo"
-  "$repo/.venv/bin/python" -B -m worldsmith.research_evaluation pymunk "$output/pymunk" --validation || exit 1
+  "$repo/.venv/bin/python" -B -m worldsmith.owner_evaluation pymunk "$output/pymunk" --validation || exit 1
   for group in maniskill libero robosuite; do
-    "$repo/$group/.venv/bin/python" -B -m worldsmith.research_evaluation "$group" "$output/$group" --validation || exit 1
+    "$repo/$group/.venv/bin/python" -B -m worldsmith.owner_evaluation "$group" "$output/$group" --validation || exit 1
   done
 )
 ```

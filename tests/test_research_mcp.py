@@ -46,10 +46,13 @@ def native_workers(workspace, monkeypatch):
         def run(self, command, *, cwd, **kwargs):
             if "worldsmith.research_evaluation" not in command:
                 return RUN(command, cwd=cwd, **kwargs)
-            group, directory = command[-2:]
-            assert "--validation" not in command and "--heldout-seed-file" not in command
+            output = Path(command[4])
+            group = output.name
+            tasks = command[command.index("--tasks") + 1:command.index("--seeds")]
+            seeds = list(map(int, command[command.index("--seeds") + 1:]))
+            assert seeds == list(DEV_SEEDS)
+            assert VALIDATION_ONLY_TASKS.isdisjoint(tasks)
             self.worker_counts[group] = int(command[command.index("--workers") + 1])
-            output = Path(directory)
             self.calls.append((group, command[0], cwd, (cwd / "autoresearch/controller.py").read_bytes()))
             if group == "pymunk":
                 result = RUN(command, cwd=cwd, **kwargs)
@@ -58,11 +61,11 @@ def native_workers(workspace, monkeypatch):
                 return result
 
             successes = self.successes if group == "maniskill" else 0
-            for task in TASK_GROUPS[group].keys() - VALIDATION_ONLY_TASKS:
+            for task in tasks:
                 task_output = output / task
                 task_output.mkdir(parents=True)
                 episodes = []
-                for seed in DEV_SEEDS:
+                for seed in seeds:
                     observation = {"agent": {"qpos": [[0.0]]}, "extra": {"tcp_pose": [[1.0]]}}
                     episodes.append({
                         "seed": seed,
@@ -92,9 +95,9 @@ def native_workers(workspace, monkeypatch):
                     "versions": {"mani-skill-nightly": "private version"},
                     "python": "3.11",
                     "obs_mode": "state_dict",
-                    "seeds": list(DEV_SEEDS),
+                    "seeds": seeds,
                     "episodes": [{key: row[key] for key in ("seed", "length", "success")} for row in episodes],
-                    "success_rate": successes / len(DEV_SEEDS),
+                    "success_rate": successes / len(seeds),
                     "private_metric": 123,
                 }))
             return subprocess.CompletedProcess(command, 0)
@@ -250,14 +253,18 @@ def test_feedback_refuses_incomplete_or_heldout_results(workspace, native_worker
     last_trace.write_text("\n".join(rows[:-1]) + "\n")
 
     results = tmp_path / "public"
+    feedback_args = dict(
+        benchmark=metrics["benchmark"], tasks_by_group={"pymunk": ["interception"], "maniskill": ["push_t"]},
+        seeds=list(DEV_SEEDS), controller_sha256="", started=monotonic(), retained=None,
+    )
     with pytest.raises(ValueError, match="Incomplete development split for push_t"):
-        publish_feedback(owner_results, results, suite="all", controller_sha256="", started=monotonic(), retained=None)
+        publish_feedback(owner_results, results, **feedback_args)
     first_summary = owner_results / "pymunk/interception/summary.json"
     summary = json.loads(first_summary.read_text())
     summary["seeds"] = list(VALIDATION_SEEDS)
     first_summary.write_text(json.dumps(summary))
     with pytest.raises(ValueError, match="Incomplete development split for interception"):
-        publish_feedback(owner_results, results, suite="all", controller_sha256="", started=monotonic(), retained=None)
+        publish_feedback(owner_results, results, **feedback_args)
     assert not results.exists()
 
 
@@ -291,9 +298,9 @@ def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, 
 
     def fail(command, *, timeout, stdout, **kwargs):
         assert 0 < timeout <= research_mcp.SUITE_TIMEOUT_SECONDS["all"]
-        if command[-2] == "pymunk":
+        output = Path(command[4])
+        if output.name == "pymunk":
             return subprocess.CompletedProcess(command, 0)
-        output = Path(command[-1])
         output.mkdir(parents=True)
         (output / "task.txt").write_text("push_cube")
         stdout.write(private_error)

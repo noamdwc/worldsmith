@@ -85,9 +85,23 @@ def evaluate_to_directory(
 ) -> dict:
     if episodes < 1 or seed < 0 or seed + episodes > 2**32:
         raise ValueError("Use a positive episode count and seeds in [0, 2**32).")
+    return evaluate_seeds_to_directory(
+        open_adapter, controller_factory, list(range(seed, seed + episodes)), output,
+        task=task, workers=workers,
+    )
+
+
+def evaluate_seeds_to_directory(
+    open_adapter: Callable[[], ContextManager[EvaluationAdapter]],
+    controller_factory: ControllerFactory,
+    seeds: list[int],
+    output: Path,
+    *,
+    task: str = "task",
+    workers: int = 1,
+) -> dict:
     if type(workers) is not int or workers < 1:
         raise ValueError("Use a positive integer worker count.")
-    seeds = list(range(seed, seed + episodes))
 
     # Native simulator initialization can change the working directory.
     output = output.resolve()
