@@ -11,11 +11,12 @@ from worldsmith.benchmark.runner import ControllerError
 from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, TASK_GROUPS
 
 LEGACY_HELDOUT_GROUPS = ("pymunk", "maniskill")
+EXPANSION_TASKS = {"roll_ball", "quadruped_reach", "wipe_table"}
 SUITES = {
-    "all": ("worldsmith-all-v3", tuple(TASK_GROUPS)),
-    "maniskill": ("worldsmith-manipulation-v1", ("maniskill",)),
+    "all": ("worldsmith-all-v4", tuple(TASK_GROUPS)),
+    "maniskill": ("worldsmith-maniskill-v2", ("maniskill",)),
     "libero": ("worldsmith-arm-position-v1", ("libero",)),
-    "robosuite": ("worldsmith-arm-skills-v1", ("robosuite",)),
+    "robosuite": ("worldsmith-arm-skills-v2", ("robosuite",)),
 }
 SUITES.update({
     task: (f"worldsmith-task-{task}", (group,))
@@ -48,14 +49,16 @@ def main() -> None:
         groups = LEGACY_HELDOUT_GROUPS if args.group in LEGACY_HELDOUT_GROUPS else (args.group,)
         tasks = {task for name in groups for task in TASK_GROUPS[name]}
         starts = json.loads(args.heldout_seed_file.read_text(encoding="utf-8"))
-        if not isinstance(starts, dict) or starts.keys() != tasks or any(
+        if not isinstance(starts, dict) or starts.keys() not in (tasks, tasks - EXPANSION_TASKS) or any(
             type(seed) is not int or not len(DEV_SEEDS) <= seed <= 2**32 - len(DEV_SEEDS)
             for seed in starts.values()
         ):
             parser.error("Provide one non-development seed start per task in the owner seed file")
         seeds = {seed + offset for seed in starts.values() for offset in DEV_SEEDS}
-        if len(seeds) != len(tasks) * len(DEV_SEEDS):
+        if len(seeds) != len(starts) * len(DEV_SEEDS):
             parser.error("Held-out seed ranges must be distinct for every task")
+        # A pre-expansion seed file can still replay its original task set.
+        group = {task: load for task, load in group.items() if task in starts}
 
     output.mkdir(parents=True)
     try:

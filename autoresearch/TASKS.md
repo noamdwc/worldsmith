@@ -60,8 +60,15 @@ Each task exposes the tool center point as `extra["tcp_pose"]` and uses the acti
 | `peg_insertion_side` | In the hole frame, peg head X is at least −0.015 m and Y and Z are within the hole radius | `peg_pose`, `peg_half_size`, `box_hole_pose`, `box_hole_radius` | XYZ, three rotation commands, and gripper | 100 |
 | `pull_cube` | Cube center is less than 0.1 m from the goal in XY | `obj_pose`, `goal_pos` | XYZ and gripper | 50 |
 | `push_t` | The T covers at least 90% of the goal outline | `obj_pose`, `goal_pos` | XYZ | 100 |
+| `roll_ball` | Ball center comes within 0.1 m of the goal in XY | `ball_pose`, `ball_vel`, `goal_pos`, `tcp_to_ball_pos`, `ball_to_goal_pos` | XYZ and gripper | 80 |
 
-Peg and hole geometry varies across episodes. Peg insertion is measured relative to the hole’s axes. PushT requires both position and orientation alignment. Its goal observation provides a position.
+Peg and hole geometry varies across episodes. Peg insertion is measured relative to the hole’s axes. PushT requires both position and orientation alignment. Its goal observation provides a position. In RollBall, the ball starts near the Panda and rolls across the table toward a distant goal. Plan where to strike and how fast. Poses and velocities are in world coordinates, and the Panda base is yawed −90° in the world. Convert a world XYZ displacement to base XYZ as `[-dy, dx, dz]`.
+
+## Quadruped locomotion
+
+`quadruped_reach` starts the Unitree Go2 in a standing pose on flat ground. Reach within 0.35 m of the sampled ground-plane goal within 200 steps. Body contact with the ground ends the episode as a fall. The goal starts 2–3 m ahead with up to 1 m lateral offset.
+
+The observation contains leg joint angles and velocities under `agent`, and `root_linear_velocity`, `root_angular_velocity`, `goal_pos`, and `robot_to_goal` under `extra`. The action sets 12 leg joint offsets as described in [API.md](API.md).
 
 ## Arm manipulation with varied starting layouts
 
@@ -75,27 +82,28 @@ These tasks run in the full suite and in a dedicated 24-episode suite. Objects s
 
 See [API.md](API.md) for the corresponding observation and action conventions. The starter holds position with the gripper open on these three tasks.
 
-## Door opening, nut assembly, and hammer handover
+## Door opening, nut assembly, hammer handover, and surface wiping
 
-The three tasks run in the full suite and in a dedicated 24-episode suite. An episode ends at the first success or the step limit. The starter keeps both motion commands and angular commands at zero with the grippers open.
+The four tasks run in the full suite and in a dedicated 32-episode suite. An episode ends at the first success or the step limit. The starter keeps motion commands at zero and opens any grippers.
 
 | Task | Success criterion | Scene observations | Step limit |
 | --- | --- | --- | ---: |
 | `open_latched_door` | Swing the door past 0.3 radians. The door starts latched. | `handle_pos`, `hinge_pos`, `hinge_angle`, `latch_angle` | 300 |
 | `assemble_nuts` | Seat both nuts on their matching pegs and move the gripper away. Each nut center must be within 0.03 m of the peg on both horizontal axes and below 0.05 m above the table. The tool must be more than about 0.042 m from each nut center. | For both `square` and `round`: `<shape>_nut_pos`, `<shape>_nut_quat`, `<shape>_nut_handle_pos`, `<shape>_peg_pos` | 450 |
 | `handover_hammer` | The receiving arm grasps the handle while the pickup arm has released the hammer and the lower end of the hammer is more than 0.1 m above the table | `hammer_pos`, `hammer_quat`, `hammer_handle_pos`, `table_height` | 400 |
+| `wipe_table` | Clear all dirt marks with the passive wiping tool. Arm collisions and joint limits can terminate the episode early. | `robot0_contact`, `wipe_centroid` (remaining dirt in world XYZ), `wipe_radius` (furthest remaining mark from the centroid), `proportion_wiped` | 300 |
 
 See [API.md](API.md) for tool observations, frames, and action limits.
 
 ## Evaluation and splits
 
-`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v3`, has 136 episodes. The door, assembly, and handover suite, `worldsmith-arm-skills-v1`, has 24. The tabletop manipulation suite, `worldsmith-manipulation-v1`, has 48. The arm manipulation suite with varied starting layouts, `worldsmith-arm-position-v1`, has 24. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
+`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v4`, has 160 episodes. The arm skills suite, `worldsmith-arm-skills-v2`, has 32. The tabletop and locomotion suite, `worldsmith-maniskill-v2`, has 64. The arm manipulation suite with varied starting layouts, `worldsmith-arm-position-v1`, has 24. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
 
 `get_episode_trace(seed, task)` accepts task IDs in the active suite and returns public feedback from the latest successful development run. The owner maintains held-out seeds separately. Researchers use development feedback for every candidate decision.
 
 ### Starter development scores
 
-The starter succeeded in 53 of 136 episodes for a `worldsmith-all-v3` score of 38.97%.
+The starter succeeded in 53 of 160 episodes for a `worldsmith-all-v4` score of 33.125%.
 
 | Task | Successes / 8 |
 | --- | ---: |
@@ -110,9 +118,12 @@ The starter succeeded in 53 of 136 episodes for a `worldsmith-all-v3` score of 3
 | `peg_insertion_side` | 0 |
 | `pull_cube` | 8 |
 | `push_t` | 0 |
+| `roll_ball` | 0 |
+| `quadruped_reach` | 0 |
 | `open_middle_drawer` | 0 |
 | `place_bowl_on_plate` | 0 |
 | `place_two_items_in_basket` | 0 |
 | `open_latched_door` | 0 |
 | `assemble_nuts` | 0 |
 | `handover_hammer` | 0 |
+| `wipe_table` | 0 |

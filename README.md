@@ -4,6 +4,8 @@ See [project.md](project.md) for the research idea. One shared Python controller
 
 [ManiSkill PushCube](maniskill/README.md) runs a 3D robotic manipulation task with a Panda arm.
 
+The full Worldsmith v2 research suite also covers tabletop manipulation, tool use, dual-arm transfer, and quadruped locomotion. The [20-task inventory](BENCHMARKS.md) describes each task’s embodiment, controls, observations, and physical interactions.
+
 ## Run the benchmark
 
 The shared evaluator runs individual tasks from all four simulation families and writes
@@ -116,13 +118,13 @@ this validation.
 
 ## AutoResearch workspace
 
-Run `make autoresearch` from the repo root for all 17 tasks across Pymunk, ManiSkill, LIBERO-PRO, and Robosuite. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for a dedicated suite. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
+Run `make autoresearch` from the repo root for all 20 tasks across Pymunk, ManiSkill, LIBERO-PRO, and Robosuite. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for a dedicated suite. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
 
 Run `./libero/setup.sh` before launching the full suite or the LIBERO-PRO-only suite. The [LIBERO-PRO setup and evaluation notes](libero/README.md) cover the pinned runtime, measured cost, and owner evaluation.
 
 Run `uv sync --project robosuite --locked --python 3.12` before launching the full suite or the Robosuite-only suite. See the [Robosuite guide](robosuite/README.md) for measurements, tests, and owner evaluation.
 
-On Apple Silicon, prepare the pinned Python 3.11 environment and Vulkan loader using the [ManiSkill setup](maniskill/README.md). Export `VK_ICD_FILENAMES` and `DYLD_LIBRARY_PATH` as shown there before launching Codex. The MCP server runs Pymunk under its Python 3.12 interpreter and defaults to `maniskill/.venv/bin/python` for ManiSkill. Set `WORLDSMITH_MANISKILL_PYTHON` to an absolute interpreter path to use another installation of the pinned environment.
+On Apple Silicon, prepare the pinned Python 3.11 environment, Vulkan loader, and Unitree Go2 asset using the [ManiSkill setup](maniskill/README.md). Export `VK_ICD_FILENAMES` and `DYLD_LIBRARY_PATH` as shown there before launching Codex. The MCP server runs Pymunk under its Python 3.12 interpreter and defaults to `maniskill/.venv/bin/python` for ManiSkill. Set `WORLDSMITH_MANISKILL_PYTHON` to an absolute interpreter path to use another installation of the pinned environment.
 
 ### Session lifecycle
 
@@ -130,8 +132,8 @@ For a manually launched session, run these lifecycle commands from the repo root
 
 ```sh
 uv run --locked python -m worldsmith.research_lifecycle start
-# Run this command from the autoresearch directory, then wait for it to exit.
-(cd autoresearch && codex "Run the three-iteration AutoResearch session in RESEARCH.md.")
+# Use the same low reasoning effort as make autoresearch.
+(cd autoresearch && codex -c 'model_reasoning_effort="low"' "Run the three-iteration AutoResearch session in RESEARCH.md.")
 archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
 uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
 ```
@@ -142,11 +144,11 @@ Run `make clear-autoresearch` to archive the current research work and reset the
 
 Reset checks that every current research file is present and unchanged in a completed archive before restoring the original controller and journal. If there are edits after archiving, archive again. Close the research session and wait for any evaluation to finish before running lifecycle commands.
 
-For a manual ManiSkill-only session, export `WORLDSMITH_RESEARCH_SUITE=maniskill` before launching Codex and ask it to work on the tabletop manipulation suite.
+For a manual ManiSkill-only session, export `WORLDSMITH_RESEARCH_SUITE=maniskill` before launching Codex and ask it to work on tabletop manipulation and quadruped locomotion.
 
 ### Evaluation feedback and owner results
 
-Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite. The default `worldsmith-all-v3` suite evaluates 136 episodes across all four families with the same controller snapshot. The earlier `worldsmith-all-v2` covered 112 episodes across Pymunk, ManiSkill, and LIBERO-PRO, and `worldsmith-all-v1` covered 88 across Pymunk and ManiSkill. `worldsmith-manipulation-v1` evaluates 48 episodes using the ManiSkill runtime. Earlier ManiSkill-only archives use the ID `worldsmith-maniskill-v1` for the same task set and scoring. All suites use the same evaluator and runner and score the equal-weight mean of their task success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
+Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite. The default `worldsmith-all-v4` suite evaluates 160 episodes across all four families with the same controller snapshot. The ManiSkill-only `worldsmith-maniskill-v2` suite evaluates 64 episodes, and the Robosuite-only `worldsmith-arm-skills-v2` suite evaluates 32. Historical archives include `worldsmith-all-v3` with 136 episodes, `worldsmith-manipulation-v1` with 48, and `worldsmith-arm-skills-v1` with 24. All suites use the same evaluator and runner and score the equal-weight mean of their task success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
 
 `get_episode_trace(seed, task)` selects an episode from the latest successful MCP evaluation. With no task specified, it returns `interception` for the full suite or `push_cube` for ManiSkill-only. Each run writes two views with the same run ID:
 
@@ -155,7 +157,7 @@ Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite.
 
 The publisher exposes only development feedback. Evaluator tracebacks and raw simulator diagnostics stay in owner files. A status of `preparing` or `running` indicates an interrupted evaluation. The local launcher uses the same OS account for the researcher and evaluator, so the directory layout and MCP allowlist separate feedback in normal use. Restrict OS access separately if running untrusted controller code.
 
-For held-out checks on Pymunk and ManiSkill, store a private JSON file outside the research workspace mapping each of the 11 task IDs to the first seed of its own disjoint eight-seed range. From an archived run's `code/` directory, set `PYTHONPATH` to the repository root. Run `python -B -m worldsmith.research_evaluation GROUP OUTPUT --heldout-seed-file SEED_FILE` with the corresponding pinned interpreter for each group (`pymunk` and `maniskill`). Use absolute paths to private output directories and the seed file. Run the `libero` group with its own seed file as described in the [LIBERO-PRO guide](libero/README.md). Run the `robosuite` group with its own seed file as described in the [Robosuite guide](robosuite/README.md). The historical Pymunk CLI still supports `--split heldout`.
+For held-out checks on Pymunk and ManiSkill, store a private JSON file outside the research workspace mapping each of the 13 task IDs to the first seed of its own disjoint eight-seed range. An existing 11-task file still evaluates the original tasks. From an archived run's `code/` directory, set `PYTHONPATH` to the repository root. Run `python -B -m worldsmith.research_evaluation GROUP OUTPUT --heldout-seed-file SEED_FILE` with the corresponding pinned interpreter for each group (`pymunk` and `maniskill`). Use absolute paths to private output directories and the seed file. Run the `libero` group with its own seed file as described in the [LIBERO-PRO guide](libero/README.md). Run the `robosuite` group with its own seed file as described in the [Robosuite guide](robosuite/README.md). The historical Pymunk CLI still supports `--split heldout`.
 
 ## Task and simulator boundary
 

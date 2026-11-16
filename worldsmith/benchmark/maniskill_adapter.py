@@ -29,8 +29,15 @@ class ManiSkillAdapter:
     def __init__(self, env: gym.Env) -> None:
         self.env = env
 
+    def observation(self, native):
+        if self.env.spec.id == "UnitreeGo2-Reach-v1":
+            # The native observation repeats the success flag alongside the measurements.
+            del native["extra"]["reached_goal"]
+        return native
+
     def reset(self, seed: int):
-        return self.env.reset(seed=seed)
+        observation, info = self.env.reset(seed=seed)
+        return self.observation(observation), info
 
     def encode_action(self, action: np.ndarray) -> list:
         space = self.env.action_space
@@ -40,7 +47,7 @@ class ManiSkillAdapter:
 
     def step(self, action: np.ndarray):
         observation, reward, terminated, truncated, info = self.env.step(action)
-        return observation, reward.item(), bool(terminated), bool(truncated), info
+        return self.observation(observation), reward.item(), bool(terminated), bool(truncated), info
 
     def score(self, episode: dict) -> dict:
         # The adapter runs one environment. ManiSkill reports a batched success flag.

@@ -246,10 +246,13 @@ def test_legacy_cli_parallel_preserves_heldout_split_and_trace(tmp_path):
     assert summary["seeds"] == list(range(1000, 1008))
 
 
-def test_research_cli_parallel_uses_owner_seed_file(tmp_path):
+@pytest.mark.parametrize("expanded", [False, True])
+def test_research_cli_parallel_uses_owner_seed_file(tmp_path, expanded):
     starts = {name: 1000 + index * 8 for index, name in enumerate(TASK_GROUPS["pymunk"])}
-    # The original seed-file format covers both groups in the legacy suite.
-    starts.update({name: 2000 + index * 8 for index, name in enumerate(TASK_GROUPS["maniskill"])})
+    maniskill = set(TASK_GROUPS["maniskill"])
+    if not expanded:
+        maniskill -= {"roll_ball", "quadruped_reach"}
+    starts.update({name: 2000 + index * 8 for index, name in enumerate(sorted(maniskill))})
     seed_file = tmp_path / "heldout.json"
     seed_file.write_text(json.dumps(starts))
     output = tmp_path / "owner"

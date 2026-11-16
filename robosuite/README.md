@@ -14,10 +14,11 @@ This environment pins Robosuite 1.5.2 and MuJoCo 3.3.7. LIBERO-PRO has its own i
 | `open_latched_door` | Door | One Panda, native latch enabled | 300 |
 | `assemble_nuts` | NutAssembly | One Panda, both square and round nuts | 450 |
 | `handover_hammer` | TwoArmHandover | Two opposed Pandas, hammer starts on the table | 400 |
+| `wipe_table` | Wipe | One Panda with passive WipingGripper | 300 |
 
-Worldsmith uses the native scene and success predicate, with sparse native rewards in the owner trace. It supplies structured observations and configures the Panda's operational-space controller for world-frame pose deltas. The Worldsmith budgets cap rollouts at 15, 22.5, and 20 simulated seconds. Compare scores within this protocol. See the [public task guide](../autoresearch/TASKS.md) and [action conventions](../autoresearch/API.md).
+Worldsmith uses the native scene and success predicate, with sparse native rewards in the owner trace. It supplies structured observations and configures the Panda's operational-space controller for world-frame pose deltas. The Worldsmith budgets cap rollouts at 15, 22.5, 20, and 15 simulated seconds respectively. Wipe also ends early on arm collision or a joint limit. Wipe's native coverage sensors sample before the same step updates coverage. Compare scores within this protocol. See the [public task guide](../autoresearch/TASKS.md) and [action conventions](../autoresearch/API.md).
 
-Each seed constructs a fresh native model, including randomized hammer geometry, and seeds object placement and arm initialization. Development uses seeds 0–7. For held-out evaluation, create a private JSON file mapping the three Worldsmith task IDs to the first seed of three distinct eight-seed ranges. Every range must lie within 8–4294967295. From a saved controller snapshot's `code/` directory, use absolute paths:
+Each seed constructs a fresh native model, including randomized hammer geometry, and seeds object placement and arm initialization. Development uses seeds 0–7. For held-out evaluation, create a private JSON file mapping the four Worldsmith task IDs to the first seed of four distinct eight-seed ranges. An existing three-task file still evaluates the original tasks. Every range must lie within 8–4294967295. From a saved controller snapshot's `code/` directory, use absolute paths:
 
 ```sh
 PYTHONPATH="$repo" "$repo/robosuite/.venv/bin/python" -B -m worldsmith.research_evaluation \
@@ -38,7 +39,7 @@ The native tests exercise same-seed resets across episode order, action validati
 
 ## Local runtime
 
-Measured on an Apple M2 Pro with 16 GB RAM, macOS 27.2.1, and Python 3.12.4. The 24-episode dedicated starter evaluation took **66.8 s** end to end, including publication. The per-task timings below are from the combined run. They include resets and owner trace writes, with interpreter startup included in the first task.
+Measured on an Apple M2 Pro with 16 GB RAM, macOS 27.2.1, and Python 3.12.4. Before the benchmark expansion, the 24-episode dedicated starter evaluation took **66.8 s** end to end, including publication. The per-task timings below are from the combined run. They include resets and owner trace writes, with interpreter startup included in the first task.
 
 | Task | Starter successes / 8 | Eight episodes | Mean per episode |
 | --- | ---: | ---: | ---: |

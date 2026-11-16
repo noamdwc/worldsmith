@@ -16,6 +16,8 @@ _MANISKILL_TASKS = {
     "peg_insertion_side": partial(_load, "worldsmith.benchmark.tasks.peg_insertion_side"),
     "pull_cube": partial(_load, "worldsmith.benchmark.tasks.pull_cube"),
     "push_t": partial(_load, "worldsmith.benchmark.tasks.push_t"),
+    "roll_ball": partial(_load, "worldsmith.benchmark.tasks.roll_ball"),
+    "quadruped_reach": partial(_load, "worldsmith.benchmark.tasks.quadruped_reach"),
 }
 _PYMUNK_TASKS = {
     "interception": partial(_load, _PYMUNK, "interception"),
@@ -37,6 +39,7 @@ _ROBOSUITE_TASKS = {
     "open_latched_door": partial(_load, _ROBOSUITE, "open_latched_door"),
     "assemble_nuts": partial(_load, _ROBOSUITE, "assemble_nuts"),
     "handover_hammer": partial(_load, _ROBOSUITE, "handover_hammer"),
+    "wipe_table": partial(_load, _ROBOSUITE, "wipe_table"),
 }
 
 # Load only the adapters available in each pinned Python environment.
