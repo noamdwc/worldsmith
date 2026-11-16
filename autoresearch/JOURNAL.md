@@ -13,13 +13,11 @@ Append an entry for each session and keep the entries for rejected candidates. U
 |---|---|---|---|---|
 | Interception | | | | Mean closest distance |
 | Navigation | | | | Collision rate, mean final destination distance, mean minimum clearance |
-| Rendezvous | | | | Mean longest tracking seconds, mean distance, mean final distance |
 | Bouncing interception | | | | Mean closest distance |
 | Object pushing | | | | Mean final and minimum object distance, mean final object speed, mean contact seconds |
 | PushCube | | | | |
 | PickCube | | | | |
 | StackCube | | | | |
-| PegInsertionSide | | | | |
 | PullCube | | | | |
 | PushT | | | | |
 

@@ -21,7 +21,7 @@ Worldsmith uses the native scene and success predicate, with sparse native rewar
 Each seed constructs a fresh native model, including randomized hammer geometry, and seeds object placement and arm initialization. Development uses seeds 0–7. For held-out evaluation, create a private JSON file mapping the four Worldsmith task IDs to the first seed of four distinct eight-seed ranges. An existing three-task file still evaluates the original tasks. Every range must lie within 8–4294967295. From a saved controller snapshot's `code/` directory, use absolute paths:
 
 ```sh
-PYTHONPATH="$repo" "$repo/robosuite/.venv/bin/python" -B -m worldsmith.research_evaluation \
+PYTHONPATH="$repo" "$repo/robosuite/.venv/bin/python" -B -m worldsmith.owner_evaluation \
   robosuite "$private_output" --heldout-seed-file "$private_seed_file"
 ```
 

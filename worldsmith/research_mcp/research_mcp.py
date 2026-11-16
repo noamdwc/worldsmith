@@ -1,13 +1,8 @@
 """Local MCP tools for the AutoResearch development benchmark."""
 
-import json
 import os
-import signal
 import subprocess
 import sys
-from contextlib import suppress
-from datetime import UTC, datetime
-from hashlib import sha256
 from pathlib import Path
 from time import monotonic
 from traceback import format_exc
@@ -15,79 +10,30 @@ from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
 
-from worldsmith.benchmark.evaluator import worker_count
-from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, TASK_CATALOG, TASK_GROUPS
-from worldsmith.research_evaluation import SUITES
+from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, DEV_SEEDS, DEV_TASK_GROUPS, TASK_CATALOG
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
-from worldsmith.research_lifecycle import ROOT, WORKSPACE as DEFAULT_WORKSPACE
-from worldsmith.research_lifecycle import copy_entry, research_entries
+from worldsmith.research_lifecycle import ROOT, copy_entry
 
-EVALUATION_TIMEOUT_SECONDS = 90
-SUITE_TIMEOUT_SECONDS = {"all": 360, "libero": 300, "robosuite": 120}
-OWNER_RUNS = ROOT / "runs" / "owner"
-WORKSPACE = Path(os.environ.get("WORLDSMITH_RESEARCH_WORKSPACE", DEFAULT_WORKSPACE)).absolute()
-SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
-if SUITE not in SUITES:
-    raise ValueError(f"WORLDSMITH_RESEARCH_SUITE must be one of {', '.join(SUITES)}")
-_worker_override = os.environ.get("WORLDSMITH_EVALUATION_WORKERS")
-WORKER_OVERRIDE = None if _worker_override is None else worker_count(_worker_override)
+from .constant import (
+    EVALUATION_TIMEOUT_SECONDS, OWNER_RUNS, SUITE, SUITE_TIMEOUT_SECONDS, SUITES, WORKER_OVERRIDE, WORKSPACE,
+)
+from .utils import now, run_group_process, snapshot_code, snapshot_hash, write_json
 
 mcp = FastMCP("worldsmith")
 latest_feedback: ResearchFeedback | None = None
 retained_summary: dict | None = None
 
 
-def now() -> str:
-    return datetime.now(UTC).isoformat()
-
-
-def write_json(path: Path, data: dict):
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
-
-
-def snapshot_code(destination: Path):
-    destination.mkdir(parents=True)
-    # A regular package prevents imports from falling back to the editable workspace.
-    (destination / "__init__.py").touch()
-    for entry in research_entries(WORKSPACE):
-        if entry.name not in {"JOURNAL.md", "runs", "__pycache__"}:
-            copy_entry(entry, destination / entry.name, skip_cache=True)
-    if not (destination / "controller.py").is_file():
-        raise ValueError("Workspace has no controller.py to evaluate.")
-
-
-def snapshot_hash(code: Path) -> str:
-    # Include helper files as well as controller.py in the snapshot identity.
-    digest = sha256()
-    for path in sorted(code.rglob("*")):
-        if path.is_file():
-            digest.update(path.relative_to(code).as_posix().encode() + b"\0")
-            digest.update(sha256(path.read_bytes()).digest())
-    return digest.hexdigest()
-
-
-def run_group_process(command: list[str], *, timeout: float, **options) -> subprocess.CompletedProcess:
-    with subprocess.Popen(command, start_new_session=True, **options) as process:
-        try:
-            returncode = process.wait(timeout=timeout)
-        except BaseException:
-            # The suite deadline also covers spawned episode workers and native code.
-            with suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-            raise
-    return subprocess.CompletedProcess(command, returncode)
-
-
-def run_group(group: str, python: str, code: Path, output: Path, deadline: float):
+def run_group(
+    group: str, python: str, code: Path, output: Path, deadline: float,
+    *, tasks: list[str], seeds: list[int],
+):
     workers = DEFAULT_WORKERS[group] if WORKER_OVERRIDE is None else WORKER_OVERRIDE
-    selection = ["--task", SUITE] if SUITE in TASK_CATALOG else []
     log = output.parent.parent / f"{group}-stderr.txt"
     with log.open("w", encoding="utf-8") as stderr:
         result = run_group_process(
-            [python, "-B", "-m", "worldsmith.research_evaluation",
-             "--workers", str(workers), *selection, group, str(output)],
+            [python, "-B", "-m", "worldsmith.research_evaluation", str(output),
+             "--workers", str(workers), "--tasks", *tasks, "--seeds", *map(str, seeds)],
             cwd=code,
             env={**os.environ, "PYTHONPATH": str(ROOT)},
             stdout=stderr,
@@ -114,7 +60,12 @@ def evaluate_controller() -> dict[str, object]:
     """Evaluate the shared controller on this session's development suite and save the run."""
     global latest_feedback, retained_summary
     started = monotonic()
-    _, groups = SUITES[SUITE]
+    benchmark, groups = SUITES[SUITE]
+    tasks_by_group = {
+        group: [SUITE] if SUITE in TASK_CATALOG else list(DEV_TASK_GROUPS[group])
+        for group in groups
+    }
+    seeds = list(DEV_SEEDS)
     timeout = SUITE_TIMEOUT_SECONDS.get(
         SUITE, SUITE_TIMEOUT_SECONDS.get(groups[0], EVALUATION_TIMEOUT_SECONDS),
     )
@@ -138,11 +89,11 @@ def evaluate_controller() -> dict[str, object]:
     owner_results = owner_run / "results"
     try:
         save_status("preparing")
-        snapshot_code(code / "autoresearch")
+        snapshot_code(WORKSPACE, code / "autoresearch")
         copy_entry(code, output / "code", skip_cache=True)
         digest = snapshot_hash(code)
         save_status("running")
-        for group in groups:
+        for group, tasks in tasks_by_group.items():
             python = Path(sys.executable)
             if group != "pymunk":
                 variable = f"WORLDSMITH_{group.upper()}_PYTHON"
@@ -153,7 +104,7 @@ def evaluate_controller() -> dict[str, object]:
                     )
             group_results = owner_results / group
             try:
-                run_group(group, str(python), code, group_results, deadline)
+                run_group(group, str(python), code, group_results, deadline, tasks=tasks, seeds=seeds)
             except subprocess.TimeoutExpired:
                 marker = group_results / "task.txt"
                 (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
@@ -165,7 +116,8 @@ def evaluate_controller() -> dict[str, object]:
             if snapshot_hash(code) != digest:
                 raise EvaluationFailure("Controller snapshot changed during evaluation")
         feedback = publish_feedback(
-            owner_results, output / "results", suite=SUITE, controller_sha256=digest,
+            owner_results, output / "results", benchmark=benchmark, tasks_by_group=tasks_by_group,
+            seeds=seeds, controller_sha256=digest,
             started=started, retained=retained_summary,
         )
     except EvaluationFailure as exc:
@@ -195,9 +147,5 @@ def get_episode_trace(seed: int, task: str | None = None) -> dict[str, object]:
     if latest_feedback is None:
         raise ValueError("Run evaluate_controller() first.")
     if task is None:
-        task = SUITE if SUITE in TASK_CATALOG else next(iter(TASK_GROUPS[SUITES[SUITE][1][0]]))
+        task = next(iter(latest_feedback.summary["tasks"]))
     return latest_feedback.episode(seed, task)
-
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")

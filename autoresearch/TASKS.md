@@ -4,7 +4,7 @@ One shared `make_controller(task=...)` handles the tasks in the active suite. Us
 
 ## Planar movement
 
-These five tasks use 2D scenes and 0.1-second steps. The [World API](API.md) supplies noisy positions and measurement covariances, observation time, robot ID, maximum speed (2.4 units/second), and the goal identifier. Entity velocity is unobserved. The first three tasks use constant-velocity targets or obstacles.
+These four tasks use 2D scenes and 0.1-second steps. The [World API](API.md) supplies noisy positions and measurement covariances, observation time, robot ID, maximum speed (2.4 units/second), and the goal identifier. Entity velocity is unobserved. The interception target and the navigation obstacles move at constant velocity.
 
 ## Moving-target interception
 
@@ -21,14 +21,6 @@ Contact is scored at the initial state and each simulation step; bodies do not b
 Destinations are 8–10 units ahead with a small lateral offset. Obstacle crossing speeds vary from 0.9–1.7 and 0.8–1.6 units/second, with independently sampled starting positions. Turning away only when an obstacle is nearby can be too late for faster crossings.
 
 Metrics: success rate, collision rate, mean final destination distance, and mean minimum obstacle clearance (center distance minus 0.7).
-
-## Rendezvous / tracking
-
-`observation.goal == "rendezvous"`. Approach `target` and remain within 0.6 units for 20 consecutive control steps (2 seconds) within a 100-step episode. Leaving the radius resets the consecutive-step count. The initial observation does not count as a control step. Success requires sustained proximity, so controlling speed and matching motion matter.
-
-Targets start 3–5 units away and move at 0.8–1.7 units/second in a sampled direction. The robot is always faster, with enough time to catch even an outbound target and sustain proximity. Slowing down based only on current distance can leave a persistent tracking lag; estimating motion can help match speed while remaining close.
-
-Metrics: success rate, mean longest tracking duration, mean distance over control steps, and mean final distance.
 
 ## Bouncing-object interception
 
@@ -57,12 +49,11 @@ Each task exposes the tool center point as `extra["tcp_pose"]` and uses the acti
 | `push_cube` | Cube center is less than 0.1 m from the goal in XY and remains at table height | `obj_pose`, `goal_pos` | XYZ and gripper | 50 |
 | `pick_cube` | Cube center is within 0.025 m of the goal in 3D and the arm is still | `obj_pose`, `goal_pos`, `is_grasped` | XYZ and gripper | 50 |
 | `stack_cube` | Cube A rests on top of cube B, is still, and has been released | `cubeA_pose`, `cubeB_pose` | XYZ and gripper | 50 |
-| `peg_insertion_side` | In the hole frame, peg head X is at least −0.015 m and Y and Z are within the hole radius | `peg_pose`, `peg_half_size`, `box_hole_pose`, `box_hole_radius` | XYZ, three rotation commands, and gripper | 100 |
 | `pull_cube` | Cube center is less than 0.1 m from the goal in XY | `obj_pose`, `goal_pos` | XYZ and gripper | 50 |
 | `push_t` | The T covers at least 90% of the goal outline | `obj_pose`, `goal_pos` | XYZ | 100 |
 | `roll_ball` | Ball center comes within 0.1 m of the goal in XY | `ball_pose`, `ball_vel`, `goal_pos`, `tcp_to_ball_pos`, `ball_to_goal_pos` | XYZ and gripper | 80 |
 
-Peg and hole geometry varies across episodes. Peg insertion is measured relative to the hole’s axes. PushT requires both position and orientation alignment. Its goal observation provides a position. In RollBall, the ball starts near the Panda and rolls across the table toward a distant goal. Plan where to strike and how fast. Poses and velocities are in world coordinates, and the Panda base is yawed −90° in the world. Convert a world XYZ displacement to base XYZ as `[-dy, dx, dz]`.
+PushT requires both position and orientation alignment. Its goal observation provides a position. In RollBall, the ball starts near the Panda and rolls across the table toward a distant goal. Plan where to strike and how fast. Poses and velocities are in world coordinates, and the Panda base is yawed −90° in the world. Convert a world XYZ displacement to base XYZ as `[-dy, dx, dz]`.
 
 ## Quadruped locomotion
 
@@ -72,58 +63,52 @@ The observation contains leg joint angles and velocities under `agent`, and `roo
 
 ## Arm manipulation with varied starting layouts
 
-These tasks run in the full suite and in a dedicated 24-episode suite. Objects start in different positions across episodes. The arm takes a position, orientation, and gripper command every 0.05 seconds. Each task scores the fraction of episodes that reach its goal within the step limit.
+These tasks run in the full suite and in a dedicated 16-episode suite. Objects start in different positions across episodes. The arm takes a position, orientation, and gripper command every 0.05 seconds. Each task scores the fraction of episodes that reach its goal within the step limit.
 
 | Task | Success criterion | Task observations | Step limit |
 | --- | --- | --- | ---: |
 | `open_middle_drawer` | Pull the middle drawer open more than 0.14 m along its slide | `drawer_handle_pos`, `drawer_slide` (negative when pulled open) | 300 |
-| `place_bowl_on_plate` | Place the black bowl identified between the plate and the ramekin onto the plate | `akita_black_bowl_1_pos`, `akita_black_bowl_2_pos`, `plate_1_pos`, `glazed_rim_porcelain_ramekin_1_pos` | 220 |
 | `place_two_items_in_basket` | Put both the alphabet soup and the tomato sauce inside the basket | `alphabet_soup_1_pos`, `tomato_sauce_1_pos`, `basket_1_pos` | 520 |
 
-See [API.md](API.md) for the corresponding observation and action conventions. The starter holds position with the gripper open on these three tasks.
+See [API.md](API.md) for the corresponding observation and action conventions. The starter holds position with the gripper open on both tasks.
 
-## Door opening, nut assembly, hammer handover, and surface wiping
+## Door opening, nut assembly, and hammer handover
 
-The four tasks run in the full suite and in a dedicated 32-episode suite. An episode ends at the first success or the step limit. The starter keeps motion commands at zero and opens any grippers.
+These tasks run in the full suite and in a dedicated 24-episode suite. An episode ends at the first success or the step limit. The starter keeps motion commands at zero and opens any grippers.
 
 | Task | Success criterion | Scene observations | Step limit |
 | --- | --- | --- | ---: |
 | `open_latched_door` | Swing the door past 0.3 radians. The door starts latched. | `handle_pos`, `hinge_pos`, `hinge_angle`, `latch_angle` | 300 |
 | `assemble_nuts` | Seat both nuts on their matching pegs and move the gripper away. Each nut center must be within 0.03 m of the peg on both horizontal axes and below 0.05 m above the table. The tool must be more than about 0.042 m from each nut center. | For both `square` and `round`: `<shape>_nut_pos`, `<shape>_nut_quat`, `<shape>_nut_handle_pos`, `<shape>_peg_pos` | 450 |
 | `handover_hammer` | The receiving arm grasps the handle while the pickup arm has released the hammer and the lower end of the hammer is more than 0.1 m above the table | `hammer_pos`, `hammer_quat`, `hammer_handle_pos`, `table_height` | 400 |
-| `wipe_table` | Clear all dirt marks with the passive wiping tool. Arm collisions and joint limits can terminate the episode early. | `robot0_contact`, `wipe_centroid` (remaining dirt in world XYZ), `wipe_radius` (furthest remaining mark from the centroid), `proportion_wiped` | 300 |
 
 See [API.md](API.md) for tool observations, frames, and action limits.
 
 ## Evaluation and splits
 
-`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v4`, has 160 episodes. The arm skills suite, `worldsmith-arm-skills-v2`, has 32. The tabletop and locomotion suite, `worldsmith-maniskill-v2`, has 64. The arm manipulation suite with varied starting layouts, `worldsmith-arm-position-v1`, has 24. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
+`evaluate_controller()` uses 8 fixed development seeds per task (0–7). The full suite, `worldsmith-all-v5`, has 128 episodes. The arm skills suite, `worldsmith-arm-skills-v3`, has 24. The tabletop and locomotion suite, `worldsmith-maniskill-v3`, has 56. The arm manipulation suite with varied starting layouts, `worldsmith-arm-position-v2`, has 16. Each episode starts with a fresh controller from the same snapshot. The aggregate is the equal-weight mean of the evaluated task success rates. Secondary metrics support diagnosis. Compare results within the same benchmark and split.
 
 `get_episode_trace(seed, task)` accepts task IDs in the active suite and returns public feedback from the latest successful development run. The owner maintains held-out seeds separately. Researchers use development feedback for every candidate decision.
 
 ### Starter development scores
 
-The starter succeeded in 53 of 160 episodes for a `worldsmith-all-v4` score of 33.125%.
+The development-task rows from the earlier starter run total 47 successes in 128 episodes.
 
 | Task | Successes / 8 |
 | --- | ---: |
 | `interception` | 6 |
 | `navigation` | 5 |
-| `rendezvous` | 6 |
 | `bouncing_interception` | 2 |
 | `object_pushing` | 4 |
 | `push_cube` | 8 |
 | `pick_cube` | 8 |
 | `stack_cube` | 6 |
-| `peg_insertion_side` | 0 |
 | `pull_cube` | 8 |
 | `push_t` | 0 |
 | `roll_ball` | 0 |
 | `quadruped_reach` | 0 |
 | `open_middle_drawer` | 0 |
-| `place_bowl_on_plate` | 0 |
 | `place_two_items_in_basket` | 0 |
 | `open_latched_door` | 0 |
 | `assemble_nuts` | 0 |
 | `handover_hammer` | 0 |
-| `wipe_table` | 0 |

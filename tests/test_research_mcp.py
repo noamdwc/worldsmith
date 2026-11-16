@@ -8,9 +8,9 @@ from time import monotonic
 
 import pytest
 
-from worldsmith import research_lifecycle, research_mcp
-from worldsmith.benchmark.task_catalog import TASK_GROUPS
-from worldsmith.research_evaluation import DEV_SEEDS
+from worldsmith import research_lifecycle
+from worldsmith.research_mcp import research_mcp
+from worldsmith.benchmark.task_catalog import DEV_SEEDS, TASK_GROUPS, VALIDATION_ONLY_TASKS, VALIDATION_SEEDS
 from worldsmith.research_feedback import publish_feedback
 
 RUN = subprocess.run
@@ -47,9 +47,13 @@ def native_workers(workspace, monkeypatch):
         def run(self, command, *, cwd, **kwargs):
             if "worldsmith.research_evaluation" not in command:
                 return RUN(command, cwd=cwd, **kwargs)
-            group, directory = command[-2:]
+            output = Path(command[4])
+            group = output.name
+            tasks = command[command.index("--tasks") + 1:command.index("--seeds")]
+            seeds = list(map(int, command[command.index("--seeds") + 1:]))
+            assert seeds == list(DEV_SEEDS)
+            assert VALIDATION_ONLY_TASKS.isdisjoint(tasks)
             self.worker_counts[group] = int(command[command.index("--workers") + 1])
-            output = Path(directory)
             self.calls.append((group, command[0], cwd, (cwd / "autoresearch/controller.py").read_bytes()))
             if group == "pymunk":
                 result = RUN(command, cwd=cwd, **kwargs)
@@ -58,11 +62,11 @@ def native_workers(workspace, monkeypatch):
                 return result
 
             successes = self.successes if group == "maniskill" else 0
-            for task in TASK_GROUPS[group]:
+            for task in tasks:
                 task_output = output / task
                 task_output.mkdir(parents=True)
                 episodes = []
-                for seed in DEV_SEEDS:
+                for seed in seeds:
                     observation = {"agent": {"qpos": [[0.0]]}, "extra": {"tcp_pose": [[1.0]]}}
                     episodes.append({
                         "seed": seed,
@@ -92,9 +96,9 @@ def native_workers(workspace, monkeypatch):
                     "versions": {"mani-skill-nightly": "private version"},
                     "python": "3.11",
                     "obs_mode": "state_dict",
-                    "seeds": list(DEV_SEEDS),
+                    "seeds": seeds,
                     "episodes": [{key: row[key] for key in ("seed", "length", "success")} for row in episodes],
-                    "success_rate": successes / len(DEV_SEEDS),
+                    "success_rate": successes / len(seeds),
                     "private_metric": 123,
                 }))
             return subprocess.CompletedProcess(command, 0)
@@ -136,13 +140,15 @@ def make_controller(*, task):
     ]
     assert (run.parent / "code/autoresearch/controller.py").read_text() == source
     summary = json.loads((run / "summary.json").read_text())
-    assert summary["benchmark"] == "worldsmith-all-v4"
+    assert summary["benchmark"] == "worldsmith-all-v5"
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
-    assert summary["episodes"] == 160
+    assert summary["episodes"] == 128
     assert summary["runtime_seconds"] > 0
-    assert set(summary["tasks"]) == {task for group in TASK_GROUPS.values() for task in group}
+    assert set(summary["tasks"]) == {task for group in TASK_GROUPS.values() for task in group} - VALIDATION_ONLY_TASKS
+    for group in TASK_GROUPS:
+        assert VALIDATION_ONLY_TASKS.isdisjoint(path.name for path in (owner / "results" / group).iterdir())
     assert all(row["episodes"] == 8 for row in summary["tasks"].values())
-    assert summary["aggregate_score"] == pytest.approx(8 / 20)
+    assert summary["aggregate_score"] == pytest.approx(7 / 16)
     assert summary["tasks"]["interception"]["captures"] == 0
     assert summary["tasks"]["open_middle_drawer"]["success_rate"] == 0
     assert not research_mcp.get_episode_trace(0, "open_middle_drawer")["success"]
@@ -161,7 +167,7 @@ def make_controller(*, task):
     assert record["status"] == "succeeded"
 
     saved = [json.loads(line) for line in (run / "episodes.jsonl").read_text().splitlines()]
-    assert len(saved) == 160
+    assert len(saved) == 128
     for public in saved:
         assert research_mcp.get_episode_trace(public["seed"], public["task"]) == public
         assert all(set(frame) == {"observation", "action"} for frame in public["frames"])
@@ -199,9 +205,9 @@ def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace
     metrics = research_mcp.evaluate_controller()
     assert [call[0] for call in native_workers.calls] == ["maniskill"]
     assert native_workers.worker_counts == {"maniskill": 1}
-    assert metrics["benchmark"] == "worldsmith-maniskill-v2"
-    assert metrics["episodes"] == 64
-    assert set(metrics["tasks"]) == set(TASK_GROUPS["maniskill"])
+    assert metrics["benchmark"] == "worldsmith-maniskill-v3"
+    assert metrics["episodes"] == 56
+    assert set(metrics["tasks"]) == TASK_GROUPS["maniskill"].keys() - VALIDATION_ONLY_TASKS
     assert metrics["aggregate_score"] == 0.75
     assert research_mcp.get_episode_trace(0) == research_mcp.get_episode_trace(0, "push_cube")
     with pytest.raises(ValueError, match="task 'interception'"):
@@ -209,8 +215,8 @@ def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace
 
 
 @pytest.mark.parametrize(("suite", "benchmark", "first_task", "episodes"), [
-    ("libero", "worldsmith-arm-position-v1", "open_middle_drawer", 24),
-    ("robosuite", "worldsmith-arm-skills-v2", "open_latched_door", 32),
+    ("libero", "worldsmith-arm-position-v2", "open_middle_drawer", 16),
+    ("robosuite", "worldsmith-arm-skills-v3", "open_latched_door", 24),
 ])
 def test_arm_suite_dispatch_and_public_feedback(
     workspace, native_workers, monkeypatch, suite, benchmark, first_task, episodes,
@@ -221,7 +227,7 @@ def test_arm_suite_dispatch_and_public_feedback(
     assert native_workers.worker_counts == {suite: 2}
     assert metrics["benchmark"] == benchmark
     assert metrics["episodes"] == episodes
-    assert set(metrics["tasks"]) == set(TASK_GROUPS[suite])
+    assert set(metrics["tasks"]) == TASK_GROUPS[suite].keys() - VALIDATION_ONLY_TASKS
     assert suite not in json.dumps(metrics)
     episode = research_mcp.get_episode_trace(0)
     assert episode == research_mcp.get_episode_trace(0, first_task)
@@ -248,20 +254,25 @@ def test_feedback_refuses_incomplete_or_heldout_results(workspace, native_worker
     last_trace.write_text("\n".join(rows[:-1]) + "\n")
 
     results = tmp_path / "public"
+    feedback_args = dict(
+        benchmark=metrics["benchmark"], tasks_by_group={"pymunk": ["interception"], "maniskill": ["push_t"]},
+        seeds=list(DEV_SEEDS), controller_sha256="", started=monotonic(), retained=None,
+    )
     with pytest.raises(ValueError, match="Incomplete development split for push_t"):
-        publish_feedback(owner_results, results, suite="all", controller_sha256="", started=monotonic(), retained=None)
+        publish_feedback(owner_results, results, **feedback_args)
     first_summary = owner_results / "pymunk/interception/summary.json"
     summary = json.loads(first_summary.read_text())
-    summary["seeds"] = list(range(1000, 1008))
+    summary["seeds"] = list(VALIDATION_SEEDS)
     first_summary.write_text(json.dumps(summary))
     with pytest.raises(ValueError, match="Incomplete development split for interception"):
-        publish_feedback(owner_results, results, suite="all", controller_sha256="", started=monotonic(), retained=None)
+        publish_feedback(owner_results, results, **feedback_args)
     assert not results.exists()
 
 
-def test_researcher_cannot_select_heldout_split(workspace):
+@pytest.mark.parametrize("split", ["heldout", "validation"])
+def test_researcher_cannot_select_owner_split(workspace, split):
     with pytest.raises(TypeError, match="unexpected keyword argument 'split'"):
-        research_mcp.evaluate_controller(split="heldout")
+        research_mcp.evaluate_controller(split=split)
     assert not (workspace / "runs").exists()
 
 
@@ -288,9 +299,9 @@ def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, 
 
     def fail(command, *, timeout, stdout, **kwargs):
         assert 0 < timeout <= research_mcp.SUITE_TIMEOUT_SECONDS["all"]
-        if command[-2] == "pymunk":
+        output = Path(command[4])
+        if output.name == "pymunk":
             return subprocess.CompletedProcess(command, 0)
-        output = Path(command[-1])
         output.mkdir(parents=True)
         (output / "task.txt").write_text("push_cube")
         stdout.write(private_error)

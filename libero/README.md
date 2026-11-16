@@ -26,7 +26,7 @@ Worldsmith exposes structured arm and object observations, plus handle position 
 Development uses layout indices 0–7. For an owner-only held-out evaluation, create a private JSON file mapping the three task IDs to distinct eight-index ranges wholly within 8–49. An out-of-range seed fails rather than wrapping to a development layout. From a saved controller snapshot's `code/` directory, run the same evaluator with the pinned Python and absolute paths:
 
 ```sh
-PYTHONPATH="$repo" "$repo/libero/.venv/bin/python" -B -m worldsmith.research_evaluation \
+PYTHONPATH="$repo" "$repo/libero/.venv/bin/python" -B -m worldsmith.owner_evaluation \
   libero "$private_output" --heldout-seed-file "$private_seed_file"
 ```
 

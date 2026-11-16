@@ -22,7 +22,7 @@ Return `Action(heading, throttle=1.0)`. Heading is a finite angle in radians cou
 
 Observations are nested dictionaries of tensors with a leading batch dimension of one. The `agent` entry provides joint state, including `qpos` and `qvel`. The `extra` entry contains task measurements listed in [TASKS.md](TASKS.md). For example, `observation["extra"]["tcp_pose"][0, :3]` gives the tool center point position. Pose vectors use `[x, y, z, qw, qx, qy, qz]`, with position in meters.
 
-Return a NumPy `float32` array with entries in `[-1, 1]`. The first three entries command XYZ displacement in the robot base frame, with 0.1 m per axis at full scale. For the peg task, the next three entries form an XYZ rotation command in the robot base frame. The command vector is clipped to unit length, then multiplied by −0.1 to obtain XYZ Euler increments in radians. On tasks with a gripper, the last entry commands it, with `-1` closing and `+1` opening. PushT uses a stick and takes only XYZ commands.
+Return a NumPy `float32` array with entries in `[-1, 1]`. The first three entries command XYZ displacement in the robot base frame, with 0.1 m per axis at full scale. On tasks with a gripper, the last entry commands it, with `-1` closing and `+1` opening. PushT uses a stick and takes only XYZ commands.
 
 ## Quadruped locomotion
 
@@ -36,13 +36,11 @@ Observations are flat dictionaries of NumPy arrays without a batch dimension. Po
 
 Return a floating-point NumPy array of shape `(7,)` with values in `[-1, 1]`. The first three entries command world XYZ displacement, scaled by 0.05 m per axis. The next three entries form a world-frame axis-angle rotation vector, scaled by 0.5 radians per component. The last entry commands the gripper. Negative opens, positive closes, and zero holds the current gripper command.
 
-## Door opening, nut assembly, hammer handover, and surface wiping
+## Door opening, nut assembly, and hammer handover
 
 Observations are flat dictionaries without a batch dimension. World XYZ positions are in meters and quaternions are in XYZW order. For each arm, `robot0_eef_pos` and `robot0_eef_quat_site` give the tool position and orientation. `robot0_joint_pos` and `robot0_joint_vel` give joint positions and velocities. `robot0_gripper_qpos` and `robot0_gripper_qvel` give finger positions and velocities. The receiving arm in handover uses the same fields prefixed with `robot1_`. See [TASKS.md](TASKS.md) for scene measurements.
 
 Return a floating-point NumPy array with finite entries in `[-1, 1]`. Each arm uses seven consecutive entries `[dx, dy, dz, rx, ry, rz, grip]`. Translation sets a target offset from the current tool position, scaled by 0.05 m per component. Rotation sets a world-frame axis-angle offset, scaled by 0.5 radians per component. Negative gripper commands open the fingers, positive commands close them, and zero holds the current gripper command. Use shape `(7,)` for one arm and `(14,)` for handover, with the pickup arm first and receiving arm second. Commands update at 20 Hz.
-
-For `wipe_table`, use shape `(6,)` with the translation and rotation entries for the passive wiping tool. The binary `robot0_contact` sensor indicates contact. The observation includes the arm joint and tool readings.
 
 ## Development feedback
 

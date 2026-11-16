@@ -5,9 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
 
-from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
-from worldsmith.research_evaluation import CONTROLLER, DEV_SEEDS, SUITES
-
+CONTROLLER = "autoresearch.controller:make_controller"
 TASK_METRICS = {
     "interception": ("captures", "capture_rate", "mean_closest_distance"),
     "bouncing_interception": ("captures", "capture_rate", "mean_closest_distance"),
@@ -87,7 +85,9 @@ def publish_feedback(
     owner_results: Path,
     results: Path,
     *,
-    suite: str,
+    benchmark: str,
+    tasks_by_group: dict[str, list[str]],
+    seeds: list[int],
     controller_sha256: str,
     started: float,
     retained: dict | None,
@@ -95,10 +95,7 @@ def publish_feedback(
     tasks = {}
     episodes = []
     episode_indices = {}
-    seeds = list(DEV_SEEDS)
-    benchmark, groups = SUITES[suite]
-    for group in groups:
-        selected_tasks = (suite,) if suite in TASK_CATALOG else TASK_GROUPS[group]
+    for group, selected_tasks in tasks_by_group.items():
         for task in selected_tasks:
             task_results = owner_results / group / task
             native = json.loads((task_results / "summary.json").read_text(encoding="utf-8"))

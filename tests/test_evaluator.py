@@ -5,10 +5,10 @@ from contextlib import contextmanager, nullcontext
 
 import pytest
 
-from worldsmith import research_evaluation
+from worldsmith import owner_evaluation
 from worldsmith.benchmark import evaluator
 from worldsmith.benchmark.evaluator import evaluate, evaluate_to_directory, main
-from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEV_TASK_GROUPS, TASK_CATALOG, TASK_GROUPS
 
 
 class CounterAdapter:
@@ -162,7 +162,7 @@ def test_cli_worker_defaults_and_override(monkeypatch, tmp_path, group, default,
         return None, None
 
     monkeypatch.setitem(TASK_CATALOG, task, load)
-    monkeypatch.setitem(TASK_GROUPS, group, {task: load})
+    monkeypatch.setitem(DEV_TASK_GROUPS, group, {task: load})
     counts = []
 
     def record_workers(*args, workers, **kwargs):
@@ -170,11 +170,11 @@ def test_cli_worker_defaults_and_override(monkeypatch, tmp_path, group, default,
         return {}
 
     flags = [] if override is None else ["--workers", str(override)]
-    for module, args in (
-        (evaluator, ["--task", task, "--output", str(tmp_path / "task")]),
-        (research_evaluation, [group, str(tmp_path / "group")]),
+    for module, function, args in (
+        (evaluator, "evaluate_to_directory", ["--task", task, "--output", str(tmp_path / "task")]),
+        (owner_evaluation, "evaluate_tasks", [group, str(tmp_path / "group")]),
     ):
-        monkeypatch.setattr(module, "evaluate_to_directory", record_workers)
+        monkeypatch.setattr(module, function, record_workers)
         monkeypatch.setattr(sys, "argv", ["evaluator", *args, *flags])
         module.main()
 

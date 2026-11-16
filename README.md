@@ -56,7 +56,7 @@ default, just as dedicated suites do. Run each simulator with its pinned Python.
 uv run --locked python -m worldsmith evaluate --task all --workers 2 --output runs/combined-parallel
 libero/.venv/bin/python -m worldsmith.benchmark.evaluator \
   --task open_middle_drawer --episodes 8 --workers 4 --output runs/drawer-parallel
-robosuite/.venv/bin/python -B -m worldsmith.research_evaluation \
+robosuite/.venv/bin/python -B -m worldsmith.owner_evaluation \
   robosuite runs/robosuite-parallel --workers 4
 WORLDSMITH_EVALUATION_WORKERS=2 make autoresearch
 ```
@@ -118,7 +118,7 @@ this validation.
 
 ## AutoResearch workspace
 
-Run `make autoresearch` from the repo root for all 20 tasks across Pymunk, ManiSkill, LIBERO-PRO, and Robosuite. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for a dedicated suite. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
+Run `make autoresearch` from the repo root for the 16 development tasks across Pymunk, ManiSkill, LIBERO-PRO, and Robosuite. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for a dedicated suite. The script starts a clean workspace, runs Codex noninteractively, archives its results, and resets to the original controller. If Codex exits with an error, the script archives the work and leaves the workspace in place. The [research run guide](autoresearch/RESEARCH.md) covers workspace trust, interactive launch, and the three-iteration workflow.
 
 Run `./libero/setup.sh` before launching the full suite or the LIBERO-PRO-only suite. The [LIBERO-PRO setup and evaluation notes](libero/README.md) cover the pinned runtime, measured cost, and owner evaluation.
 
@@ -148,7 +148,7 @@ For a manual ManiSkill-only session, export `WORLDSMITH_RESEARCH_SUITE=maniskill
 
 ### Evaluation feedback and owner results
 
-Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite. The default `worldsmith-all-v4` suite evaluates 160 episodes across all four families with the same controller snapshot. The ManiSkill-only `worldsmith-maniskill-v2` suite evaluates 64 episodes, and the Robosuite-only `worldsmith-arm-skills-v2` suite evaluates 32. Historical archives include `worldsmith-all-v3` with 136 episodes, `worldsmith-manipulation-v1` with 48, and `worldsmith-arm-skills-v1` with 24. All suites use the same evaluator and runner and score the equal-weight mean of their task success rates. Use the historical `worldsmith-v3` CLI for five-task comparisons.
+Each `evaluate_controller()` call uses seeds 0–7 per shared task in the active suite. The default `worldsmith-all-v5` suite evaluates 128 episodes with the same controller snapshot. The ManiSkill suite (`worldsmith-maniskill-v3`) evaluates 56 episodes, LIBERO-PRO (`worldsmith-arm-position-v2`) evaluates 16, and Robosuite (`worldsmith-arm-skills-v3`) evaluates 24. All suites score the equal-weight mean of their task success rates. Earlier benchmark IDs identify historical task sets.
 
 `get_episode_trace(seed, task)` selects an episode from the latest successful MCP evaluation. With no task specified, it returns `interception` for the full suite or `push_cube` for ManiSkill-only. Each run writes two views with the same run ID:
 
@@ -157,7 +157,27 @@ Each `evaluate_controller()` call uses seeds 0–7 per task in the active suite.
 
 The publisher exposes only development feedback. Evaluator tracebacks and raw simulator diagnostics stay in owner files. A status of `preparing` or `running` indicates an interrupted evaluation. The local launcher uses the same OS account for the researcher and evaluator, so the directory layout and MCP allowlist separate feedback in normal use. Restrict OS access separately if running untrusted controller code.
 
-For held-out checks on Pymunk and ManiSkill, store a private JSON file outside the research workspace mapping each of the 13 task IDs to the first seed of its own disjoint eight-seed range. An existing 11-task file still evaluates the original tasks. From an archived run's `code/` directory, set `PYTHONPATH` to the repository root. Run `python -B -m worldsmith.research_evaluation GROUP OUTPUT --heldout-seed-file SEED_FILE` with the corresponding pinned interpreter for each group (`pymunk` and `maniskill`). Use absolute paths to private output directories and the seed file. Run the `libero` group with its own seed file as described in the [LIBERO-PRO guide](libero/README.md). Run the `robosuite` group with its own seed file as described in the [Robosuite guide](robosuite/README.md). The historical Pymunk CLI still supports `--split heldout`.
+### Final validation
+
+Once research ends, use the run ID for the retained controller and evaluate its saved `code/` snapshot. Run these commands from the repository root with the pinned simulators set up.
+
+```sh
+repo=$PWD
+selected_run=mcp-... # Run ID of the retained development controller
+output="$repo/runs/validation/$selected_run"
+(
+  cd "$repo/runs/owner/$selected_run/code" || exit 1
+  export PYTHONPATH="$repo"
+  "$repo/.venv/bin/python" -B -m worldsmith.owner_evaluation pymunk "$output/pymunk" --validation || exit 1
+  for group in maniskill libero robosuite; do
+    "$repo/$group/.venv/bin/python" -B -m worldsmith.owner_evaluation "$group" "$output/$group" --validation || exit 1
+  done
+)
+```
+
+Validation uses seeds 8–15 for all 20 tasks. Read the shared-task summaries for seed generalization and the four validation-only task summaries for task generalization. The validation-only tasks are `rendezvous`, `peg_insertion_side`, `place_bowl_on_plate`, and `wipe_table`. The separation applies to new research sessions. Earlier benchmark runs included these tasks. [Owner task reference](BENCHMARKS.md#owner-reference-for-validation-only-tasks)
+
+Final validation writes raw per-task summaries and traces to the owner output directories. The research MCP uses the development partition for every candidate evaluation. For debugging, `worldsmith.benchmark.evaluator` accepts any catalog task with an explicit seed and episode count. Historical replays can still use `--heldout-seed-file` with the owner group CLI or `--split heldout` with the Pymunk CLI.
 
 ## Task and simulator boundary
 
