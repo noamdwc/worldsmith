@@ -4,16 +4,18 @@ Validation used the PR 18 merge (`c5569a7`) and the repository's pinned CPU envi
 
 ## Test execution
 
-All 162 tests passed, including 30 new checks. Sixteen tasks passed the planned behavioral checks. Hammer handover passed the replay, action, observation and timeout checks. Its positive grasp path still needs an independent logic test.
+Across the validation runs, 163 tests passed, including 31 new checks. All 17 tasks passed the planned behavioral checks. The added hammer-handover regression uses a seed-3 controller driven by public observations and actions.
 
 | Environment | Command | Passed |
 | --- | --- | ---: |
 | Default | `.venv/bin/python -m pytest -q` | 115 |
 | ManiSkill | `maniskill/.venv/bin/python -m pytest -q tests/maniskill_push_cube.py tests/maniskill_manipulation.py` | 27 |
 | LIBERO-PRO | `libero/.venv/bin/python -m pytest -q tests/libero_pro.py` | 11 |
-| Robosuite | `robosuite/.venv/bin/python -m pytest -q tests/robosuite_native.py` | 9 |
+| Robosuite | `robosuite/.venv/bin/python -m pytest -q tests/robosuite_native.py` | 10 |
 
 ManiSkill used the Vulkan configuration in its README and required macOS graphics access. The pinned ManiSkill and LIBERO dependencies emitted deprecation warnings.
+
+The final verification reran the default and Robosuite suites and four targeted LIBERO drawer and bowl checks.
 
 ## Changes
 
@@ -45,18 +47,18 @@ Every row includes the replay checks above. The validation column covers the beh
 | ManiSkill | `peg_insertion_side` | Native peg pose, clipped base-frame rotation, inserted peg | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Completed |
 | ManiSkill | `pull_cube` | Native cube pose and placement in the goal | Passed | 8/8 (100%) | 8/8 (100%) | 8/8 (100%) | 0 pp | Completed |
 | ManiSkill | `push_t` | Three-channel stick command, native T pose and aligned goal | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Completed |
-| LIBERO-PRO | `open_middle_drawer` | World and tool-frame poses, native open-drawer success | Passed | 0/8 (0%) | Setup failed | 0/8 (0%) | 0 pp | Completed |
-| LIBERO-PRO | `place_bowl_on_plate` | Bowl pose, tool-frame offset and positive contact on plate | Passed | 0/8 (0%) | Setup failed | 0/8 (0%) | 0 pp | Completed |
+| LIBERO-PRO | `open_middle_drawer` | World and tool-frame poses, native open-drawer success | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Rerun completed |
+| LIBERO-PRO | `place_bowl_on_plate` | Bowl pose, tool-frame offset and positive contact on plate | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Rerun completed |
 | LIBERO-PRO | `place_two_items_in_basket` | Basket pose and both required items inside the native region | Passed | 0/8 (0%) | 8/8 (100%) | 8/8 (100%) | +100 pp | Completed |
-| Robosuite | `open_latched_door` | Native handle and hinge state, real controller opens door | Passed | 0/8 (0%) | Setup failed | 0/8 (0%) | 0 pp | Completed |
+| Robosuite | `open_latched_door` | Native handle and hinge state, real controller opens door | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Rerun completed |
 | Robosuite | `assemble_nuts` | Peg locations, half reward after one nut, success after two | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Completed |
-| Robosuite | `handover_hammer` | Both arm action slices and hammer state. The independent logic suite still needs a positive receiving-grasp fixture | Not Verified | 0/8 (0%) | 1/8 (12.5%) | 1/8 (12.5%) | +12.5 pp | Completed |
+| Robosuite | `handover_hammer` | Both arm action slices and native contact transfer from pickup to receiver, with successful termination at step 176 on seed 3 | Passed | 0/8 (0%) | 1/8 (12.5%) | 1/8 (12.5%) | +12.5 pp | Completed |
 
 ## AutoResearch execution
 
 Part A finished before the sanity runs started. Each of the 17 sessions received its task's verified starter summary and public development traces, along with the benchmark guides and starter controller. Each session had its own workspace and MCP server. The budget was one candidate per task, with strict improvement required for retention. Starter, candidate, and owner re-evaluation used seeds 0–7.
 
-All 17 loops completed. Six of the 14 scored candidates improved and were retained. The other eight tied. The owner re-evaluated the selected snapshot for every task and reproduced its score and complete public trace. The handover candidate succeeded on development seed 3 at step 176. That rollout can inform a separate positive logic test.
+In the initial round, six of the 14 scored candidates improved and were retained. The other eight tied. The owner re-evaluated the selected snapshot for every task and reproduced its score and complete public trace. The handover candidate's successful rollout on development seed 3 was used to build the new regression test. The test reads native contacts and success for its assertions while the controller acts solely on public observations.
 
 For 10 sessions, the owner archived leftover backup files and restored the exact selected code snapshot before the final verification. The earlier outputs and researcher journals remain in their task directories.
 
@@ -66,8 +68,10 @@ For 10 sessions, the owner archived leftover backup files and restored the exact
 
 Those sessions placed helper modules one directory below the package root. The workspace guide now shows where to place importable helpers and where to keep temporary backups.
 
-The original local baselines are under `runs/pr19-baselines/<task>/baseline.json`. The session records, candidate snapshots, journals and final results live under `runs/pr19-sanity/<task>/`. The local `audit.json` indexes the baseline, candidate and final run IDs. These paired development scores measure the sanity workflow on eight fixed seeds.
+Each of those three tasks was rerun in a fresh workspace with the corrected guide, one candidate attempt, and the same development seeds 0–7. All three candidates evaluated successfully and tied their starters at 0/8. The owner re-evaluated the exact starter snapshots and reproduced all three scores and public traces. Across the latest scored attempt for each task, six candidates improved and eleven tied.
+
+The original local baselines are under `runs/pr19-baselines/<task>/baseline.json`. The session records, candidate snapshots, journals and final results live under `runs/pr19-sanity/<task>/` for the initial round and `runs/pr19-sanity-rerun/<task>/` for the reruns. Each run directory has an `audit.json` index at its root. These paired development scores measure the sanity workflow on eight fixed seeds.
 
 ## Follow-up
 
-Add a physically successful two-arm handover fixture and enforce process isolation if the researcher or generated Python must be treated as adversarial. Keep sanity scores separate from benchmark validity and reserve held-out seeds for a separate evaluation.
+Enforce process isolation if the researcher or generated Python must be treated as adversarial. Keep sanity scores separate from benchmark validity and reserve held-out seeds for a separate evaluation.
