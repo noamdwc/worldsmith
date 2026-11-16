@@ -17,6 +17,11 @@ SUITES = {
     "libero": ("worldsmith-arm-position-v1", ("libero",)),
     "robosuite": ("worldsmith-arm-skills-v1", ("robosuite",)),
 }
+SUITES.update({
+    task: (f"worldsmith-task-{task}", (group,))
+    for group, tasks in TASK_GROUPS.items()
+    for task in tasks
+})
 DEV_SEEDS = tuple(range(8))
 CONTROLLER = "autoresearch.controller:make_controller"
 
@@ -25,11 +30,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("group", choices=TASK_GROUPS)
     parser.add_argument("output", type=Path)
-    parser.add_argument("--heldout-seed-file", type=Path, help="Owner file mapping each task to its first held-out seed")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--heldout-seed-file", type=Path, help="Owner file mapping each task to its first held-out seed")
+    selection.add_argument("--task", help="Evaluate one task from the group on development seeds")
     parser.add_argument("--workers", type=worker_count, help="Episode workers per task (default depends on simulator)")
     args = parser.parse_args()
     output = args.output.resolve()
     group = TASK_GROUPS[args.group]
+    if args.task is not None:
+        if args.task not in group:
+            parser.error(f"{args.task} is not in the {args.group} task group")
+        group = {args.task: group[args.task]}
     workers = DEFAULT_WORKERS[args.group] if args.workers is None else args.workers
     starts = dict.fromkeys(group, DEV_SEEDS[0])
     if args.heldout_seed_file is not None:

@@ -3,6 +3,7 @@
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from numbers import Real
 from random import Random
 
 import pymunk
@@ -131,7 +132,12 @@ class Simulation:
         return state
 
     def step(self, action: Action) -> Observation:
-        if not math.isfinite(action.heading) or not 0 <= action.throttle <= 1:
+        if (
+            not isinstance(action.heading, Real)
+            or not isinstance(action.throttle, Real)
+            or not math.isfinite(action.heading)
+            or not 0 <= action.throttle <= 1
+        ):
             raise InvalidAction("Action requires a finite heading and throttle in [0, 1]")
 
         self._bodies[self._robot_id].velocity = pymunk.Vec2d(

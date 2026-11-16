@@ -16,14 +16,16 @@ from uuid import uuid4
 from mcp.server.fastmcp import FastMCP
 
 from worldsmith.benchmark.evaluator import worker_count
-from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS, TASK_CATALOG, TASK_GROUPS
 from worldsmith.research_evaluation import SUITES
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
-from worldsmith.research_lifecycle import ROOT, WORKSPACE, copy_entry, research_entries
+from worldsmith.research_lifecycle import ROOT, WORKSPACE as DEFAULT_WORKSPACE
+from worldsmith.research_lifecycle import copy_entry, research_entries
 
 EVALUATION_TIMEOUT_SECONDS = 90
 SUITE_TIMEOUT_SECONDS = {"all": 360, "libero": 300, "robosuite": 120}
 OWNER_RUNS = ROOT / "runs" / "owner"
+WORKSPACE = Path(os.environ.get("WORLDSMITH_RESEARCH_WORKSPACE", DEFAULT_WORKSPACE)).absolute()
 SUITE = os.environ.get("WORLDSMITH_RESEARCH_SUITE", "all")
 if SUITE not in SUITES:
     raise ValueError(f"WORLDSMITH_RESEARCH_SUITE must be one of {', '.join(SUITES)}")
@@ -80,11 +82,12 @@ def run_group_process(command: list[str], *, timeout: float, **options) -> subpr
 
 def run_group(group: str, python: str, code: Path, output: Path, deadline: float):
     workers = DEFAULT_WORKERS[group] if WORKER_OVERRIDE is None else WORKER_OVERRIDE
+    selection = ["--task", SUITE] if SUITE in TASK_CATALOG else []
     log = output.parent.parent / f"{group}-stderr.txt"
     with log.open("w", encoding="utf-8") as stderr:
         result = run_group_process(
             [python, "-B", "-m", "worldsmith.research_evaluation",
-             "--workers", str(workers), group, str(output)],
+             "--workers", str(workers), *selection, group, str(output)],
             cwd=code,
             env={**os.environ, "PYTHONPATH": str(ROOT)},
             stdout=stderr,
@@ -111,7 +114,10 @@ def evaluate_controller() -> dict[str, object]:
     """Evaluate the shared controller on this session's development suite and save the run."""
     global latest_feedback, retained_summary
     started = monotonic()
-    timeout = SUITE_TIMEOUT_SECONDS.get(SUITE, EVALUATION_TIMEOUT_SECONDS)
+    _, groups = SUITES[SUITE]
+    timeout = SUITE_TIMEOUT_SECONDS.get(
+        SUITE, SUITE_TIMEOUT_SECONDS.get(groups[0], EVALUATION_TIMEOUT_SECONDS),
+    )
     deadline = started + timeout
     run_id = f"mcp-{uuid4().hex}"
     output = WORKSPACE / "runs" / run_id
@@ -136,7 +142,6 @@ def evaluate_controller() -> dict[str, object]:
         copy_entry(code, output / "code", skip_cache=True)
         digest = snapshot_hash(code)
         save_status("running")
-        _, groups = SUITES[SUITE]
         for group in groups:
             python = Path(sys.executable)
             if group != "pymunk":
@@ -190,7 +195,7 @@ def get_episode_trace(seed: int, task: str | None = None) -> dict[str, object]:
     if latest_feedback is None:
         raise ValueError("Run evaluate_controller() first.")
     if task is None:
-        task = next(iter(TASK_GROUPS[SUITES[SUITE][1][0]]))
+        task = SUITE if SUITE in TASK_CATALOG else next(iter(TASK_GROUPS[SUITES[SUITE][1][0]]))
     return latest_feedback.episode(seed, task)
 
 
