@@ -5,7 +5,7 @@ Improve the controller through simulation experiments. Look for reusable represe
 ## Workspace rules
 
 - Read [TASKS.md](TASKS.md) for the public task brief and [API.md](API.md) for the World API. Use the `worldsmith` MCP tools and development run files for feedback.
-- Keep controller code, reusable skills, and experiment notes under `autoresearch/`. Import the public World API and local research code from controllers. Keep generated run files under `autoresearch/runs/`.
+- The current working directory is the AutoResearch workspace. Import the public World API and local research code from controllers. Place controller helpers next to `controller.py`. The evaluator snapshots the workspace as the `autoresearch` package, so a sibling file named `drawer.py` is importable as `autoresearch.drawer`. Keep reusable skills and experiment notes in this workspace. Put generated run files and temporary controller backups under `runs/`, which is excluded from code snapshots.
 - Use the public task descriptions, MCP tools, and saved development feedback for evaluation. Leave simulator internals, task implementations, scoring logic, reference controller source, tests, owner diagnostics, and held-out evaluations to the project owner.
 - Base actions on the public observations and episode memory. Use traces for offline diagnosis. Do not read traces, scenario seeds, or evaluator state from a running controller.
 

@@ -4,7 +4,7 @@ Validation used the PR 18 merge (`c5569a7`) and the repository's pinned CPU envi
 
 ## Test execution
 
-All 162 tests passed, including 30 new checks. Sixteen tasks passed the planned behavioral checks. Hammer handover passed the replay, action, observation and timeout checks. Its positive grasp path remains unverified.
+All 162 tests passed, including 30 new checks. Sixteen tasks passed the planned behavioral checks. Hammer handover passed the replay, action, observation and timeout checks. Its positive grasp path still needs an independent logic test.
 
 | Environment | Command | Passed |
 | --- | --- | ---: |
@@ -32,31 +32,41 @@ ManiSkill used the Vulkan configuration in its README and required macOS graphic
 
 Every row includes the replay checks above. The validation column covers the behaviors tested. Pymunk tests compare heading, throttle and stop commands to native motion and exercise the task-specific criteria. Manipulation tests compare native joint, tool and object state, bounded actions, and native success and timeout behavior.
 
-| Family | Task | Task-specific checks and limitations | Validation | Starter | Final | Improvement | Loop |
-| --- | --- | --- | --- | ---: | ---: | ---: | --- |
-| Pymunk | `interception` | Capture radius, seeded sensor noise, malformed and NumPy scalar actions | Passed | 6/8 (75%) | — | — | Blocked |
-| Pymunk | `navigation` | Destination distance, obstacle contact, exact public trace and outcomes | Passed | 5/8 (62.5%) | — | — | Blocked |
-| Pymunk | `rendezvous` | Consecutive tracking time and timeout | Passed | 6/8 (75%) | — | — | Blocked |
-| Pymunk | `bouncing_interception` | Wall rebounds, capture boundary and timeout | Passed | 2/8 (25%) | — | — | Blocked |
-| Pymunk | `object_pushing` | Contact, coasting and consecutive slow steps at goal | Passed | 4/8 (50%) | — | — | Blocked |
-| ManiSkill | `push_cube` | Native cube pose and successful reference pushes | Passed | 8/8 (100%) | — | — | Blocked |
-| ManiSkill | `pick_cube` | Grasp and pose reset, successful native grasp and placement | Passed | 8/8 (100%) | — | — | Blocked |
-| ManiSkill | `stack_cube` | Native cube pose and a placed, released stack | Passed | 6/8 (75%) | — | — | Blocked |
-| ManiSkill | `peg_insertion_side` | Native peg pose, clipped base-frame rotation, inserted peg | Passed | 0/8 (0%) | — | — | Blocked |
-| ManiSkill | `pull_cube` | Native cube pose and placement in the goal | Passed | 8/8 (100%) | — | — | Blocked |
-| ManiSkill | `push_t` | Three-channel stick command, native T pose and aligned goal | Passed | 0/8 (0%) | — | — | Blocked |
-| LIBERO-PRO | `open_middle_drawer` | World and tool-frame poses, native open-drawer success | Passed | 0/8 (0%) | — | — | Blocked |
-| LIBERO-PRO | `place_bowl_on_plate` | Bowl pose, tool-frame offset and positive contact on plate | Passed | 0/8 (0%) | — | — | Blocked |
-| LIBERO-PRO | `place_two_items_in_basket` | Basket pose and both required items inside the native region | Passed | 0/8 (0%) | — | — | Blocked |
-| Robosuite | `open_latched_door` | Native handle and hinge state, real controller opens door | Passed | 0/8 (0%) | — | — | Blocked |
-| Robosuite | `assemble_nuts` | Peg locations, half reward after one nut, success after two | Passed | 0/8 (0%) | — | — | Blocked |
-| Robosuite | `handover_hammer` | Both arm action slices and hammer state. Successful receiving grasp remains unverified | Not Verified | 0/8 (0%) | — | — | Blocked |
+| Family | Task | Task-specific checks and limitations | Validation | Starter | Candidate | Final | Improvement | Loop |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| Pymunk | `interception` | Capture radius, seeded sensor noise, malformed and NumPy scalar actions | Passed | 6/8 (75%) | 6/8 (75%) | 6/8 (75%) | 0 pp | Completed |
+| Pymunk | `navigation` | Destination distance, obstacle contact, exact public trace and outcomes | Passed | 5/8 (62.5%) | 8/8 (100%) | 8/8 (100%) | +37.5 pp | Completed |
+| Pymunk | `rendezvous` | Consecutive tracking time and timeout | Passed | 6/8 (75%) | 8/8 (100%) | 8/8 (100%) | +25 pp | Completed |
+| Pymunk | `bouncing_interception` | Wall rebounds, capture boundary and timeout | Passed | 2/8 (25%) | 8/8 (100%) | 8/8 (100%) | +75 pp | Completed |
+| Pymunk | `object_pushing` | Contact, coasting and consecutive slow steps at goal | Passed | 4/8 (50%) | 8/8 (100%) | 8/8 (100%) | +50 pp | Completed |
+| ManiSkill | `push_cube` | Native cube pose and successful reference pushes | Passed | 8/8 (100%) | 8/8 (100%) | 8/8 (100%) | 0 pp | Completed |
+| ManiSkill | `pick_cube` | Grasp and pose reset, successful native grasp and placement | Passed | 8/8 (100%) | 8/8 (100%) | 8/8 (100%) | 0 pp | Completed |
+| ManiSkill | `stack_cube` | Native cube pose and a placed, released stack | Passed | 6/8 (75%) | 6/8 (75%) | 6/8 (75%) | 0 pp | Completed |
+| ManiSkill | `peg_insertion_side` | Native peg pose, clipped base-frame rotation, inserted peg | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Completed |
+| ManiSkill | `pull_cube` | Native cube pose and placement in the goal | Passed | 8/8 (100%) | 8/8 (100%) | 8/8 (100%) | 0 pp | Completed |
+| ManiSkill | `push_t` | Three-channel stick command, native T pose and aligned goal | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Completed |
+| LIBERO-PRO | `open_middle_drawer` | World and tool-frame poses, native open-drawer success | Passed | 0/8 (0%) | Setup failed | 0/8 (0%) | 0 pp | Completed |
+| LIBERO-PRO | `place_bowl_on_plate` | Bowl pose, tool-frame offset and positive contact on plate | Passed | 0/8 (0%) | Setup failed | 0/8 (0%) | 0 pp | Completed |
+| LIBERO-PRO | `place_two_items_in_basket` | Basket pose and both required items inside the native region | Passed | 0/8 (0%) | 8/8 (100%) | 8/8 (100%) | +100 pp | Completed |
+| Robosuite | `open_latched_door` | Native handle and hinge state, real controller opens door | Passed | 0/8 (0%) | Setup failed | 0/8 (0%) | 0 pp | Completed |
+| Robosuite | `assemble_nuts` | Peg locations, half reward after one nut, success after two | Passed | 0/8 (0%) | 0/8 (0%) | 0/8 (0%) | 0 pp | Completed |
+| Robosuite | `handover_hammer` | Both arm action slices and hammer state. The independent logic suite still needs a positive receiving-grasp fixture | Not Verified | 0/8 (0%) | 1/8 (12.5%) | 1/8 (12.5%) | +12.5 pp | Completed |
 
 ## AutoResearch execution
 
-After the validation suites passed, all 17 local starter evaluations completed on seeds 0–7, each from a fresh workspace with the same starter snapshot. The results are recorded under `runs/pr19-baselines/<task>/baseline.json` and `runs/pr19-baselines/<task>/workspace/runs/`. Every starter score was checked against its eight public episode outcomes.
+Part A finished before the sanity runs started. Each of the 17 sessions received its task's verified starter summary and public development traces, along with the benchmark guides and starter controller. Each session had its own workspace and MCP server. The budget was one candidate per task, with strict improvement required for retention. Starter, candidate, and owner re-evaluation used seeds 0–7.
 
-Automatic approval review rejected the signed-in Codex CLI launch because the experiment would send project material to the hosted model without explicit authorization for that destination. No candidate evaluation ran. Final success rates and improvement are unmeasured for all 17 tasks. The planned budget is one candidate per task, followed by a fresh evaluation of the retained controller on the same development seeds.
+All 17 loops completed. Six of the 14 scored candidates improved and were retained. The other eight tied. The owner re-evaluated the selected snapshot for every task and reproduced its score and complete public trace. The handover candidate succeeded on development seed 3 at step 176. That rollout can inform a separate positive logic test.
+
+For 10 sessions, the owner archived leftover backup files and restored the exact selected code snapshot before the final verification. The earlier outputs and researcher journals remain in their task directories.
+
+- `open_middle_drawer` candidate setup failed at seed 0 with `ModuleNotFoundError: No module named 'autoresearch.drawer'`. The starter was retained.
+- `place_bowl_on_plate` candidate setup failed at seed 0 with `ModuleNotFoundError: No module named 'autoresearch.bowl'`. The starter was retained.
+- `open_latched_door` candidate setup failed at seed 0 with `ModuleNotFoundError: No module named 'autoresearch.door'`. The starter was retained.
+
+Those sessions placed helper modules one directory below the package root. The workspace guide now shows where to place importable helpers and where to keep temporary backups.
+
+The original local baselines are under `runs/pr19-baselines/<task>/baseline.json`. The session records, candidate snapshots, journals and final results live under `runs/pr19-sanity/<task>/`. The local `audit.json` indexes the baseline, candidate and final run IDs. These paired development scores measure the sanity workflow on eight fixed seeds.
 
 ## Follow-up
 
