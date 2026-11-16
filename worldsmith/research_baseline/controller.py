@@ -48,6 +48,13 @@ def push_object(observation: Observation, robot_x: float, robot_y: float) -> Act
 
 
 def make_controller(*, task=None):
+    if task == "quadruped_reach":
+        return lambda observation: np.zeros(12, dtype=np.float32)
+    if task == "roll_ball":
+        return lambda observation: np.array([0., 0., 0., 1.], dtype=np.float32)
+    if task == "wipe_table":
+        return lambda observation: np.zeros(6)
+
     if task == "handover_hammer":
         return lambda observation: np.tile([0., 0., 0., 0., 0., 0., -1.], 2)
 

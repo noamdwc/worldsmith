@@ -1,6 +1,6 @@
-# ManiSkill manipulation
+# ManiSkill manipulation and locomotion
 
-Evaluate six native ManiSkill tasks with the Worldsmith evaluator on Apple Silicon.
+Evaluate eight native ManiSkill tasks with the Worldsmith evaluator on Apple Silicon.
 
 ## Run on Apple Silicon
 
@@ -14,6 +14,7 @@ export VK_ICD_FILENAMES="$(brew --prefix molten-vk)/etc/vulkan/icd.d/MoltenVK_ic
 export DYLD_LIBRARY_PATH="$(brew --prefix vulkan-loader)/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
 uv sync --project maniskill --locked --python 3.11
+uv run --project maniskill --locked --python 3.11 python -m mani_skill.utils.download_asset unitree_go2 -y
 uv run --project maniskill --locked --python 3.11 python -m worldsmith.benchmark.evaluator \
   --task push_cube --episodes 3 --seed 42 --output runs/push-cube-benchmark
 ```
@@ -22,7 +23,7 @@ The optional ManiSkill environment pins ManiSkill nightly `2026.8.2.400`, SAPIEN
 
 ## Tasks
 
-Each evaluation worker uses one environment with `state_dict` observations, PhysX CPU simulation, the SAPIEN CPU render backend, and `render_mode=None`. The pinned packages supply the robot and scene assets for all six tasks. Worldsmith rebuilds the physics scene at every reset to make each seed independent of prior episodes. This fixes a historical bug where a reset that reused the scene could report stale contacts. For example, PickCube could report an initial grasp after a successful previous episode. Earlier exploratory traces, episode lengths, and results can differ from runs with clean resets. PegInsertionSide continues to sample its peg and hole geometry from the episode seed. [ManiSkill reset implementation](https://github.com/mani-skill/ManiSkill/blob/main/mani_skill/envs/sapien_env.py)
+Each evaluation worker uses one environment with `state_dict` observations, PhysX CPU simulation, the SAPIEN CPU render backend, and `render_mode=None`. The pinned packages supply the tabletop assets. The download command installs the Go2 URDF and meshes from the release selected by the pinned ManiSkill package. Worldsmith rebuilds the physics scene at every reset to make each seed independent of prior episodes. This fixes a historical bug where a reset that reused the scene could report stale contacts. For example, PickCube could report an initial grasp after a successful previous episode. Earlier exploratory traces, episode lengths, and results can differ from runs with clean resets. PegInsertionSide continues to sample its peg and hole geometry from the episode seed. [ManiSkill reset implementation](https://github.com/mani-skill/ManiSkill/blob/main/mani_skill/envs/sapien_env.py)
 
 | CLI task | Official environment | Robot | Control mode | Action size | Step limit | Scripted baseline |
 | --- | --- | --- | --- | ---: | ---: | --- |
@@ -32,10 +33,12 @@ Each evaluation worker uses one environment with `state_dict` observations, Phys
 | `peg_insertion_side` | `PegInsertionSide-v1` | `panda_wristcam` | `pd_ee_delta_pose` | 7 | 100 | Approach, grasp, and lift the peg |
 | `pull_cube` | `PullCube-v1` | `panda` | `pd_ee_delta_pos` | 4 | 50 | Reach over the cube and sweep it back with the closed gripper |
 | `push_t` | `PushT-v1` | `panda_stick` | `pd_ee_delta_pos` | 3 | 100 | Push the T toward the target center using its observed position |
+| `roll_ball` | `RollBall-v1` | `panda` | `pd_ee_delta_pos` | 4 | 80 | Hold with the gripper open |
+| `quadruped_reach` | `UnitreeGo2-Reach-v1` | `unitree_go2_simplified_locomotion` | `pd_joint_delta_pos` | 12 | 200 | Command zero joint deltas |
 
-Use `--controller module:factory` to select an importable, zero-argument Python factory. The evaluator creates a new controller for each episode and passes it ManiSkill's original nested dictionary of CPU tensors with a leading batch dimension of one. `agent` contains robot joint state. `extra` contains task observations such as TCP pose, object pose, and target position.
+Use `--controller module:factory` to select an importable, zero-argument Python factory. The evaluator creates a new controller for each episode and passes it ManiSkill's nested dictionary of CPU tensors with a leading batch dimension of one. `agent` contains robot joint state. `extra` contains task observations such as TCP pose, object pose, and target position.
 
-Return a NumPy `float32` array with the action size above and values in `[-1, 1]`. The first three values command XYZ displacement in the robot base frame with a full scale of 0.1 m per axis. The pose mode adds three rotation commands before the gripper command. On gripper-equipped arms, the final value commands the gripper, with `-1` closing it.
+Return a NumPy `float32` array with the action size above and values in `[-1, 1]`. For Panda arms, the first three values command XYZ displacement in the robot base frame with a full scale of 0.1 m per axis. The pose mode adds three rotation commands before the gripper command. On gripper-equipped arms, the final value commands the gripper, with `-1` closing it. The Go2 actions set joint offsets up to 0.7 radians. See the [public action guide](../autoresearch/API.md) for joint ordering.
 
 The evaluator uses each environment's native success flag and stops on native termination or truncation. PegInsertionSide scores the peg head in the hole's frame. PushT scores overlap with the goal T, so reaching its center alone can still fail.
 
@@ -48,6 +51,6 @@ On seeds 42, 43, and 44, the PushCube, PickCube, StackCube, and PullCube baselin
 
 ```sh
 uv run --project maniskill --locked --python 3.11 python -m pytest \
-  tests/maniskill_push_cube.py tests/maniskill_manipulation.py
+  tests/maniskill_push_cube.py tests/maniskill_manipulation.py tests/maniskill_diversity.py
 uv run --locked python -m pytest
 ```

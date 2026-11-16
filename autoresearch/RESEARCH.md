@@ -2,13 +2,13 @@
 
 Improve one shared task-aware controller across the tasks in the active development suite using their public observations and reusable Python strategies. Read [TASKS.md](TASKS.md); task descriptions and detailed development traces are available to you. Use only the public files in this workspace and the `worldsmith` MCP tools for evaluation. [AGENTS.md](AGENTS.md) defines the workspace rules.
 
-The launch selects the full development suite (17 tasks, 136 episodes), tabletop manipulation (six tasks, 48 episodes), arm manipulation with varied starting layouts (three tasks, 24 episodes), or door opening, nut assembly, and hammer handover (three tasks, 24 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
+The launch selects the full development suite (20 tasks, 160 episodes), tabletop manipulation and quadruped locomotion (eight tasks, 64 episodes), arm manipulation with varied starting layouts (three tasks, 24 episodes), or arm skills including surface wiping (four tasks, 32 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
 
 For a single-task run, set `WORLDSMITH_RESEARCH_SUITE` to the task ID before starting a new MCP server. The run uses the same eight development seeds as the full suite. The owner can set `WORLDSMITH_RESEARCH_WORKSPACE` on the server to point to a separate directory containing a fresh starter controller, journal, and public guides. Give each experiment its own directory and MCP server so it has its own retained score and traces.
 
 ## Budget and process
 
-1. Call `evaluate_controller()` once before editing to establish a baseline. Record the aggregate score, every evaluated task’s success rate and secondary metrics, and run directory in [JOURNAL.md](JOURNAL.md). Stop and report the error if the baseline fails.
+1. Call `evaluate_controller()` once before editing to establish a baseline. Record the aggregate score, every evaluated task’s success rate and secondary metrics, and run directory in [JOURNAL.md](JOURNAL.md). Continue after a successful evaluation at any score, including 0%. Stop and report a baseline evaluation error.
 2. Run up to **three candidate iterations**, with one evaluation per iteration. Use `get_episode_trace(seed, task)` with a task ID from the active suite or the saved development traces to identify a failure, write a hypothesis, and make one focused change. Trace lookups do not use the evaluation budget. A failed or timed-out candidate evaluation uses one iteration.
 
    Before each candidate evaluation, verify that the implementation commands succeeded, the controller passes basic syntax checks, and the candidate's source differs from the retained controller. Do not spend an evaluation on an unchanged or failed edit.

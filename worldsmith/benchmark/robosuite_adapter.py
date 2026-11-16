@@ -13,8 +13,10 @@ TASKS = {
     "open_latched_door": ("Door", 1, 300),
     "assemble_nuts": ("NutAssembly", 1, 450),
     "handover_hammer": ("TwoArmHandover", 2, 400),
+    "wipe_table": ("Wipe", 1, 300),
 }
-ARM_FIELDS = ("joint_pos", "joint_vel", "eef_pos", "eef_quat_site", "gripper_qpos", "gripper_qvel")
+ARM_FIELDS = ("joint_pos", "joint_vel", "eef_pos", "eef_quat_site")
+GRIPPER_FIELDS = ("gripper_qpos", "gripper_qvel")
 
 
 class RobosuiteAdapter:
@@ -25,9 +27,10 @@ class RobosuiteAdapter:
         self.env = None
 
     def observation(self, native):
+        fields = ARM_FIELDS if self.native_task == "Wipe" else ARM_FIELDS + GRIPPER_FIELDS
         observation = {
             f"robot{arm}_{field}": native[f"robot{arm}_{field}"]
-            for arm in range(self.arms) for field in ARM_FIELDS
+            for arm in range(self.arms) for field in fields
         }
         env = self.env
         data = env.sim.data
@@ -54,13 +57,16 @@ class RobosuiteAdapter:
                 hammer_handle_pos=native["handle_xpos"],
                 table_height=float(data.site_xpos[env.table_top_id][2]),
             )
+        elif self.native_task == "Wipe":
+            for field in ("robot0_contact", "wipe_centroid", "wipe_radius", "proportion_wiped"):
+                observation[field] = native[field]
         else:
             raise ValueError(f"Unsupported native task: {self.native_task!r}")
         return observation
 
     def reset(self, seed):
         self.close()
-        # The handover environment samples hammer geometry when constructing the model.
+        # Handover and Wipe sample scene parameters during model construction.
         # Build once per seed so geometry and placement are independent of episode order.
         self.env = self.make_env(seed=seed)
         self.low, self.high = self.env.action_spec
@@ -84,9 +90,12 @@ class RobosuiteAdapter:
         return action.tolist()
 
     def step(self, action):
-        native, reward, at_limit, info = self.env.step(action)
+        native, reward, done, info = self.env.step(action)
         success = bool(self.env._check_success())
-        return self.observation(native), float(reward), success, at_limit and not success, {
+        # Wipe also ends on arm collisions or joint limits. A native done signal
+        # from either of those conditions is a failure termination, not a timeout.
+        terminated = success or (done and self.native_task == "Wipe" and self.env._check_terminated())
+        return self.observation(native), float(reward), terminated, done and not terminated, {
             **info, "success": success,
         }
 
@@ -142,6 +151,11 @@ def idle_controller(*, arms):
     return partial(idle, arms=arms)
 
 
+def idle_wiper():
+    return lambda observation: np.zeros(6)
+
+
 def evaluation_setup(task):
     _, arms, _ = TASKS[task]
-    return partial(open_robosuite, task), partial(idle_controller, arms=arms)
+    factory = idle_wiper if task == "wipe_table" else partial(idle_controller, arms=arms)
+    return partial(open_robosuite, task), factory

@@ -136,13 +136,13 @@ def make_controller(*, task):
     ]
     assert (run.parent / "code/autoresearch/controller.py").read_text() == source
     summary = json.loads((run / "summary.json").read_text())
-    assert summary["benchmark"] == "worldsmith-all-v3"
+    assert summary["benchmark"] == "worldsmith-all-v4"
     assert summary["split"] == "dev" and summary["seeds"] == list(range(8))
-    assert summary["episodes"] == 136
+    assert summary["episodes"] == 160
     assert summary["runtime_seconds"] > 0
     assert set(summary["tasks"]) == {task for group in TASK_GROUPS.values() for task in group}
     assert all(row["episodes"] == 8 for row in summary["tasks"].values())
-    assert summary["aggregate_score"] == pytest.approx(6 / 17)
+    assert summary["aggregate_score"] == pytest.approx(8 / 20)
     assert summary["tasks"]["interception"]["captures"] == 0
     assert summary["tasks"]["open_middle_drawer"]["success_rate"] == 0
     assert not research_mcp.get_episode_trace(0, "open_middle_drawer")["success"]
@@ -161,7 +161,7 @@ def make_controller(*, task):
     assert record["status"] == "succeeded"
 
     saved = [json.loads(line) for line in (run / "episodes.jsonl").read_text().splitlines()]
-    assert len(saved) == 136
+    assert len(saved) == 160
     for public in saved:
         assert research_mcp.get_episode_trace(public["seed"], public["task"]) == public
         assert all(set(frame) == {"observation", "action"} for frame in public["frames"])
@@ -199,8 +199,8 @@ def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace
     metrics = research_mcp.evaluate_controller()
     assert [call[0] for call in native_workers.calls] == ["maniskill"]
     assert native_workers.worker_counts == {"maniskill": 1}
-    assert metrics["benchmark"] == "worldsmith-manipulation-v1"
-    assert metrics["episodes"] == 48
+    assert metrics["benchmark"] == "worldsmith-maniskill-v2"
+    assert metrics["episodes"] == 64
     assert set(metrics["tasks"]) == set(TASK_GROUPS["maniskill"])
     assert metrics["aggregate_score"] == 0.75
     assert research_mcp.get_episode_trace(0) == research_mcp.get_episode_trace(0, "push_cube")
@@ -208,17 +208,19 @@ def test_maniskill_suite_runs_only_maniskill_and_defaults_to_push_cube(workspace
         research_mcp.get_episode_trace(0, "interception")
 
 
-@pytest.mark.parametrize(("suite", "benchmark", "first_task"), [
-    ("libero", "worldsmith-arm-position-v1", "open_middle_drawer"),
-    ("robosuite", "worldsmith-arm-skills-v1", "open_latched_door"),
+@pytest.mark.parametrize(("suite", "benchmark", "first_task", "episodes"), [
+    ("libero", "worldsmith-arm-position-v1", "open_middle_drawer", 24),
+    ("robosuite", "worldsmith-arm-skills-v2", "open_latched_door", 32),
 ])
-def test_arm_suite_dispatch_and_public_feedback(workspace, native_workers, monkeypatch, suite, benchmark, first_task):
+def test_arm_suite_dispatch_and_public_feedback(
+    workspace, native_workers, monkeypatch, suite, benchmark, first_task, episodes,
+):
     monkeypatch.setattr(research_mcp, "SUITE", suite)
     metrics = research_mcp.evaluate_controller()
     assert [call[0] for call in native_workers.calls] == [suite]
     assert native_workers.worker_counts == {suite: 2}
     assert metrics["benchmark"] == benchmark
-    assert metrics["episodes"] == 24
+    assert metrics["episodes"] == episodes
     assert set(metrics["tasks"]) == set(TASK_GROUPS[suite])
     assert suite not in json.dumps(metrics)
     episode = research_mcp.get_episode_trace(0)

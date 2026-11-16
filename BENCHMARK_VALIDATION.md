@@ -75,3 +75,38 @@ The original local baselines are under `runs/pr19-baselines/<task>/baseline.json
 ## Follow-up
 
 Enforce process isolation if the researcher or generated Python must be treated as adversarial. Keep sanity scores separate from benchmark validity and reserve held-out seeds for a separate evaluation.
+
+## PR20 task expansion
+
+PR20 adds three native tasks to the [benchmark inventory](BENCHMARKS.md). Validation used the pinned CPU runtimes on Apple M2 Pro. The new tasks replayed identically in both seed orders and produced byte-identical CLI summaries and traces with one and two workers.
+
+| Environment | Command | Passed |
+| --- | --- | ---: |
+| Default | `.venv/bin/python -m pytest -q` | 116 |
+| ManiSkill | `maniskill/.venv/bin/python -m pytest -q tests/maniskill_push_cube.py tests/maniskill_manipulation.py tests/maniskill_diversity.py` | 36 |
+| LIBERO-PRO | `libero/.venv/bin/python -m pytest -q tests/libero_pro.py` | 11 |
+| Robosuite | `robosuite/.venv/bin/python -m pytest -q tests/robosuite_native.py` | 15 |
+
+- `roll_ball` checks base-frame action mapping, native ball and goal observations, and continued motion after contact sets the ball rolling.
+- `quadruped_reach` checks joint channel ordering, target offsets and actual leg motion, native proprioception and goal offsets, and termination after body-ground contact.
+- `wipe_table` checks world-frame tool motion, native contact and marker removal, coverage sampling, reset after wiping, and early failure at a joint limit.
+
+Each new task checks native success from a controlled state, timeout at the configured horizon, and 50% evaluator aggregation across one success and one timeout. The controlled success checks exercise the adapter and native predicates independently of the controller's ability to solve the whole task.
+
+The full `worldsmith-all-v4` starter evaluation finished in 196.4 seconds on the M2 Pro and scored 53/160 (33.125%). All 17 existing tasks reproduced their PR19 starter metrics and complete public traces on the same development seeds. The full starter record is under `runs/pr20-full-starter/`.
+
+### PR20 AutoResearch sanity checks
+
+Each task had an independent workspace and development-only evaluation server. The baseline and each candidate evaluation used seeds 0–7. The fixed budget was three evaluation attempts per task, with strict improvement required for retention.
+
+| Task | Baseline | Attempt 1 | Attempt 2 | Attempt 3 | Best retained | Retained run |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `roll_ball` | 0/8 | 0/8 (unchanged source) | 2/8 | 3/8 | 3/8 (37.5%) | `mcp-c29b674faea54abcb1c9f05aaa2a813b` |
+| `quadruped_reach` | 0/8 | 0/8 | 4/8 | 0/8 | 4/8 (50%) | `mcp-21b2fdf025ab4028b160d2872e48380c` |
+| `wipe_table` | 0/8 | 0/8 (unchanged source) | 0/8 | 0/8 | 0/8 (0%) | `mcp-630a6af9a13d48bd9d69450f2fb28196` |
+
+RollBall retained a staged strike with a closer approach waypoint. Quadruped Reach retained a higher-gain diagonal trot. Wipe's final candidate made sustained contact and cleared 1–35% of the markers across the eight layouts. It tied the baseline on native task success, so the baseline was retained.
+
+The first launch could not call the local evaluator with approvals disabled. With review enabled, all three baselines completed. Review initially blocked a public quadruped trace request after mistaking a score of 0% for an evaluation error. The experiment resumed from the saved successful baseline. A Codex usage limit interrupted RollBall and Wipe, and both resumed from their journals. Each had already spent one attempt re-evaluating unchanged source after a shell edit failed because `python` was unavailable. The remaining attempts used verified source changes. All 12 evaluation batches scored successfully once submitted to the evaluator. The interrupted sessions resumed within the original budget.
+
+An owner replay of each retained snapshot reproduced its summary and full native trace byte for byte. Local workspaces, session logs, and public artifacts are under `runs/pr20-sanity/approved/<task>/`. The retained scores are measurements on the development seeds.

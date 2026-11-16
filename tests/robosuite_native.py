@@ -5,7 +5,7 @@ import pytest
 from scipy.spatial.transform import Rotation
 
 from worldsmith.benchmark.evaluator import evaluate_episodes
-from worldsmith.benchmark.runner import InvalidAction
+from worldsmith.benchmark.runner import InvalidAction, run_scored_episode
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_feedback import public_episode
 
@@ -18,6 +18,7 @@ def test_parallel_native_artifacts(check_native_parallel_artifacts):
     ("open_latched_door", "Door", "handle_pos", 7, 300),
     ("assemble_nuts", "NutAssembly", "square_nut_pos", 7, 450),
     ("handover_hammer", "TwoArmHandover", "hammer_handle_pos", 14, 400),
+    ("wipe_table", "Wipe", "wipe_centroid", 6, 300),
 ])
 def test_native_episode(task, native_task, object_key, size, horizon):
     open_adapter, factory = TASK_GROUPS["robosuite"][task]()
@@ -220,6 +221,8 @@ def test_native_observation_and_world_frame_actions(
         # Opposite world-frame offsets distinguish the two arms' action slices.
         commands = np.array([[0.4, 0., 0., 0., 0., -0.2, 1.], [-0.4, 0., 0., 0., 0., 0.2, -1.]])
         commands = commands[:len(env.robots)]
+        if task == "wipe_table":
+            commands = commands[:, :6]
         action = commands.flatten()
         for _ in range(6):
             # Refresh kinematics from qpos just as native step does before setting its goal.
@@ -251,7 +254,8 @@ def test_native_observation_and_world_frame_actions(
                 Rotation.from_quat(observation[prefix + "eef_quat_site"]).as_matrix(),
                 sim.data.site_xmat[site].reshape(3, 3), atol=1e-7,
             )
-        assert np.ptp(observation["robot0_gripper_qpos"]) < np.ptp(initial["robot0_gripper_qpos"])
+        if task != "wipe_table":
+            assert np.ptp(observation["robot0_gripper_qpos"]) < np.ptp(initial["robot0_gripper_qpos"])
 
         if task == "open_latched_door":
             np.testing.assert_array_equal(observation["handle_pos"], sim.data.site_xpos[env.door_handle_site_id])
@@ -259,9 +263,17 @@ def test_native_observation_and_world_frame_actions(
         elif task == "assemble_nuts":
             np.testing.assert_array_equal(observation["square_peg_pos"], sim.data.get_body_xpos("peg1"))
             np.testing.assert_array_equal(observation["round_peg_pos"], sim.data.get_body_xpos("peg2"))
-        else:
+        elif task == "handover_hammer":
             np.testing.assert_array_equal(observation["hammer_pos"], sim.data.body_xpos[env.hammer_body_id])
             assert observation["table_height"] == sim.data.site_xpos[env.table_top_id, 2]
+        else:
+            assert "robot0_gripper_qpos" not in observation
+            positions = np.array([
+                sim.data.get_body_xpos(marker.root_body) for marker in env.model.mujoco_arena.markers
+            ])
+            centroid = positions.mean(axis=0)
+            np.testing.assert_allclose(observation["wipe_centroid"], centroid)
+            assert observation["wipe_radius"] == pytest.approx(np.linalg.norm(positions - centroid, axis=1).max())
     check_episode_order(task)
     if task != "handover_hammer":
         check_native_parallel_artifacts(task)
@@ -300,3 +312,84 @@ def test_partial_nut_reward_does_not_end_episode():
         assert not partial["terminated"] and not partial["truncated"]
         assert complete["reward"] == 1.0 and complete["terminated"] and not complete["truncated"]
         assert adapter.env._check_success()
+
+
+def test_wiping_contact_removes_native_markers():
+    open_adapter, _ = TASK_GROUPS["robosuite"]["wipe_table"]()
+    with open_adapter() as adapter:
+        observation, _ = adapter.reset(0)
+        env = adapter.env
+        centroid = observation["wipe_centroid"].copy()
+        assert observation["proportion_wiped"] == 0
+        assert not observation["robot0_contact"]
+
+        # Approach above the dirt, then lower the passive wiper into table contact.
+        for z in (0.10, -0.015):
+            target = centroid + (0, 0, z)
+            for _ in range(24):
+                delta = (target - observation["robot0_eef_pos"]) / 0.05
+                action = np.r_[np.clip(delta, -0.6, 0.6), 0., 0., 0.]
+                # Native observables sample before the reward call updates coverage.
+                sampled_coverage = len(env.wiped_markers) / env.num_markers
+                observation, _, terminated, truncated, info = adapter.step(action)
+                assert not terminated and not truncated and not info["success"]
+                assert observation["proportion_wiped"] == sampled_coverage
+
+        assert observation["robot0_contact"]
+        assert observation["robot0_contact"] == env._has_gripper_contact
+        assert 0 < len(env.wiped_markers) < env.num_markers
+        for marker in env.wiped_markers:
+            marker_id = env.sim.model.geom_name2id(marker.visual_geoms[0])
+            assert env.sim.model.geom_rgba[marker_id, 3] == 0
+
+        reset, _ = adapter.reset(0)
+        assert reset["proportion_wiped"] == 0 and not adapter.env.wiped_markers
+        np.testing.assert_array_equal(reset["wipe_centroid"], centroid)
+
+
+def test_native_wipe_completion_and_timeout_aggregate():
+    task = "wipe_table"
+    open_adapter, idle = TASK_GROUPS["robosuite"][task]()
+    with open_adapter() as adapter:
+        complete = iter((True, False))
+
+        def factory():
+            env = adapter.env
+            assert not env._check_success()
+            if next(complete):
+                # Set the native coverage state independently of the contact test.
+                env.wiped_markers.extend(env.model.mujoco_arena.markers)
+                assert env._check_success()
+            return idle()
+
+        traces = []
+        result = evaluate_episodes(adapter, factory, [0, 0], lambda episode, _: traces.append(episode), task=task)
+        assert result.metrics == {"success_rate": 0.5}
+        assert result.episodes == [
+            {"seed": 0, "length": 1, "success": True},
+            {"seed": 0, "length": adapter.horizon, "success": False},
+        ]
+        success, timeout = (trace["steps"][-1] for trace in traces)
+        assert success["terminated"] and not success["truncated"]
+        assert not timeout["terminated"] and timeout["truncated"]
+
+
+def test_wipe_joint_limit_terminates_as_failure():
+    task = "wipe_table"
+    open_adapter, idle = TASK_GROUPS["robosuite"][task]()
+    with open_adapter() as adapter:
+        def start_at_joint_limit():
+            env = adapter.env
+            robot = env.robots[0]
+            index = robot._ref_joint_indexes[0]
+            env.sim.data.qpos[robot._ref_joint_pos_indexes[0]] = env.sim.model.jnt_range[index, 1] - 0.01
+            env.sim.forward()
+            assert robot.check_q_limits()
+            return idle()
+
+        episode, score = run_scored_episode(adapter, start_at_joint_limit, 0, task)
+        assert adapter.env.robots[0].check_q_limits()
+        assert score == {"success": False}
+        assert episode["length"] == 1
+        last = episode["steps"][-1]
+        assert last["terminated"] and not last["truncated"]
