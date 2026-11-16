@@ -9,6 +9,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import sapien
+from scipy.spatial.transform import Rotation
 
 from worldsmith.benchmark.evaluator import evaluate_to_directory
 from worldsmith.benchmark.results import snapshot
@@ -169,3 +171,94 @@ def test_invalid_shared_controller_action_fails_native_evaluation(tmp_path):
             open_adapter, lambda: lambda observation: np.full(4, np.nan, dtype=np.float32),
             1, 0, tmp_path / "run", task="push_cube",
         )
+
+
+@pytest.mark.parametrize(("task", "pose_field", "actor"), [
+    ("push_cube", "obj_pose", "obj"),
+    ("pick_cube", "obj_pose", "cube"),
+    ("stack_cube", "cubeA_pose", "cubeA"),
+    ("peg_insertion_side", "peg_pose", "peg"),
+    ("pull_cube", "obj_pose", "obj"),
+    ("push_t", "obj_pose", "tee"),
+])
+def test_native_observation_and_delta_commands(
+    task, pose_field, actor, check_episode_order, check_native_parallel_artifacts,
+):
+    open_adapter, _ = TASK_CATALOG[task]()
+    with open_adapter() as adapter:
+        positions = []
+        fingers = []
+        for sign in (1, -1):
+            before, _ = adapter.reset(0)
+            native = adapter.env.unwrapped
+            arm = native.agent.controller.controllers["arm"]
+            action = np.zeros(adapter.env.action_space.shape, dtype=np.float32)
+            action[0] = sign * 0.5
+            if task != "push_t":
+                action[-1] = sign
+            if task == "peg_insertion_side":
+                action[3:5] = 1
+            for _ in range(3):
+                previous = arm.ee_pose_at_base.raw_pose[0].numpy()
+                adapter.encode_action(action)
+                after, _, terminated, truncated, info = adapter.step(action)
+                goal = arm._target_pose.raw_pose[0].numpy()
+                np.testing.assert_allclose(goal[:3] - previous[:3], [sign * 0.05, 0, 0], atol=1e-6)
+                delta = Rotation.from_quat(goal[3:], scalar_first=True) * Rotation.from_quat(
+                    previous[3:], scalar_first=True,
+                ).inv()
+                expected_rotation = (
+                    Rotation.from_euler("XYZ", [-0.1 / np.sqrt(2), -0.1 / np.sqrt(2), 0])
+                    if task == "peg_insertion_side" else Rotation.identity()
+                )
+                np.testing.assert_allclose(delta.as_matrix(), expected_rotation.as_matrix(), atol=1e-6)
+                assert terminated == bool(native.evaluate()["success"]) == bool(info["success"])
+                assert not truncated
+
+            robot = native.agent.robot
+            np.testing.assert_array_equal(after["agent"]["qpos"], robot.get_qpos())
+            np.testing.assert_array_equal(after["agent"]["qvel"], robot.get_qvel())
+            np.testing.assert_array_equal(after["extra"]["tcp_pose"], native.agent.tcp.pose.raw_pose)
+            np.testing.assert_array_equal(after["extra"][pose_field], getattr(native, actor).pose.raw_pose)
+            assert "success" not in after and "success" not in after["extra"]
+            positions.append(float(after["extra"]["tcp_pose"][0, 0] - before["extra"]["tcp_pose"][0, 0]))
+            if task != "push_t":
+                fingers.append(float(robot.get_qpos()[0, -2:].sum()))
+        assert positions[0] > 0.01 and positions[1] < -0.01
+        if fingers:
+            assert fingers[0] > fingers[1] + 0.01
+    check_episode_order(task)
+    if task not in {"pick_cube", "push_cube"}:
+        check_native_parallel_artifacts(task)
+
+
+@pytest.mark.parametrize("task", ["stack_cube", "peg_insertion_side", "pull_cube", "push_t"])
+def test_native_goal_states_terminate_with_success(task):
+    open_adapter, _ = TASK_CATALOG[task]()
+    with open_adapter() as adapter:
+        def start_at_goal():
+            native = adapter.env.unwrapped
+            assert not bool(native.evaluate()["success"])
+            if task == "stack_cube":
+                position = native.cubeB.pose.p[0].numpy().copy()
+                position[2] += 2 * float(native.cube_half_size[2])
+                native.cubeA.set_pose(sapien.Pose(position))
+            elif task == "peg_insertion_side":
+                native.peg.set_pose(native.goal_pose)
+            elif task == "pull_cube":
+                position = native.obj.pose.p[0].numpy().copy()
+                position[:2] = native.goal_region.pose.p[0, :2].numpy()
+                native.obj.set_pose(sapien.Pose(position))
+            else:
+                position = native.tee.pose.p[0].numpy().copy()
+                position[:2] = native.goal_tee.pose.p[0, :2].numpy()
+                native.tee.set_pose(sapien.Pose(position, native.goal_tee.pose.q[0].numpy()))
+            assert bool(native.evaluate()["success"])
+            action = np.zeros(adapter.env.action_space.shape, dtype=np.float32)
+            return lambda observation: action
+
+        episode, score = run_scored_episode(adapter, start_at_goal, 0, task)
+        assert score == {"success": True}
+        assert episode["length"] == 1
+        assert episode["steps"][0]["terminated"] and not episode["steps"][0]["truncated"]
+        assert bool(adapter.env.unwrapped.evaluate()["success"])

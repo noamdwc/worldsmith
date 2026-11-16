@@ -80,6 +80,16 @@ def failing_factory():
     raise RuntimeError("private exception detail")
 
 
+def fail_on_seed_eight(observation):
+    if observation == 8:
+        raise RuntimeError("private controller detail")
+    return 2
+
+
+def make_partially_failing_controller():
+    return fail_on_seed_eight
+
+
 def test_parallel_seed_order_scores_and_worker_reuse(tmp_path):
     sequential, parallel = tmp_path / "sequential", tmp_path / "parallel"
     log = tmp_path / "workers"
@@ -183,6 +193,21 @@ def test_controller_error_keeps_diagnostic_and_public_message(tmp_path):
         )
     assert error.value.public_message == "counter, seed 7: make_controller raised an exception"
     assert "failing_factory" in error.value.__notes__[0]
+
+
+@pytest.mark.parametrize("workers", [1, 2])
+def test_failed_episode_keeps_only_the_completed_prefix(tmp_path, workers):
+    output = tmp_path / "evaluation"
+    with pytest.raises(ControllerError) as error:
+        evaluate_to_directory(
+            partial(open_logged_adapter, tmp_path / "workers"), make_partially_failing_controller,
+            3, 7, output, task="counter", workers=workers,
+        )
+    assert error.value.public_message == "counter, seed 8, step 1: controller raised an exception"
+    assert not (output / "summary.json").exists()
+    rows = [json.loads(line) for line in (output / "episodes.jsonl").read_text().splitlines()]
+    assert [(row["seed"], row["length"], row["points"]) for row in rows] == [(7, 1, 9)]
+    assert rows[0]["final_observation"] == 9
 
 
 def test_parallel_rejects_unpicklable_factory(tmp_path):

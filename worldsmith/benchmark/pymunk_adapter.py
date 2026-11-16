@@ -5,7 +5,7 @@ from functools import partial
 from typing import TextIO
 
 from worldsmith.api import INTERCEPTION_GOAL, Action
-from worldsmith.benchmark.results import TaskEvaluation, write_episode
+from worldsmith.benchmark.results import TaskEvaluation, snapshot, write_episode
 from worldsmith.benchmark.runner import InvalidAction
 from worldsmith.benchmark.tasks.constants import BENCHMARKS, TASKS
 from worldsmith.benchmark.tasks.interception import Chase
@@ -26,7 +26,7 @@ class PymunkAdapter:
     def encode_action(self, action: Action) -> dict:
         if not isinstance(action, Action):
             raise InvalidAction("Controller must return an Action")
-        return {"heading": action.heading, "throttle": action.throttle}
+        return snapshot({"heading": action.heading, "throttle": action.throttle})
 
     def step(self, action: Action):
         observation = self.world.step(action)

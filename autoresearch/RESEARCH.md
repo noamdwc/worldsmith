@@ -4,6 +4,8 @@ Improve one shared task-aware controller across the tasks in the active developm
 
 The launch selects the full development suite (17 tasks, 136 episodes), tabletop manipulation (six tasks, 48 episodes), arm manipulation with varied starting layouts (three tasks, 24 episodes), or door opening, nut assembly, and hammer handover (three tasks, 24 episodes). Use the benchmark ID and task list returned by the baseline for the whole session.
 
+For a single-task run, set `WORLDSMITH_RESEARCH_SUITE` to the task ID before starting a new MCP server. The run uses the same eight development seeds as the full suite. The owner can set `WORLDSMITH_RESEARCH_WORKSPACE` on the server to point to a separate directory containing a fresh starter controller, journal, and public guides. Give each experiment its own directory and MCP server so it has its own retained score and traces.
+
 ## Budget and process
 
 1. Call `evaluate_controller()` once before editing to establish a baseline. Record the aggregate score, every evaluated task’s success rate and secondary metrics, and run directory in [JOURNAL.md](JOURNAL.md). Stop and report the error if the baseline fails.

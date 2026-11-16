@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
 
-from worldsmith.benchmark.task_catalog import TASK_GROUPS
+from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
 from worldsmith.research_evaluation import CONTROLLER, DEV_SEEDS, SUITES
 
 TASK_METRICS = {
@@ -98,7 +98,8 @@ def publish_feedback(
     seeds = list(DEV_SEEDS)
     benchmark, groups = SUITES[suite]
     for group in groups:
-        for task in TASK_GROUPS[group]:
+        selected_tasks = (suite,) if suite in TASK_CATALOG else TASK_GROUPS[group]
+        for task in selected_tasks:
             task_results = owner_results / group / task
             native = json.loads((task_results / "summary.json").read_text(encoding="utf-8"))
             with (task_results / "episodes.jsonl").open(encoding="utf-8") as trace:

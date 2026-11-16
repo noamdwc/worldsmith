@@ -385,3 +385,35 @@ with open(sys.argv[1], "w") as lock:
     assert lock.read_text() == "ready"
     with lock.open("r+") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def test_single_task_uses_only_development_runs_and_public_inputs(workspace, monkeypatch):
+    task = "navigation"
+    monkeypatch.setattr(research_mcp, "SUITE", task)
+    summary = research_mcp.evaluate_controller()
+    assert summary["split"] == "dev"
+    assert summary["episodes"] == 8
+    assert list(summary["tasks"]) == [task]
+    assert summary["aggregate_score"] == summary["tasks"][task]["success_rate"]
+
+    owner = research_mcp.OWNER_RUNS / summary["run_id"] / "results/pymunk"
+    assert sorted(path.name for path in owner.iterdir()) == [task, "task.txt"]
+    private_rows = [
+        json.loads(line) for line in (owner / task / "episodes.jsonl").read_text().splitlines()
+    ]
+    public_rows = [research_mcp.get_episode_trace(seed) for seed in DEV_SEEDS]
+    assert summary["aggregate_score"] == sum(row["success"] for row in public_rows) / 8
+    for seed, (private, public) in enumerate(zip(private_rows, public_rows, strict=True)):
+        assert (public["task"], public["seed"]) == (task, seed)
+        assert public["frames"] == [
+            {key: step[key] for key in ("observation", "action")} for step in private["steps"]
+        ]
+        assert public["final_observation"] == private["final_observation"]
+        assert {"info", "reward"} <= private["steps"][-1].keys()
+        assert set(public) == {
+            "task", "seed", "steps", "success", "terminated", "truncated", "collided",
+            "initial_observation", "frames", "final_observation",
+        }
+    for seed, selected_task in ((0, "interception"), (8, task), (1000, task)):
+        with pytest.raises(ValueError, match="not in the latest development run"):
+            research_mcp.get_episode_trace(seed, selected_task)
