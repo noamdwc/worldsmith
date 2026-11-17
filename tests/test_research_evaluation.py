@@ -16,6 +16,7 @@ from worldsmith.research_mcp.constant import SUITES
 
 
 def test_task_and_seed_partitions():
+    assert VALIDATION_ONLY_TASKS == {"rendezvous", "peg_insertion_side", "place_bowl_on_plate", "wipe_table"}
     assert VALIDATION_ONLY_TASKS <= TASK_CATALOG.keys()
     assert VALIDATION_ONLY_TASKS.isdisjoint(SUITES)
     assert set(DEV_SEEDS).isdisjoint(VALIDATION_SEEDS)
@@ -40,6 +41,32 @@ def test_owner_validation_selects_all_group_tasks(monkeypatch, tmp_path, group):
     assert tasks.keys() & VALIDATION_ONLY_TASKS
     assert tasks.keys() - VALIDATION_ONLY_TASKS
     assert calls == [(task, list(VALIDATION_SEEDS)) for task in tasks]
+
+
+def test_owner_replays_original_three_task_robosuite_seed_file(monkeypatch, tmp_path):
+    output = tmp_path / "replay"
+    seed_file = tmp_path / "heldout.json"
+    seed_file.write_text(json.dumps({
+        "handover_hammer": 1040,
+        "open_latched_door": 1000,
+        "assemble_nuts": 1020,
+    }))
+    monkeypatch.setattr(sys, "argv", [
+        "owner_evaluation", "robosuite", str(output), "--heldout-seed-file", str(seed_file),
+    ])
+    calls = []
+
+    def record(task_seeds, directory, *, workers):
+        calls.append((list(task_seeds.items()), directory, workers))
+
+    monkeypatch.setattr(owner_evaluation, "evaluate_tasks", record)
+    owner_evaluation.main()
+
+    assert calls == [([
+        ("open_latched_door", list(range(1000, 1008))),
+        ("assemble_nuts", list(range(1020, 1028))),
+        ("handover_hammer", list(range(1040, 1048))),
+    ], output, 2)]
 
 
 @pytest.mark.parametrize("validation", [True, False])

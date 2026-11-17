@@ -236,14 +236,36 @@ def test_arm_suite_dispatch_and_public_feedback(
 
 
 def test_per_task_changes_use_retained_run(workspace, native_workers):
+    controller = workspace / "controller.py"
+    starter = controller.read_text()
+    native_workers.successes = 6
     baseline = research_mcp.evaluate_controller()
+
+    controller.write_text(starter + "\n# improved candidate\n")
+    native_workers.successes = 8
+    improved = research_mcp.evaluate_controller()
+    assert improved["aggregate_score"] > baseline["aggregate_score"]
+    assert improved["retained_controller_snapshot_sha256"] == baseline["controller_snapshot_sha256"]
+    assert improved["tasks"]["push_cube"]["success_rate_change"] == 0.25
+
+    controller.write_text(starter + "\n# tied candidate\n")
+    tie = research_mcp.evaluate_controller()
+    assert tie["aggregate_score"] == improved["aggregate_score"]
+    assert tie["tasks"]["push_cube"]["success_rate_change"] == 0
+
+    controller.write_text(starter + "\n# weaker candidate\n")
     native_workers.successes = 6
     weaker = research_mcp.evaluate_controller()
-    tie = research_mcp.evaluate_controller()
-    assert weaker["aggregate_score"] < baseline["aggregate_score"]
-    assert weaker["retained_aggregate_score"] == tie["retained_aggregate_score"] == baseline["aggregate_score"]
-    assert tie["tasks"]["push_cube"]["success_rate_change"] == -0.25
-    assert tie["tasks"]["interception"]["success_rate_change"] == 0
+    assert weaker["aggregate_score"] < improved["aggregate_score"]
+    assert weaker["tasks"]["push_cube"]["success_rate_change"] == -0.25
+    assert weaker["tasks"]["interception"]["success_rate_change"] == 0
+
+    assert len({run["controller_snapshot_sha256"] for run in (baseline, improved, tie, weaker)}) == 4
+    retained = improved["controller_snapshot_sha256"]
+    for run in (tie, weaker):
+        assert run["retained_controller_snapshot_sha256"] == retained
+        assert run["retained_aggregate_score"] == improved["aggregate_score"]
+    assert research_mcp.retained_summary["controller_snapshot_sha256"] == retained
 
 
 def test_feedback_refuses_incomplete_or_heldout_results(workspace, native_workers, tmp_path):
