@@ -14,7 +14,14 @@ if [ "$(git -C source rev-parse HEAD)" != "$source_revision" ]; then
     printf 'Expected LIBERO-PRO source at %s\n' "$source_revision" >&2
     exit 1
 fi
-uv sync --locked --python 3.11
+case "$(uname -s)" in
+    Linux)
+        # The checked-in lock targets Apple Silicon. Keep the same direct pins on Linux.
+        uv venv --python 3.11
+        uv pip install --python .venv/bin/python -r pyproject.toml
+        ;;
+    *) uv sync --locked --python 3.11 ;;
+esac
 root="$(pwd -P)"
 cd source/libero/libero
 while read -r _ path; do
@@ -24,7 +31,10 @@ while read -r _ path; do
         mv "$path.download" "$path"
     fi
 done < "$root/assets.sha256"
-shasum -a 256 -c "$root/assets.sha256"
+case "$(uname -s)" in
+    Linux) sha256sum -c "$root/assets.sha256" ;;
+    *) shasum -a 256 -c "$root/assets.sha256" ;;
+esac
 cd "$root"
 mkdir -p config
 .venv/bin/python - <<'PY'

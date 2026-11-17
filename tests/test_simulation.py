@@ -22,12 +22,13 @@ def ball(position=(0, 0), velocity=(0, 0)):
     body = pymunk.Body(MASS, MOMENT, body_type=pymunk.Body.DYNAMIC)
     body.position = position
     body.velocity = velocity
-    return pymunk.Circle(body, RADIUS)
+    # Pymunk shapes hold only weak references to their bodies.
+    return body, pymunk.Circle(body, RADIUS)
 
 
 def wall():
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
-    return pymunk.Segment(body, (1, -2), (1, 2), 0.05)
+    return body, pymunk.Segment(body, (1, -2), (1, 2), 0.05)
 
 
 def scene(**entities):
@@ -39,19 +40,20 @@ def scene(**entities):
 
 @pytest.mark.parametrize(("elasticity", "impact_velocity"), [(0, 0), (1, -1.6)])
 def test_force_drives_ball_into_static_wall(elasticity, impact_velocity):
-    circle, segment = ball(), wall()
+    target, circle = ball()
+    barrier, segment = wall()
     circle.elasticity = elasticity
     segment.elasticity = 1
-    world = scene(ball=PhysicalEntity(circle.body), wall=PhysicalEntity(segment.body))
+    world = scene(ball=PhysicalEntity(target), wall=PhysicalEntity(barrier))
 
     for _ in range(8):
-        circle.body.apply_force_at_local_point((4, 0))
+        target.apply_force_at_local_point((4, 0))
         world.step(COAST)
     before = world.ground_truth()
     assert before["ball"]["position"] == pytest.approx((0.56, 0))
     assert before["ball"]["velocity"] == pytest.approx((1.6, 0))
 
-    circle.body.apply_force_at_local_point((4, 0))
+    target.apply_force_at_local_point((4, 0))
     world.step(COAST)
     impact = world.ground_truth()
     assert impact["ball"]["position"] == pytest.approx((0.72, 0))
@@ -64,10 +66,11 @@ def test_force_drives_ball_into_static_wall(elasticity, impact_velocity):
 
 def test_friction_reduces_sliding_and_spins_ball_at_contact():
     def impact(friction):
-        circle, segment = ball(velocity=(2, 1)), wall()
+        target, circle = ball(velocity=(2, 1))
+        barrier, segment = wall()
         circle.friction = friction
         segment.friction = 1
-        world = scene(ball=PhysicalEntity(circle.body), wall=PhysicalEntity(segment.body))
+        world = scene(ball=PhysicalEntity(target), wall=PhysicalEntity(barrier))
         for _ in range(4):
             world.step(COAST)
         return world.ground_truth()["ball"]
@@ -80,12 +83,13 @@ def test_friction_reduces_sliding_and_spins_ball_at_contact():
 
 
 def test_dynamic_circles_exchange_momentum_after_impulse():
-    first, second = ball(), ball((0.75, 0))
-    first.elasticity = second.elasticity = 1
-    world = scene(first=PhysicalEntity(first.body), second=PhysicalEntity(second.body))
+    first, first_circle = ball()
+    second, second_circle = ball((0.75, 0))
+    first_circle.elasticity = second_circle.elasticity = 1
+    world = scene(first=PhysicalEntity(first), second=PhysicalEntity(second))
 
-    first.body.apply_impulse_at_local_point((MASS, 0))
-    assert first.body.velocity == pytest.approx((1, 0))
+    first.apply_impulse_at_local_point((MASS, 0))
+    assert first.velocity == pytest.approx((1, 0))
     for _ in range(3):
         world.step(COAST)
     state = world.ground_truth()
@@ -94,16 +98,17 @@ def test_dynamic_circles_exchange_momentum_after_impulse():
 
 
 def test_kinematic_robot_pushes_dynamic_body_at_commanded_speed():
-    robot = pymunk.Circle(pymunk.Body(body_type=pymunk.Body.KINEMATIC), RADIUS)
-    circle = ball((1, 0))
-    world = scene(robot=PhysicalEntity(robot.body, observable=True), ball=PhysicalEntity(circle.body))
+    robot = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+    pymunk.Circle(robot, RADIUS)
+    target, _ = ball((1, 0))
+    world = scene(robot=PhysicalEntity(robot, observable=True), ball=PhysicalEntity(target))
 
     for _ in range(4):
         observation = world.step(Action(0))
     assert observation.entities["robot"].position == pytest.approx((0.8, 0))
     assert world.position("ball")[0] > 1
-    assert circle.body.velocity == pytest.approx((2, 0))
-    assert robot.body.velocity == pytest.approx((2, 0))
+    assert target.velocity == pytest.approx((2, 0))
+    assert robot.velocity == pytest.approx((2, 0))
 
 
 @pytest.mark.parametrize("layout", ["one_wall", "two_walls", "two_shapes_on_one_wall"])
@@ -171,12 +176,13 @@ def test_physics_stays_in_owner_trace(tmp_path):
         step_limit = 1
 
         def start(self, seed):
-            circle, segment = ball(velocity=(0.5, 0)), wall()
+            target, circle = ball(velocity=(0.5, 0))
+            barrier, _ = wall()
             circle.friction = 0.7
             circle.elasticity = 0.3
             return scene(
-                target=PhysicalEntity(circle.body, observable=True),
-                wall=PhysicalEntity(segment.body),
+                target=PhysicalEntity(target, observable=True),
+                wall=PhysicalEntity(barrier),
             )
 
     owner_dir = tmp_path / "owner"

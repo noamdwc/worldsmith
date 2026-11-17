@@ -23,7 +23,15 @@ status=0
         "Run the three-iteration AutoResearch session in RESEARCH.md on $tasks and summarize your findings."
 ) || status=$?
 
-archive_id=$(lifecycle archive)
+archive_status=0
+archive_id=$(lifecycle archive) || archive_status=$?
+if [ "$archive_status" -ne 0 ]; then
+    printf 'Could not archive the research session. Workspace kept for inspection.\n' >&2
+    if [ "$status" -ne 0 ]; then
+        exit "$status"
+    fi
+    exit "$archive_status"
+fi
 printf 'Archived session in research-history/%s\n' "$archive_id"
 
 if [ "$status" -ne 0 ]; then

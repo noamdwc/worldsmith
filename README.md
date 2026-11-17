@@ -24,13 +24,15 @@ Supply a different zero-argument controller factory with `--controller module:fa
 
 ## AutoResearch
 
-With all four environments set up, run `make autoresearch` from the repository root. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for one simulator. Pymunk uses the root interpreter. The server defaults to `simulation_environments/<simulator>/.venv/bin/python` for the other simulators. Set `WORLDSMITH_MANISKILL_PYTHON`, `WORLDSMITH_LIBERO_PYTHON`, or `WORLDSMITH_ROBOSUITE_PYTHON` to an absolute path to override it.
+Run `make autoresearch` from the repository root after configuring Google Colab and Cloudflare R2. The launcher starts a Colab L4 runtime before starting Codex, reuses it for the session's evaluations, and stops it when the research process exits. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for one simulator. [Colab setup and verification](COLAB.md)
 
 The launcher starts from the clean starter, runs the research session, archives it under `research-history/`, and restores the starter after success. If Codex exits with an error, the archive and workspace are both kept. After closing a session and waiting for evaluations to finish, use `make clear-autoresearch` to archive and reset the workspace manually.
 
 ### Manual sessions
 
-Run these commands from the repository root. For a single-task session, the owner sets `WORLDSMITH_RESEARCH_SUITE` to a development task ID before launching Codex, for example `export WORLDSMITH_RESEARCH_SUITE=navigation`. Close the session and wait for evaluations to finish before archiving and resetting.
+Run these commands from the repository root for a local debugging session. You can also use `WORLDSMITH_EVALUATION_BACKEND=local make autoresearch` with the local simulators installed. The server uses the root interpreter for Pymunk and defaults to `simulation_environments/<simulator>/.venv/bin/python` for the other simulators. Set `WORLDSMITH_MANISKILL_PYTHON`, `WORLDSMITH_LIBERO_PYTHON`, or `WORLDSMITH_ROBOSUITE_PYTHON` to an absolute path to override it.
+
+For a single-task session, set `WORLDSMITH_RESEARCH_SUITE` to a development task ID before launching Codex, for example `export WORLDSMITH_RESEARCH_SUITE=navigation`. Close the session and wait for evaluations to finish before archiving and resetting.
 
 ```sh
 uv run --locked python -m worldsmith.research_lifecycle start

@@ -1,0 +1,289 @@
+"""Exercise the Colab lifecycle and artifact protocol without cloud services."""
+
+import ast
+import json
+import signal
+import subprocess
+import tarfile
+from contextlib import nullcontext
+from io import BytesIO
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+
+from worldsmith import research_lifecycle
+from worldsmith.colab import __main__ as owner
+from worldsmith.colab import backend, remote_job, session, storage
+from worldsmith.research_mcp import research_mcp
+
+
+@pytest.fixture
+def fake_cli(tmp_path, monkeypatch):
+    """Fake the CLI transport and R2, with real job unpacking and evaluation."""
+    staging = tmp_path / "vm"
+    staging.mkdir()
+    calls = []
+    objects = {}
+    requests = []
+
+    class Storage:
+        def check(self):
+            pass
+
+        def put(self, key, source):
+            assert key not in objects
+            objects[key] = source.read_bytes()
+
+        def output_url(self, key, *, expires):
+            assert 0 < expires < 3600
+            return f"https://example.test/{key}?private-signature"
+
+        def download(self, key, destination):
+            destination.write_bytes(objects[key])
+
+    def upload(request, *, timeout):
+        key = request.full_url.split("example.test/")[1].split("?")[0]
+        assert request.get_method() == "PUT"
+        assert request.get_header("If-none-match") == "*"
+        assert key not in objects
+        objects[key] = request.data.read()
+        return nullcontext()
+
+    def command(self, action, *args, **kwargs):
+        calls.append((self.name, action, args))
+        if action == "new":
+            assert args == ("--gpu", "L4")
+        elif action == "upload":
+            local, remote = args
+            (staging / Path(remote).name).write_bytes(Path(local).read_bytes())
+        elif action == "exec":
+            code = kwargs["code"]
+            if "setup-colab.py" in code:
+                with tarfile.open(staging / "worldsmith.tar.gz") as archive:
+                    assert "scripts/setup-colab.py" in archive.getnames()
+                    assert "worldsmith/colab/remote_job.py" in archive.getnames()
+                    assert "autoresearch/controller.py" not in archive.getnames()
+                return "WORLDSMITH_COLAB_READY\n"
+            assert "private-signature" not in code
+            call = next(node for node in ast.walk(ast.parse(code)) if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute) and node.func.attr == "Popen")
+            job_id, budget = ast.literal_eval(call.args[0])[-2:]
+            dispatch = json.loads((staging / f"{job_id}.json").read_text())
+            requests.append(dispatch["request"])
+            status = remote_job.run_job(job_id, float(budget), staging)
+            return f"WORLDSMITH_JOB {job_id} {status}\n"
+        return ""
+
+    monkeypatch.setattr(session, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(session.ColabSession, "command", command)
+    monkeypatch.setattr(session, "R2", Storage)
+    monkeypatch.setattr(backend, "R2", Storage)
+    monkeypatch.setattr(remote_job, "urlopen", upload)
+    return calls, objects, requests
+
+
+@pytest.fixture
+def researcher(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    candidate = workspace / "controller.py"
+    candidate.write_bytes((research_lifecycle.BASELINE / "controller.py").read_bytes())
+    monkeypatch.setattr(research_mcp, "WORKSPACE", workspace)
+    monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
+    monkeypatch.setattr(research_mcp, "SUITE", "navigation")
+    monkeypatch.setattr(research_mcp, "latest_feedback", None)
+    monkeypatch.setattr(research_mcp, "retained_summary", None)
+    monkeypatch.setenv("WORLDSMITH_EVALUATION_BACKEND", "colab")
+    monkeypatch.delenv("WORLDSMITH_COLAB_SESSION", raising=False)
+    return candidate
+
+
+def test_mcp_reuses_session_and_isolates_candidate_processes(fake_cli, researcher, monkeypatch):
+    calls, objects, requests = fake_cli
+    runtime = session.start_session()
+    monkeypatch.setenv("WORLDSMITH_COLAB_SESSION", runtime.name)
+    monkeypatch.setattr(backend, "WORKER_OVERRIDE", 2)
+    # The two evaluations import the same module name. An interpreter reused
+    # across jobs would either cache the old source or retain this global.
+    prefix = (
+        "import builtins\n"
+        "assert not hasattr(builtins, 'worldsmith_colab_test')\n"
+        "builtins.worldsmith_colab_test = True\n"
+    )
+    source = researcher.read_text()
+    researcher.write_text(prefix + source)
+    first = research_mcp.evaluate_controller()
+    first_trace = research_mcp.get_episode_trace(0)
+    researcher.write_text(prefix + source + "\n# second candidate\n")
+    second = research_mcp.evaluate_controller()
+    runtime.stop()
+
+    assert first["controller_snapshot_sha256"] != second["controller_snapshot_sha256"]
+    assert second["retained_controller_snapshot_sha256"] == first["controller_snapshot_sha256"]
+    assert set(first["tasks"]) == {"navigation"}
+    assert first["aggregate_score"] == second["aggregate_score"]
+    assert research_mcp.get_episode_trace(0) == first_trace
+    assert first["seeds"] == second["seeds"] == list(range(8))
+    assert first["run_dir"] == f"runs/{first['run_id']}/results"
+    for result, request in zip((first, second), requests, strict=True):
+        run_id = result["run_id"]
+        job = f"{backend.PREFIX}/{run_id}"
+        assert request["groups"] == {"pymunk": {"tasks": ["navigation"], "workers": 2}}
+        assert request == json.loads(objects[f"{job}/input/request.json"])
+        assert request["job_id"] == run_id
+        with tarfile.open(fileobj=BytesIO(objects[f"{job}/input/candidate.tar.gz"])) as archive:
+            stored_source = archive.extractfile("autoresearch/controller.py").read().decode()
+        assert stored_source == (prefix + source if result is first else researcher.read_text())
+        assert json.loads(objects[f"{job}/output/completed.json"])["job_id"] == run_id
+        assert (research_mcp.OWNER_RUNS / run_id / "pymunk-stderr.txt").is_file()
+
+    assert [action for _, action, _ in calls if action in {"new", "exec", "stop"}] == [
+        "new", "exec", "exec", "exec", "stop",
+    ]
+    assert {name for name, _, _ in calls} == {runtime.name}
+    assert session.tracked_session() is None
+    assert not any(b"private-signature" in content for content in objects.values())
+
+
+def test_mcp_requires_existing_session(fake_cli, researcher):
+    with pytest.raises(RuntimeError, match="Colab session is unavailable"):
+        research_mcp.evaluate_controller()
+    assert fake_cli == ([], {}, [])
+
+
+def test_storage_signs_a_single_conditional_put_with_external_credentials(tmp_path, monkeypatch):
+    credentials = tmp_path / "r2.env"
+    credentials.write_text(
+        f"R2_ACCOUNT_ID={'a' * 32}\nR2_ACCESS_KEY_ID=example-key\nR2_SECRET_ACCESS_KEY=example-secret\n",
+    )
+    monkeypatch.setenv("R2_BUCKET", "test-bucket")
+    monkeypatch.setenv("R2_CREDENTIALS_FILE", str(credentials))
+    url = urlparse(storage.R2().output_url("worldsmith/evaluations/job/output/artifacts.tar.gz", expires=500))
+    query = parse_qs(url.query)
+    assert url.hostname == f"{'a' * 32}.r2.cloudflarestorage.com"
+    assert url.path == "/test-bucket/worldsmith/evaluations/job/output/artifacts.tar.gz"
+    assert query["X-Amz-SignedHeaders"] == ["host;if-none-match"]
+    assert query["X-Amz-Expires"] == ["500"]
+    assert "example-secret" not in url.geturl()
+
+    monkeypatch.setenv("R2_CREDENTIALS_FILE", str(storage.ROOT / "pyproject.toml"))
+    with pytest.raises(storage.StorageError, match="must be outside"):
+        storage.R2()
+
+
+@pytest.mark.parametrize("fault, message", [
+    ("controller", "Could not load controller"),
+    ("simulation", "Simulation execution failed"),
+    ("runtime", "Colab session disappeared"),
+    ("command", "Colab remote evaluation command did not complete"),
+    ("transfer", "R2 remote artifact upload failed"),
+    ("download", "R2 download failed"),
+    ("corrupt", "Colab returned invalid evaluation artifacts"),
+    ("overlap", "Another Colab evaluation is in progress"),
+    ("timeout", "Evaluation timed out"),
+])
+def test_failures_are_distinct_and_cannot_complete(fake_cli, researcher, monkeypatch, fault, message):
+    _, objects, _ = fake_cli
+    session.start_session()
+    if fault == "controller":
+        researcher.write_text("raise ValueError('private controller diagnostic')\n")
+    elif fault == "simulation":
+        monkeypatch.setattr(remote_job, "run_group_process", lambda *a, **kw: subprocess.CompletedProcess([], 3))
+    elif fault == "timeout":
+        def expire(command, *, timeout, **kwargs):
+            raise subprocess.TimeoutExpired(command, timeout)
+        monkeypatch.setattr(remote_job, "run_group_process", expire)
+    elif fault in {"runtime", "command"}:
+        monkeypatch.setattr(session.ColabSession, "execute", lambda *a, **kw: "No completion marker")
+        if fault == "runtime":
+            monkeypatch.setattr(session.ColabSession, "is_assigned", lambda self: False)
+    elif fault == "transfer":
+        def abort(*a, **kw):
+            raise OSError("private-signature")
+        monkeypatch.setattr(remote_job, "urlopen", abort)
+    elif fault == "download":
+        storage = backend.R2
+        def abort(self, key, destination):
+            raise backend.StorageError("R2 download failed")
+        monkeypatch.setattr(storage, "download", abort)
+    elif fault == "corrupt":
+        monkeypatch.setattr(backend.R2, "download", lambda self, key, destination: destination.write_bytes(b"partial"))
+    lock = session.session_lock("evaluation") if fault == "overlap" else nullcontext()
+    with lock, pytest.raises(RuntimeError, match=message) as error:
+        research_mcp.evaluate_controller()
+    assert "private" not in str(error.value)
+    assert research_mcp.latest_feedback is None
+    assert all(not key.endswith("completed.json") for key in objects)
+    [run] = (researcher.parent / "runs").iterdir()
+    status = json.loads((run / "evaluation.json").read_text())
+    assert status["status"] == ("timed_out" if fault == "timeout" else "failed")
+    assert not (run / "results").exists()
+
+
+def test_interrupted_evaluation_keeps_r2_inputs_without_a_completion_marker(fake_cli, researcher, monkeypatch):
+    _, objects, _ = fake_cli
+    session.start_session()
+
+    def interrupt(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(session.ColabSession, "execute", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        research_mcp.evaluate_controller()
+    assert any(key.endswith("input/request.json") for key in objects)
+    assert all("/output/" not in key for key in objects)
+    assert research_mcp.latest_feedback is None
+
+
+def test_failed_initialization_stops_session_without_launching_research(fake_cli, monkeypatch):
+    calls, _, _ = fake_cli
+    monkeypatch.setattr(session.ColabSession, "execute", lambda *a, **kw: "WORLDSMITH_SETUP GPU mismatch")
+    monkeypatch.setattr(owner.subprocess, "Popen", lambda *a, **kw: pytest.fail("research started"))
+    # Project packaging uses subprocess before the researcher can be launched.
+    monkeypatch.setattr(session, "package_project", lambda archive: archive.touch())
+    with pytest.raises(session.ColabError, match="GPU mismatch"):
+        owner.run_research("all")
+    assert [action for _, action, _ in calls] == ["new", "upload", "stop"]
+    assert session.tracked_session() is None
+
+
+@pytest.mark.parametrize("status, interrupt, cleanup_fails", [
+    (0, False, False), (7, False, False), (7, False, True), (0, False, True), (0, True, False),
+])
+def test_owner_shutdown_preserves_exit_status(fake_cli, tmp_path, monkeypatch, capsys, status, interrupt, cleanup_fails):
+    calls, _, _ = fake_cli
+    real_start = owner.start_session
+    def start():
+        runtime = real_start()
+        if cleanup_fails:
+            def fail_stop(self):
+                raise session.ColabError("Could not stop Colab")
+            monkeypatch.setattr(session.ColabSession, "stop", fail_stop)
+        return runtime
+    monkeypatch.setattr(owner, "start_session", start)
+    root = tmp_path / "project"
+    (root / "scripts").mkdir(parents=True)
+    script = root / "scripts/run-autoresearch.sh"
+    if interrupt:
+        script.write_text('#!/bin/sh\nkill -TERM "$PPID"\nsleep 30\n')
+    else:
+        script.write_text(f'#!/bin/sh\ntest -n "$WORLDSMITH_COLAB_SESSION" || exit 99\nexit {status}\n')
+    script.chmod(0o700)
+    monkeypatch.setattr(owner, "ROOT", root)
+    if interrupt:
+        previous = signal.signal(signal.SIGTERM, owner.handle_interrupt)
+        try:
+            with pytest.raises(SystemExit) as exit_info:
+                owner.run_research("all")
+            assert exit_info.value.code == 143
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+    else:
+        assert owner.run_research("all") == (status or int(cleanup_fails))
+    if cleanup_fails:
+        assert "Retry cleanup with make colab-stop" in capsys.readouterr().err
+        assert session.tracked_session()["ready"]
+    else:
+        assert calls[-1][1] == "stop"
+        assert session.tracked_session() is None
