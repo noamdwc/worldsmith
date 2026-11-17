@@ -9,7 +9,7 @@ from time import monotonic
 import pytest
 
 from worldsmith import research_lifecycle
-from worldsmith.research_mcp import research_mcp
+from worldsmith.research_mcp import evaluation_io, research_mcp
 from worldsmith.benchmark.task_catalog import DEV_SEEDS, TASK_GROUPS, VALIDATION_ONLY_TASKS, VALIDATION_SEEDS
 from worldsmith.research_feedback import publish_feedback
 
@@ -23,7 +23,7 @@ def workspace(tmp_path, monkeypatch):
     shutil.copyfile(research_lifecycle.BASELINE / "controller.py", workspace / "controller.py")
     monkeypatch.setattr(research_mcp, "WORKSPACE", workspace)
     monkeypatch.setattr(research_mcp, "SUITE", "all")
-    monkeypatch.setattr(research_mcp, "WORKER_OVERRIDE", None)
+    monkeypatch.setattr(evaluation_io, "WORKER_OVERRIDE", None)
     monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
     monkeypatch.setattr(research_mcp, "latest_feedback", None)
     monkeypatch.setattr(research_mcp, "retained_summary", None)
@@ -104,13 +104,13 @@ def native_workers(workspace, monkeypatch):
             return subprocess.CompletedProcess(command, 0)
 
     worker = Worker()
-    monkeypatch.setattr(research_mcp, "run_group_process", worker.run)
+    monkeypatch.setattr(evaluation_io, "run_group_process", worker.run)
     return worker
 
 
 @pytest.mark.parametrize("workers", [None, 3])
 def test_full_suite_snapshot_scoring_and_public_feedback(workspace, native_workers, monkeypatch, workers):
-    monkeypatch.setattr(research_mcp, "WORKER_OVERRIDE", workers)
+    monkeypatch.setattr(evaluation_io, "WORKER_OVERRIDE", workers)
     source = '''from worldsmith.api import Action
 
 def make_controller(*, task):
@@ -309,7 +309,7 @@ def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, 
             raise subprocess.TimeoutExpired(command, timeout)
         return subprocess.CompletedProcess(command, 1)
 
-    monkeypatch.setattr(research_mcp, "run_group_process", fail)
+    monkeypatch.setattr(evaluation_io, "run_group_process", fail)
     with pytest.raises(RuntimeError, match="while evaluating push_cube") as failure:
         research_mcp.evaluate_controller()
     assert research_mcp.latest_feedback is previous_feedback
@@ -369,7 +369,7 @@ def test_interrupted_evaluation_keeps_snapshot(workspace, monkeypatch):
     def interrupt(*args, **kwargs):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(research_mcp, "run_group_process", interrupt)
+    monkeypatch.setattr(evaluation_io, "run_group_process", interrupt)
     with pytest.raises(KeyboardInterrupt):
         research_mcp.evaluate_controller()
     [run] = (workspace / "runs").iterdir()
@@ -392,7 +392,7 @@ with open(sys.argv[1], "w") as lock:
 """
     group = "import subprocess, sys; subprocess.run([sys.executable, '-c', *sys.argv[1:]], check=True)"
     with pytest.raises(subprocess.TimeoutExpired):
-        research_mcp.run_group_process(
+        evaluation_io.run_group_process(
             [sys.executable, "-c", group, descendant, str(lock)], timeout=2,
         )
     assert lock.read_text() == "ready"
