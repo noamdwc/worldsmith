@@ -121,6 +121,29 @@ def test_runner_uses_selected_snapshot_and_seeds(tmp_path, validation):
         assert not public.with_suffix(".tmp").exists()
 
 
+@pytest.mark.parametrize("has_controller", [False, True], ids=["missing", "wrong-import-origin"])
+def test_owner_snapshot_cannot_fall_back_to_repository_controller(tmp_path, has_controller):
+    repo = Path(__file__).resolve().parents[1]
+    code = tmp_path / "code"
+    code.mkdir()
+    controller = code / "autoresearch/controller.py"
+    env = {**os.environ, "PYTHONPATH": str(repo)}
+    if has_controller:
+        controller.parent.mkdir()
+        controller.write_text("def make_controller(): raise AssertionError('should not run')\n")
+        env["PYTHONSAFEPATH"] = "1"  # Resolve the valid repository controller instead.
+
+    output = tmp_path / "validation"
+    result = subprocess.run(
+        [sys.executable, "-B", "-m", "worldsmith.evaluation.owner_evaluation", "pymunk",
+         str(output), "--validation"],
+        cwd=code, env=env, capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode != 0
+    assert str(controller.resolve()) in result.stderr
+    assert not (output / "interception").exists()
+
+
 def test_validation_only_task_is_still_available_for_direct_execution(tmp_path):
     task = "rendezvous"
     output = tmp_path / "debug"

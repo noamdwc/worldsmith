@@ -1,4 +1,5 @@
 from functools import partial
+from importlib.util import find_spec
 from inspect import signature
 from pathlib import Path
 
@@ -12,6 +13,14 @@ def evaluate_tasks(task_seeds: dict[str, list[int]], output: Path, *, workers: i
     output.mkdir(parents=True)
     try:
         try:
+            # The working directory holds either the live workspace or a saved snapshot.
+            controller_path = Path.cwd() / "autoresearch/controller.py"
+            if not controller_path.is_file():
+                raise FileNotFoundError(f"Controller file is missing: {controller_path}")
+            spec = find_spec("autoresearch.controller")
+            if spec is None or spec.origin is None or Path(spec.origin).resolve() != controller_path:
+                raise ImportError(f"Controller import does not resolve to the expected file: {controller_path}")
+
             from autoresearch.controller import make_controller
 
             parameters = signature(make_controller).parameters
