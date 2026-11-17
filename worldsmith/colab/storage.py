@@ -2,7 +2,7 @@
 
 import os
 import re
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 import boto3
@@ -106,6 +106,6 @@ class R2:
                 if error.response["Error"]["Code"] in {"NoSuchKey", "404"}:
                     raise ObjectMissing("R2 has no artifact bundle for this job") from None
                 raise
-            with response["Body"] as body, destination.open("wb") as file:
+            with closing(response["Body"]) as body, destination.open("wb") as file:
                 for chunk in body.iter_chunks(chunk_size=1024 * 1024):
                     file.write(chunk)

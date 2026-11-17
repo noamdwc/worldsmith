@@ -15,6 +15,7 @@ from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
+from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 ENVIRONMENTS = ROOT / "simulation_environments"
@@ -94,13 +95,21 @@ def archive_directory(directory, bundle, *, gzip=True):
 def install_tools(config, staging, *, prepare):
     tools = {}
     if prepare and any("put" in cache for cache in config["tools"].values()):
-        prefix = staging / "bootstrap-uv"
+        downloads = staging / "bootstrap-uv"
         stage(
-            "uv installation", sys.executable, "-m", "pip", "install",
-            "--prefix", str(prefix), "--ignore-installed", "--no-deps",
+            "uv wheel download", sys.executable, "-m", "pip", "download",
+            "--dest", str(downloads), "--no-deps",
             "--only-binary", ":all:", f"uv=={config['uv_version']}",
         )
-        builder = prefix / "bin/uv"
+        [wheel] = downloads.glob("uv-*.whl")
+        builder = downloads / "uv"
+        # The wheel specifies the executable. pip's script install path depends
+        # on the host Python's installation scheme.
+        with ZipFile(wheel) as archive:
+            [executable] = [name for name in archive.namelist() if name.endswith(".data/scripts/uv")]
+            with archive.open(executable) as source, builder.open("wb") as destination:
+                shutil.copyfileobj(source, destination)
+        builder.chmod(0o755)
     for version, cache in config["tools"].items():
         directory = ROOT / "tools" / version
         directory.mkdir(parents=True)

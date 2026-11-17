@@ -14,8 +14,10 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
+from zipfile import ZipFile
 
 import pytest
+from botocore.response import StreamingBody
 
 from worldsmith import research_lifecycle
 from worldsmith.colab import __main__ as owner
@@ -362,6 +364,36 @@ def test_preparation_plan_skips_other_simulators_with_complete_caches():
     assert set(config["tools"]) == {packaging.ENVIRONMENT_PYTHONS["libero"]}
 
 
+def test_tool_preparation_uses_uv_directly_from_the_wheel(tmp_path, monkeypatch):
+    script = runpy.run_path(str(packaging.ROOT / "scripts/setup-colab.py"))
+    install = script["install_tools"]
+    version = packaging.ENVIRONMENT_PYTHONS["pymunk"]
+    staging = tmp_path / "staging"
+    staging.mkdir()
+
+    def stage(label, *command):
+        if label == "uv wheel download":
+            directory = Path(command[command.index("--dest") + 1])
+            directory.mkdir()
+            with ZipFile(directory / "uv-linux.whl", "w") as wheel:
+                wheel.writestr("uv-0.11.15.data/scripts/uv", b"uv executable")
+        elif label == f"Python {version} download":
+            binary = Path(command[0])
+            assert binary.read_bytes() == b"uv executable"
+            assert binary.stat().st_mode & 0o100
+            destination = Path(command[command.index("--install-dir") + 1])
+            (destination / f"cpython-{version}-linux-x86_64-gnu").mkdir(parents=True)
+
+    monkeypatch.setitem(install.__globals__, "ROOT", tmp_path)
+    monkeypatch.setitem(install.__globals__, "stage", stage)
+    monkeypatch.setitem(install.__globals__, "publish", lambda *args: None)
+    tools = install(
+        {"uv_version": packaging.UV_VERSION, "tools": {version: {"put": "cache"}}},
+        staging, prepare=True,
+    )
+    assert Path(tools[version][0]).read_bytes() == b"uv executable"
+
+
 @pytest.mark.parametrize("prepare", [True, False])
 def test_wheelhouse_installs_offline_before_publication(tmp_path, monkeypatch, prepare):
     script = runpy.run_path(str(packaging.ROOT / "scripts/setup-colab.py"))
@@ -419,6 +451,21 @@ def test_cache_publication_attaches_the_checksum_and_rejects_a_bad_reply(tmp_pat
     cache = {"put": "https://example.test/cache", "headers": {"x-amz-meta-worldsmith-verified": "1"}}
     with pytest.raises(RuntimeError, match="checksum confirmation failed"):
         publish(cache, bundle)
+
+
+def test_r2_download_streams_the_sdk_body(tmp_path):
+    contents = b"evaluation artifacts"
+    raw = BytesIO(contents)
+    body = StreamingBody(raw, len(contents))
+    bucket = storage.R2.__new__(storage.R2)
+    bucket.bucket = "test-bucket"
+    bucket.client = SimpleNamespace(get_object=lambda **kwargs: {"Body": body})
+    destination = tmp_path / "artifact.tar.gz"
+
+    bucket.download("output/artifacts.tar.gz", destination)
+
+    assert destination.read_bytes() == contents
+    assert raw.closed
 
 
 def test_storage_signs_a_single_conditional_put_with_external_credentials(tmp_path, monkeypatch):
