@@ -37,9 +37,8 @@ def snapshot(value):
     return value
 
 
-def write_episode(trace: TextIO, episode: dict, *, legacy: bool = False) -> None:
-    options = {} if legacy else {"allow_nan": False, "separators": (",", ":")}
-    trace.write(json.dumps(episode, **options) + "\n")
+def write_episode(trace: TextIO, episode: dict) -> None:
+    trace.write(json.dumps(episode, allow_nan=False, separators=(",", ":")) + "\n")
 
 
 def write_scored_episode(trace: TextIO, episode: dict, metrics: dict) -> None:

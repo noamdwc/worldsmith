@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from functools import partial
@@ -7,18 +8,17 @@ import pytest
 
 
 @pytest.fixture
-def research_metrics():
-    from worldsmith.benchmark.evaluator import evaluate
-    from worldsmith.benchmark.pymunk_adapter import (
-        PymunkAdapter, summarize_research, write_research_episode,
-    )
+def evaluate_pymunk(tmp_path_factory):
+    from worldsmith.benchmark.evaluator import evaluate_seeds_to_directory
+    from worldsmith.benchmark.pymunk_adapter import open_pymunk
 
-    def run(tasks, factory, seeds, trace, *, combined=False):
-        return evaluate(
-            {name: PymunkAdapter(task) for name, task in tasks.items()},
-            factory, seeds, partial(write_research_episode, trace),
-            summarize=partial(summarize_research, combined=combined),
+    def run(task, factory, seeds):
+        output = tmp_path_factory.mktemp(task) / "results"
+        summary = evaluate_seeds_to_directory(
+            partial(open_pymunk, task), factory, seeds, output, task=task,
         )
+        episodes = [json.loads(line) for line in (output / "episodes.jsonl").read_text().splitlines()]
+        return summary, episodes
 
     return run
 

@@ -2,13 +2,16 @@ import json
 import subprocess
 import sys
 from contextlib import contextmanager, nullcontext
+from functools import partial
 
 import pytest
 
+from autoresearch import controller as research_controller
 from worldsmith import owner_evaluation
 from worldsmith.benchmark import evaluator
-from worldsmith.benchmark.evaluator import evaluate, evaluate_to_directory, main
+from worldsmith.benchmark.evaluator import evaluate_to_directory, main
 from worldsmith.benchmark.task_catalog import DEV_TASK_GROUPS, TASK_CATALOG, TASK_GROUPS
+from worldsmith.research_evaluation import evaluate_tasks
 
 
 class CounterAdapter:
@@ -89,35 +92,33 @@ def test_seeded_evaluation_uses_native_scores_and_snapshots(tmp_path):
     assert second["steps"][-1]["truncated"] and not second["steps"][-1]["terminated"]
 
 
-def test_task_collection_uses_shared_factory_and_benchmark_summary():
+def test_task_group_uses_shared_factory_and_native_scores(tmp_path, monkeypatch):
     class DoubleScoreAdapter(CounterAdapter):
         def score(self, episode):
             return {"points": 2 * super().score(episode)["points"]}
 
     factory_calls = []
-    recorded = []
 
-    def factory():
-        factory_calls.append("created")
+    def factory(*, task):
+        factory_calls.append(task)
         return lambda observation: [3]
 
-    def record(episode, metrics):
-        recorded.append((episode["seed"], metrics["points"]))
+    def counter_setup(adapter_type):
+        return partial(nullcontext, adapter_type()), None
 
-    def summarize(results):
-        assert list(results) == ["double", "counter"]
-        double_points = results["double"].metrics["total_points"]
-        counter_points = results["counter"].metrics["total_points"]
-        return {"points_difference": double_points - counter_points}
+    monkeypatch.setattr(research_controller, "make_controller", factory)
+    monkeypatch.setitem(TASK_CATALOG, "double", partial(counter_setup, DoubleScoreAdapter))
+    monkeypatch.setitem(TASK_CATALOG, "counter", partial(counter_setup, CounterAdapter))
+    output = tmp_path / "group"
+    evaluate_tasks({"double": [7, 8], "counter": [7, 8]}, output, workers=1)
 
-    summary = evaluate(
-        {"double": DoubleScoreAdapter(), "counter": CounterAdapter()},
-        factory, [7, 8], record, summarize=summarize,
-    )
-
-    assert len(factory_calls) == 4
-    assert recorded == [(7, 42), (8, 48), (7, 21), (8, 24)]
-    assert summary == {"points_difference": 45}
+    assert factory_calls == ["double", "double", "counter", "counter"]
+    for task, points in (("double", [42, 48]), ("counter", [21, 24])):
+        task_output = output / task
+        summary = json.loads((task_output / "summary.json").read_text())
+        assert summary["total_points"] == sum(points)
+        rows = [json.loads(line) for line in (task_output / "episodes.jsonl").read_text().splitlines()]
+        assert [(row["seed"], row["points"]) for row in rows] == list(zip([7, 8], points, strict=True))
 
 
 @pytest.mark.parametrize(("episodes", "seed"), [(0, 42), (1, -1), (2, 2**32 - 1)])
@@ -182,19 +183,22 @@ def test_cli_worker_defaults_and_override(monkeypatch, tmp_path, group, default,
     assert counts == [expected, expected]
 
 
-def test_v1_task_uses_standard_artifacts_from_unified_cli(tmp_path):
+def test_cli_loads_lead_factory_and_writes_standard_artifacts(tmp_path):
     output = tmp_path / "evaluation"
     result = subprocess.run(
         [sys.executable, "-m", "worldsmith.benchmark.evaluator", "--task", "interception",
          "--controller", "worldsmith.benchmark.tasks.interception:Lead",
-         "--episodes", "1", "--seed", "0", "--output", str(output)],
+         "--episodes", "1", "--seed", "12", "--output", str(output)],
         check=True, capture_output=True, text=True,
     )
     summary = json.loads(result.stdout)
+    assert summary == json.loads((output / "summary.json").read_text())
     episode = json.loads((output / "episodes.jsonl").read_text())
     assert summary["task_id"] == "interception-v2"
     assert summary["controller"] == "worldsmith.benchmark.tasks.interception.Lead"
-    assert summary["seeds"] == [0]
+    assert summary["seeds"] == [12]
+    assert episode["seed"] == 12
     assert episode["steps"][0]["observation"]["goal"] == "interception"
     assert episode["length"] == len(episode["steps"])
+    assert summary["captures"] == int(episode["captured"])
     assert summary["capture_rate"] == float(episode["captured"])

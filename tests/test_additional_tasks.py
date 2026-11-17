@@ -2,27 +2,31 @@ import json
 import math
 import subprocess
 import sys
-from io import StringIO
+from functools import partial
 from random import Random
+from time import monotonic
 
 import pymunk
 import pytest
 
+from autoresearch import controller as research_controller
 from autoresearch.controller import make_controller
 from worldsmith.api import (
     BOUNCING_INTERCEPTION_GOAL, INTERCEPTION_GOAL, OBJECT_PUSHING_GOAL,
     Action, Observation, PositionMeasurement,
 )
 from worldsmith.benchmark.simulation import Entity, Simulation
-from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS, TASKS, TASK_SPLITS
+from worldsmith.benchmark.task_catalog import DEV_SEEDS, DEV_TASK_GROUPS, VALIDATION_SEEDS
+from worldsmith.benchmark.tasks.constants import TASKS
 from worldsmith.benchmark.tasks.navigation import COLLISION_DISTANCE, Navigation
 from worldsmith.benchmark.tasks.rendezvous import HOLD_STEPS, TRACKING_RADIUS, Rendezvous
+from worldsmith.research_evaluation import evaluate_tasks
+from worldsmith.research_feedback import publish_feedback
 
 
 @pytest.mark.parametrize("goal", TASKS)
-def test_deterministic_episodes_and_goal_propagation(goal, research_metrics):
+def test_deterministic_episodes_and_goal_propagation(goal, evaluate_pymunk):
     task = TASKS[goal]()
-    first_trace, replay_trace = StringIO(), StringIO()
     seen_goals = []
 
     def factory():
@@ -37,16 +41,15 @@ def test_deterministic_episodes_and_goal_propagation(goal, research_metrics):
 
         return control
 
-    first = research_metrics({goal: task}, factory, [0, 1], first_trace)
-    replay = research_metrics({goal: task}, make_controller, [0, 1], replay_trace)
-    assert first == replay
-    assert first_trace.getvalue() == replay_trace.getvalue()
+    first, first_trace = evaluate_pymunk(goal, factory, [0, 1])
+    replay, replay_trace = evaluate_pymunk(goal, make_controller, [0, 1])
+    assert first == {**replay, "controller": first["controller"]}
+    assert first_trace == replay_trace
     assert set(seen_goals) == {goal}
-    for line in first_trace.getvalue().splitlines():
-        episode = json.loads(line)
-        assert episode["initial_observation"]["goal"] == goal
-        assert all(frame["observation"]["goal"] == goal for frame in episode["frames"])
-        assert episode["steps"] <= task.step_limit
+    for episode in first_trace:
+        assert all(step["observation"]["goal"] == goal for step in episode["steps"])
+        assert episode["final_observation"]["goal"] == goal
+        assert episode["length"] <= task.step_limit
 
 
 @pytest.mark.parametrize("goal", TASKS)
@@ -96,48 +99,58 @@ def test_rendezvous_requires_consecutive_tracking_steps():
 
 
 @pytest.mark.parametrize("goal", ["navigation", "rendezvous", OBJECT_PUSHING_GOAL])
-def test_failed_tasks_run_to_their_episode_limit(goal, research_metrics):
-    trace = StringIO()
-    task = TASKS[goal]()
-    metrics = research_metrics({goal: task}, lambda: lambda observation: Action(0, 0), [0], trace)
-    episode = json.loads(trace.getvalue())
-    assert metrics["success_rate"] == 0
-    assert episode["steps"] == task.step_limit
+def test_failed_tasks_run_to_their_episode_limit(goal, evaluate_pymunk):
+    summary, (episode,) = evaluate_pymunk(goal, lambda: lambda observation: Action(0, 0), [0])
+    assert summary["success_rate"] == 0
+    assert episode["length"] == TASKS[goal].step_limit
     assert not episode["success"]
 
 
-def test_combined_evaluation_matches_independent_results_and_resets_controller(research_metrics):
-    seeds = list(COMBINED_SPLITS["dev"])
-    trace = StringIO()
-    factory_calls = 0
+def test_group_evaluation_matches_independent_results_and_resets_controller(tmp_path, monkeypatch, evaluate_pymunk):
+    seeds = list(DEV_SEEDS)
+    factory_calls = []
 
-    def factory():
-        nonlocal factory_calls
-        factory_calls += 1
-        return make_controller()
+    def factory(*, task):
+        factory_calls.append(task)
+        return make_controller(task=task)
 
-    combined = research_metrics(
-        {name: task() for name, task in TASKS.items()}, factory, seeds, trace, combined=True
-    )
-    assert factory_calls == combined["episodes"] == 40
-    rates = []
-    for goal, task_factory in TASKS.items():
-        independent = research_metrics({goal: task_factory()}, make_controller, seeds, StringIO())
-        if goal in (INTERCEPTION_GOAL, BOUNCING_INTERCEPTION_GOAL):
-            independent["success_rate"] = independent["capture_rate"]
-        assert combined["tasks"][goal] == independent
-        rates.append(independent["success_rate"])
-    assert combined["aggregate_score"] == sum(rates) / 5
-    episodes = [json.loads(line) for line in trace.getvalue().splitlines()]
-    assert [(item["initial_observation"]["goal"], item["seed"]) for item in episodes] == [
-        (goal, seed) for goal in TASKS for seed in seeds
-    ]
+    monkeypatch.setattr(research_controller, "make_controller", factory)
+    owner_results = tmp_path / "owner"
+    evaluate_tasks(dict.fromkeys(TASKS, seeds), owner_results / "pymunk", workers=1)
+    assert factory_calls == [goal for goal in TASKS for _ in seeds]
+
+    rates = {}
+    for goal in TASKS:
+        independent, independent_trace = evaluate_pymunk(goal, partial(make_controller, task=goal), seeds)
+        task_results = owner_results / "pymunk" / goal
+        assert json.loads((task_results / "summary.json").read_text()) == independent
+        episodes = [json.loads(line) for line in (task_results / "episodes.jsonl").read_text().splitlines()]
+        assert episodes == independent_trace
+        assert [episode["seed"] for episode in episodes] == seeds
+        assert all(episode["steps"][0]["observation"]["goal"] == goal for episode in episodes)
+        rate = "capture_rate" if goal in (INTERCEPTION_GOAL, BOUNCING_INTERCEPTION_GOAL) else "success_rate"
+        rates[goal] = independent[rate]
+
     for goal in (INTERCEPTION_GOAL, "navigation", "rendezvous"):
-        assert 0 < combined["tasks"][goal]["success_rate"] < 1
+        assert 0 < rates[goal] < 1
+
+    dev_tasks = list(DEV_TASK_GROUPS["pymunk"])
+    feedback = publish_feedback(
+        owner_results, tmp_path / "feedback", benchmark="test-pymunk",
+        tasks_by_group={"pymunk": dev_tasks}, seeds=seeds, controller_sha256="",
+        started=monotonic(), retained=None,
+    )
+    assert {goal: task["success_rate"] for goal, task in feedback.summary["tasks"].items()} == {
+        goal: rates[goal] for goal in dev_tasks
+    }
+    assert feedback.summary["aggregate_score"] == sum(rates[goal] for goal in dev_tasks) / len(dev_tasks)
+    assert [(episode["task"], episode["seed"]) for episode in feedback.episodes] == [
+        (goal, seed) for goal in dev_tasks for seed in seeds
+    ]
 
 
-@pytest.mark.parametrize("split", COMBINED_SPLITS)
-def test_combined_metrics_and_traces_match_kinematic_reference(split, monkeypatch, research_metrics):
+@pytest.mark.parametrize("seeds", [list(DEV_SEEDS), list(VALIDATION_SEEDS)], ids=["development", "validation"])
+def test_metrics_and_traces_match_kinematic_reference(seeds, monkeypatch, evaluate_pymunk):
     # Keep the pre-physics integration and sensing as a reference so exact trace
     # equality can be checked on the current platform without large fixtures.
     class KinematicReference:
@@ -189,52 +202,29 @@ def test_combined_metrics_and_traces_match_kinematic_reference(split, monkeypatc
                 robot_max_speed=self.robot_max_speed, goal=self.goal,
             )
 
-    seeds = list(COMBINED_SPLITS[split])
-    actual, reference = StringIO(), StringIO()
-    actual_metrics = research_metrics(
-        {name: task() for name, task in TASKS.items()}, make_controller, seeds, actual, combined=True
-    )
-    monkeypatch.delitem(TASKS, BOUNCING_INTERCEPTION_GOAL)
-    monkeypatch.delitem(TASKS, OBJECT_PUSHING_GOAL)
-    for task_factory in TASKS.values():
-        monkeypatch.setattr(sys.modules[task_factory.__module__], "Simulation", KinematicReference)
-    reference_metrics = research_metrics(
-        {name: task() for name, task in TASKS.items()}, make_controller, seeds, reference, combined=True
-    )
-    assert {goal: actual_metrics["tasks"][goal] for goal in TASKS} == reference_metrics["tasks"]
-    original_episodes = [
-        line for line in actual.getvalue().splitlines(keepends=True)
-        if json.loads(line)["initial_observation"]["goal"] in TASKS
-    ]
-    assert "".join(original_episodes) == reference.getvalue()
+    for goal in (INTERCEPTION_GOAL, "navigation", "rendezvous"):
+        actual = evaluate_pymunk(goal, make_controller, seeds)
+        task_module = sys.modules[TASKS[goal].__module__]
+        with monkeypatch.context() as patch:
+            patch.setattr(task_module, "Simulation", KinematicReference)
+            reference = evaluate_pymunk(goal, make_controller, seeds)
+        assert actual == reference
 
 
-def test_development_and_heldout_seeds_are_disjoint():
-    for splits in [COMBINED_SPLITS, *TASK_SPLITS.values()]:
-        assert set(splits["dev"]).isdisjoint(splits["heldout"])
-    assert list(TASK_SPLITS["interception"]["dev"]) == list(range(32))
-    assert list(TASK_SPLITS["interception"]["heldout"]) == list(range(1000, 1032))
-    assert TASK_SPLITS[OBJECT_PUSHING_GOAL] == COMBINED_SPLITS
-
-
-@pytest.mark.parametrize("task", [*TASKS, "all"])
-def test_cli_can_evaluate_each_task_and_combined(tmp_path, task):
+@pytest.mark.parametrize("task", TASKS)
+def test_single_task_cli_evaluates_each_pymunk_task(tmp_path, task):
     output = tmp_path / task
     result = subprocess.run(
-        [sys.executable, "-m", "worldsmith", "evaluate", "--task", task,
-         "--seed", "0", "--output", str(output)],
+        [sys.executable, "-m", "worldsmith.benchmark.evaluator", "--task", task,
+         "--seed", "0", "--episodes", "1", "--output", str(output)],
         check=True, capture_output=True, text=True,
     )
     summary = json.loads(result.stdout)
-    assert result.stdout == (output / "summary.json").read_text()
+    assert summary == json.loads((output / "summary.json").read_text())
     assert summary["seeds"] == [0]
-    assert summary["episodes"] == (5 if task == "all" else 1)
-    assert "goal" not in summary
-    if task == "all":
-        assert set(summary["tasks"]) == set(TASKS)
-        assert summary["objective"] == {name: task_class.objective for name, task_class in TASKS.items()}
-    else:
-        assert summary["objective"] == TASKS[task].objective
-    episodes = [json.loads(line) for line in (output / "episodes.jsonl").read_text().splitlines()]
-    expected_goals = set(TASKS) if task == "all" else {task}
-    assert {episode["initial_observation"]["goal"] for episode in episodes} == expected_goals
+    assert len(summary["episodes"]) == 1
+    assert summary["objective"] == TASKS[task].objective
+    (line,) = (output / "episodes.jsonl").read_text().splitlines()
+    episode = json.loads(line)
+    assert episode["seed"] == 0
+    assert episode["steps"][0]["observation"]["goal"] == task

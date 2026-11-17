@@ -1,6 +1,4 @@
-import json
 import math
-from io import StringIO
 
 import pytest
 
@@ -45,14 +43,12 @@ def test_seed_varies_target_and_wall_properties():
     assert first["wall_left"]["shapes"][0]["elasticity"] != second["wall_left"]["shapes"][0]["elasticity"]
 
 
-def test_capture_boundary_and_episode_limit(research_metrics):
+def test_capture_boundary_and_episode_limit(evaluate_pymunk):
     task = BouncingInterception()
     assert task.succeeded([{"distance": CAPTURE_RADIUS}])
     assert not task.succeeded([{"distance": CAPTURE_RADIUS + 0.01}])
 
-    trace = StringIO()
-    metrics = research_metrics({"bouncing_interception": task}, lambda: lambda observation: Action(0, 0), [12], trace)
-    assert metrics["capture_rate"] == 0
-    episode = json.loads(trace.getvalue())
+    summary, (episode,) = evaluate_pymunk("bouncing_interception", lambda: lambda observation: Action(0, 0), [12])
+    assert summary["capture_rate"] == 0
     assert not episode["captured"]
-    assert episode["steps"] == task.step_limit
+    assert episode["length"] == task.step_limit
