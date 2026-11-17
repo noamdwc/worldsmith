@@ -1,4 +1,6 @@
-.PHONY: autoresearch autoresearch-maniskill autoresearch-libero autoresearch-robosuite clear-autoresearch colab-status colab-stop
+.PHONY: autoresearch autoresearch-maniskill autoresearch-libero autoresearch-robosuite clear-autoresearch colab-build-envs colab-status colab-stop
+
+SIMULATOR ?= all
 
 autoresearch:
 	@uv run --locked python -m worldsmith.colab run
@@ -17,6 +19,9 @@ colab-status:
 
 colab-stop:
 	@uv run --locked python -m worldsmith.colab stop
+
+colab-build-envs:
+	@uv run --locked python -m worldsmith.colab build-envs "$(SIMULATOR)"
 
 clear-autoresearch:
 	@archive_id=$$(uv run --locked python -m worldsmith.research_lifecycle archive) && \

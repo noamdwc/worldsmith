@@ -68,14 +68,16 @@ class R2:
             self.client.head_bucket(Bucket=self.bucket)
 
     def exists(self, key: str) -> bool:
+        return self.head(key) is not None
+
+    def head(self, key: str) -> dict | None:
         with transfer("cache check"):
             try:
-                self.client.head_object(Bucket=self.bucket, Key=key)
+                return self.client.head_object(Bucket=self.bucket, Key=key)
             except ClientError as error:
                 if error.response["Error"]["Code"] not in {"404", "NotFound", "NoSuchKey"}:
                     raise
-                return False
-        return True
+                return None
 
     def put(self, key: str, source: Path, *, cache: bool = False):
         with transfer("upload"), source.open("rb") as body:
@@ -85,10 +87,12 @@ class R2:
                 if not cache or error.response["Error"]["Code"] != "PreconditionFailed":
                     raise
 
-    def signed_url(self, key: str, *, expires: int, upload: bool = False) -> str:
+    def signed_url(self, key: str, *, expires: int, upload: bool = False, metadata=None) -> str:
         params = {"Bucket": self.bucket, "Key": key}
         if upload:
             params["IfNoneMatch"] = "*"
+            if metadata:
+                params["Metadata"] = metadata
         with transfer("URL signing"):
             return self.client.generate_presigned_url(
                 "put_object" if upload else "get_object", Params=params, ExpiresIn=expires,

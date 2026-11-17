@@ -93,8 +93,10 @@ def dispatch(session, storage, request, code, output, staging, deadline):
         timeout=seconds_remaining(deadline),
     )
     budget = seconds_remaining(deadline)
+    group = next(iter(request["groups"]))
+    environment = REMOTE_PROJECT if group == "pymunk" else f"{REMOTE_PROJECT}/simulation_environments/{group}"
     command = [
-        f"{REMOTE_PROJECT}/.venv/bin/python", "-B", "-m", "worldsmith.colab.remote_job",
+        f"{environment}/.venv/bin/python", "-B", "-m", "worldsmith.colab.remote_job",
         job_id, str(budget),
     ]
     try:

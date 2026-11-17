@@ -1,14 +1,18 @@
 """Exercise the Colab lifecycle and artifact protocol without cloud services."""
 
 import ast
+import base64
 import json
+import runpy
 import shutil
 import signal
 import subprocess
 import tarfile
 from contextlib import nullcontext
+from hashlib import md5
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -17,6 +21,12 @@ from worldsmith import research_lifecycle
 from worldsmith.colab import __main__ as owner
 from worldsmith.colab import backend, packaging, remote_job, session, storage
 from worldsmith.research_mcp import research_mcp
+
+PREPARED_OBJECT = {
+    "Metadata": packaging.VERIFIED_METADATA,
+    "ContentLength": 42,
+    "ETag": f'"{"a" * 32}"',
+}
 
 
 @pytest.fixture
@@ -34,6 +44,9 @@ def fake_cli(tmp_path, monkeypatch):
 
         def exists(self, key):
             return key in objects
+
+        def head(self, key):
+            return PREPARED_OBJECT
 
         def put(self, key, source, *, cache=False):
             assert key not in objects
@@ -85,7 +98,7 @@ def fake_cli(tmp_path, monkeypatch):
     monkeypatch.setattr(session, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(session.ColabSession, "command", command)
     monkeypatch.setattr(session, "R2", Storage)
-    monkeypatch.setattr(packaging, "prepare_wheel", lambda *a, **kw: {"filename": "test.whl", "url": "test"})
+    monkeypatch.setattr(session, "prepare_wheel", lambda *a, **kw: {"filename": "test.whl", "url": "test"})
     monkeypatch.setattr(backend, "R2", Storage)
     monkeypatch.setattr(backend, "RECOVERY_WINDOW_SECONDS", 0)
     monkeypatch.setenv("PYTHONPATH", str(research_lifecycle.ROOT))
@@ -162,11 +175,12 @@ def test_mcp_requires_existing_session(fake_cli, researcher):
     assert fake_cli == ([], {}, [])
 
 
-def test_bootstrap_reuses_wheel_and_independent_cache_keys(tmp_path, monkeypatch):
+def test_candidate_and_simulator_pins_do_not_change_the_worldsmith_wheel(tmp_path, monkeypatch):
     root = tmp_path / "checkout"
     sources = (
-        *packaging.SETUP_FILES, Path("pyproject.toml"), Path("worldsmith/__init__.py"),
+        Path("pyproject.toml"), Path("worldsmith/__init__.py"),
         Path("worldsmith/research_baseline/JOURNAL.md"), Path("autoresearch/controller.py"),
+        packaging.REQUIREMENTS / "pymunk.txt",
     )
     for path in sources:
         (root / path).parent.mkdir(parents=True, exist_ok=True)
@@ -174,22 +188,18 @@ def test_bootstrap_reuses_wheel_and_independent_cache_keys(tmp_path, monkeypatch
     monkeypatch.setattr(packaging, "ROOT", root)
 
     class Cache:
-        def __init__(self):
-            self.objects = set()
-            self.planned = set()
+        key = None
 
         def exists(self, key):
-            return key in self.objects
+            return key == self.key
 
-        def signed_url(self, key, *, expires, upload=False):
-            self.planned.add((key, upload))
+        def signed_url(self, key, *, expires):
             return key
 
         def put(self, key, source, *, cache):
             assert cache and source.read_bytes() == b"wheel"
-            self.objects.add(key)
+            self.key = key
 
-    cache = Cache()
     builds = []
 
     def build(command, **kwargs):
@@ -200,26 +210,187 @@ def test_bootstrap_reuses_wheel_and_independent_cache_keys(tmp_path, monkeypatch
         (source.parent / "worldsmith-0.1.0-py3-none-any.whl").write_bytes(b"wheel")
 
     monkeypatch.setattr(packaging.subprocess, "run", build)
-    archive = tmp_path / "bootstrap.tar.gz"
-    packaging.package_bootstrap(cache, archive, expires=600)
-    assert len(builds) == 1
-    cold = {key for key, upload in cache.planned if upload}
-    assert len(cold) == 6 and all(key.endswith((".tar", ".tar.gz")) for key in cold)
-    cache.objects.update(cold)
-
+    cache = Cache()
+    package = packaging.prepare_wheel(cache, expires=600)
+    keys = packaging.runtime_cache_keys("pymunk")
     (root / "autoresearch/controller.py").write_text("# edited candidate\n")
-    cache.planned.clear()
-    packaging.package_bootstrap(cache, archive, expires=600)
-    assert len(builds) == 1
-    assert cache.planned == {(key, False) for key in cache.objects}
-
     (root / packaging.REQUIREMENTS / "pymunk.txt").write_text("pymunk==7.3.2\n")
-    cache.planned.clear()
-    packaging.package_bootstrap(cache, archive, expires=600)
-    [new_key] = [key for key, upload in cache.planned if upload]
-    assert "/wheels/pymunk/" in new_key
-    assert new_key not in cold
+
+    updated = packaging.runtime_cache_keys("pymunk")
+    assert keys["tools"] == updated["tools"]
+    assert keys["wheelhouses"] != updated["wheelhouses"]
+    assert packaging.prepare_wheel(cache, expires=600) == package
     assert len(builds) == 1
+
+
+def test_research_requires_prepared_caches_before_allocating(fake_cli, monkeypatch):
+    calls, _, _ = fake_cli
+    monkeypatch.setattr(session.R2, "head", lambda self, key: None)
+    monkeypatch.setattr(session, "prepare_wheel", lambda *a, **kw: pytest.fail("built Worldsmith wheel"))
+    with pytest.raises(storage.StorageError, match="Run make colab-build-envs"):
+        session.start_session("pymunk")
+    assert calls == []
+    assert session.tracked_session() is None
+
+
+@pytest.mark.parametrize("selector", ["all", "maniskill"])
+def test_research_bootstrap_has_only_downloads_for_selected_simulators(fake_cli, monkeypatch, selector):
+    initialize = session.initialize
+
+    def check_bootstrap(runtime, archive, *, marker):
+        with tarfile.open(archive) as bundle:
+            config = json.load(bundle.extractfile("setup.json"))
+        assert config["mode"] == "research"
+        assert config["wheel"]
+        expected_wheels = set(packaging.ENVIRONMENT_PYTHONS) if selector == "all" else {"maniskill"}
+        assert set(config["wheelhouses"]) == expected_wheels
+        assert set(config["assets"]) == expected_wheels & {"libero", "maniskill"}
+        for family in ("tools", "wheelhouses", "assets"):
+            assert all("get" in entry and "put" not in entry for entry in config[family].values())
+        initialize(runtime, archive, marker=marker)
+
+    monkeypatch.setattr(session, "initialize", check_bootstrap)
+    session.start_session(selector).stop()
+
+
+@pytest.mark.parametrize("failure", [None, "setup", "interrupt", "missing after success"])
+def test_owner_builds_selected_caches_and_releases_temporary_session(tmp_path, monkeypatch, failure):
+    keys = packaging.runtime_cache_keys("maniskill")
+    tool_key = next(iter(keys["tools"].values()))
+    prepared = {tool_key}
+    actions = []
+
+    class Storage:
+        def check(self):
+            pass
+
+        def head(self, key):
+            return PREPARED_OBJECT if key in prepared else None
+
+        def signed_url(self, key, *, expires, upload=False, metadata=None):
+            assert metadata == (packaging.VERIFIED_METADATA if upload else None)
+            return key
+
+    def command(self, action, *args, **kwargs):
+        assert self.name.startswith("worldsmith-env-")
+        actions.append((action, args))
+
+    def initialize(runtime, archive, *, marker):
+        assert marker == "WORLDSMITH_COLAB_PREPARED"
+        with tarfile.open(archive) as bundle:
+            config = json.load(bundle.extractfile("setup.json"))
+        assert config["mode"] == "prepare"
+        assert "wheel" not in config
+        assert set(config["wheelhouses"]) == {"maniskill"}
+        assert set(config["assets"]) == {"maniskill"}
+        assert next(iter(config["tools"].values()))["get"] == tool_key
+        if failure == "setup":
+            raise session.ColabError("verification failed")
+        if failure == "interrupt":
+            raise SystemExit(130)
+        if failure is None:
+            prepared.update([config["wheelhouses"]["maniskill"]["put"], config["assets"]["maniskill"]["put"]])
+
+    monkeypatch.setattr(session, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(session, "R2", Storage)
+    monkeypatch.setattr(session, "initialize", initialize)
+    monkeypatch.setattr(session.ColabSession, "command", command)
+    monkeypatch.setattr(session, "prepare_wheel", lambda *a, **kw: pytest.fail("built Worldsmith wheel"))
+
+    session.STATE_DIR.mkdir()
+    session.save_session("active-research", ready=True)
+    if failure == "interrupt":
+        with pytest.raises(SystemExit, match="130"):
+            session.build_environments("maniskill")
+    elif failure == "setup":
+        with pytest.raises(session.ColabError, match="verification failed"):
+            session.build_environments("maniskill")
+    elif failure == "missing after success":
+        with pytest.raises(session.ColabError, match="Prepared cache was not found"):
+            session.build_environments("maniskill")
+    else:
+        assert session.build_environments("maniskill") == 0
+        assert session.build_environments("maniskill") == 0
+    assert actions == [("new", ()), ("stop", ())]
+    assert session.tracked_session()["name"] == "active-research"
+
+
+def test_preparation_plan_skips_other_simulators_with_complete_caches():
+    keys = packaging.runtime_cache_keys("all")
+    missing_asset = keys["assets"]["libero"]
+
+    class Storage:
+        def head(self, key):
+            return None if key == missing_asset else PREPARED_OBJECT
+
+        def signed_url(self, key, **kwargs):
+            return key
+
+    config, missing = packaging.plan_runtime(Storage(), "all", prepare=True, expires=600)
+    assert missing == [missing_asset]
+    assert set(config["assets"]) == {"libero"}
+    assert set(config["wheelhouses"]) == {"libero"}
+    assert config["wheelhouses"]["libero"]["get"] == keys["wheelhouses"]["libero"]
+    assert set(config["tools"]) == {packaging.ENVIRONMENT_PYTHONS["libero"]}
+
+
+@pytest.mark.parametrize("prepare", [True, False])
+def test_wheelhouse_installs_offline_before_publication(tmp_path, monkeypatch, prepare):
+    script = runpy.run_path(str(packaging.ROOT / "scripts/setup-colab.py"))
+    install = script["install_environment"]
+    environment = install.__globals__
+    commands = []
+    wheel = "pymunk-example-linux_x86_64.whl"
+
+    def stage(name, *args):
+        commands.append(args)
+        if "wheel" in args:
+            assert "--no-deps" not in args
+            wheelhouse = Path(args[args.index("--wheel-dir") + 1])
+            (wheelhouse / wheel).write_bytes(b"new wheel")
+        if "install" in args:
+            assert "--offline" in args and "--no-index" in args and "--no-deps" in args
+            wheels = Path(args[args.index("--find-links") + 1])
+            assert (wheels / wheel).is_file()
+        if "check" in args:
+            raise RuntimeError("dependency closure is incomplete")
+
+    def restore(cache, bundle, destination):
+        bundle.touch()
+        (destination / wheel).write_bytes(b"cached wheel")
+
+    monkeypatch.setitem(environment, "stage", stage)
+    monkeypatch.setitem(environment, "restore", restore)
+    monkeypatch.setitem(environment, "publish", lambda *a: pytest.fail("published an unverified cache"))
+    argument = {"python": "3.12.13", **({"put": "cache"} if prepare else {"get": "cache"})}
+    tools = {"3.12.13": ("uv", "python")}
+    if prepare:
+        with pytest.raises(RuntimeError, match="closure is incomplete"):
+            install("pymunk", argument, tools, tmp_path, prepare=True)
+        assert any("wheel" in command for command in commands)
+        assert any("check" in command for command in commands)
+    else:
+        install("pymunk", argument, tools, tmp_path, prepare=False)
+        assert all("--offline" in command for command in commands)
+
+
+def test_cache_publication_attaches_the_checksum_and_rejects_a_bad_reply(tmp_path, monkeypatch):
+    script = runpy.run_path(str(packaging.ROOT / "scripts/setup-colab.py"))
+    bundle = tmp_path / "pymunk.tar"
+    bundle.write_bytes(b"verified wheelhouse")
+    digest = md5(bundle.read_bytes(), usedforsecurity=False)
+
+    def upload(request, *, timeout):
+        assert request.get_header("If-none-match") == "*"
+        assert request.get_header("Content-md5") == base64.b64encode(digest.digest()).decode()
+        assert request.get_header("X-amz-meta-worldsmith-verified") == "1"
+        return nullcontext(SimpleNamespace(headers={"ETag": '"different"'}))
+
+    publish = script["publish"]
+    monkeypatch.setitem(publish.__globals__, "urlopen", upload)
+    cache = {"put": "https://example.test/cache", "headers": {"x-amz-meta-worldsmith-verified": "1"}}
+    with pytest.raises(RuntimeError, match="checksum confirmation failed"):
+        publish(cache, bundle)
 
 
 def test_storage_signs_a_single_conditional_put_with_external_credentials(tmp_path, monkeypatch):
@@ -238,6 +409,12 @@ def test_storage_signs_a_single_conditional_put_with_external_credentials(tmp_pa
     assert query["X-Amz-SignedHeaders"] == ["host;if-none-match"]
     assert query["X-Amz-Expires"] == ["500"]
     assert "example-secret" not in url.geturl()
+
+    verified = urlparse(storage.R2().signed_url(
+        "worldsmith/cache/wheels/pymunk/wheelhouse.tar",
+        expires=500, upload=True, metadata=packaging.VERIFIED_METADATA,
+    ))
+    assert parse_qs(verified.query)["X-Amz-SignedHeaders"] == ["host;if-none-match;x-amz-meta-worldsmith-verified"]
 
     monkeypatch.setenv("R2_CREDENTIALS_FILE", str(storage.ROOT / "pyproject.toml"))
     with pytest.raises(storage.StorageError, match="must be outside"):
@@ -425,8 +602,8 @@ def test_failed_initialization_stops_session_without_launching_research(fake_cli
 def test_owner_shutdown_preserves_exit_status(fake_cli, tmp_path, monkeypatch, capsys, status, interrupt, cleanup_fails):
     calls, _, _ = fake_cli
     real_start = owner.start_session
-    def start():
-        runtime = real_start()
+    def start(selector):
+        runtime = real_start(selector)
         if cleanup_fails:
             def fail_stop(self):
                 raise session.ColabError("Could not stop Colab")

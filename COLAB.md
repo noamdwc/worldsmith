@@ -19,16 +19,30 @@ R2_SECRET_ACCESS_KEY=your-secret-access-key
 ```sh
 export R2_CREDENTIALS_FILE="$HOME/.config/colab-utils/r2.env"
 export R2_BUCKET=your-bucket-name
+make colab-build-envs
 make autoresearch
 ```
 
-## Package preparation and startup
+## Prepare simulator environments
 
-The launcher checks R2 before allocating an L4. On a package cache miss, it builds a pure-Python Worldsmith wheel locally with `uv build` and uploads it to R2. The package key hashes the Python source, package data, and build configuration. An existing key skips the local build and upload. The small bootstrap bundle carries setup scripts, pinned dependency lists, and short-lived R2 URLs.
+Run `make colab-build-envs` to prepare all four simulators. Set `SIMULATOR` to `pymunk`, `maniskill`, `libero`, or `robosuite` to prepare one.
 
-Colab verifies Linux x86-64 and uses `nvidia-smi` to check the assigned GPU. It creates fresh Python 3.11 or 3.12 environments and installs the same Worldsmith wheel into each. A cold simulator cache builds or downloads Linux-compatible wheels from the exact pins in [simulation_environments/colab](simulation_environments/colab). A warm cache installs those wheels offline. The wheelhouse keys hash the dependency pins and include the Python version and platform. The Linux pins preserve the direct simulator versions, with CPU builds of the pinned PyTorch releases for the existing CPU simulation settings.
+```sh
+make colab-build-envs SIMULATOR=maniskill
+make autoresearch-maniskill
+```
 
-LIBERO-PRO source and assets use a separate cache keyed by their pinned revisions and checksum list. Colab verifies the pinned data before registering it in the LIBERO environment. The ManiSkill Go2 cache is keyed by the pinned ManiSkill release and its asset ID. R2 caches contain wheel archives and simulator data. Python environments are recreated per session, and candidate snapshots are staged separately for each job. Colab installs the base system prerequisites and runs one smoke episode per simulator before starting the local researcher.
+Preparation starts a temporary Linux x86-64 CPU session only when a required cache is missing. It builds complete wheelhouses from the exact pins in [simulation_environments/colab](simulation_environments/colab), installs each new wheelhouse from its archive with `--no-index`, and checks the installed dependency closure. The Linux pins use CPU builds of the pinned PyTorch releases for the existing simulation settings.
+
+LIBERO-PRO source and assets and the ManiSkill Go2 assets have separate cache keys and verification. Preparation checks the pinned LIBERO-PRO data and the referenced Go2 meshes. It also caches the pinned standalone CPython and uv tools so a fresh research runtime can install offline.
+
+Each verified archive is published with a conditional, checksum-checked R2 upload under `worldsmith/cache/`. Wheelhouse keys include the dependency pins, Python version, and platform. Asset keys include the relevant pinned simulator or asset revisions. The command checks the committed objects and attempts to release the temporary session on success, failure, or interruption. A later invocation skips completed caches. If an object at a prepared key is invalid, remove the named object before rerunning preparation. The verified cache keys differ from the earlier startup-built cache keys.
+
+## Start AutoResearch
+
+Research startup checks for the required prepared caches before allocating an L4. A missing cache reports the affected artifacts and directs the owner to `make colab-build-envs`. The launcher separately builds the pure-Python Worldsmith wheel locally with `uv build` when its source and build configuration are absent from the package cache.
+
+The L4 runtime uses the base system libraries from the Colab image and downloads the prepared tooling, wheelhouses, and assets from R2. It checks the downloaded archives, creates fresh Python environments, installs the pinned wheels offline, and runs one smoke episode per selected simulator. The bootstrap carries read-only cache URLs. Candidate snapshots are staged separately for each job.
 
 `make colab-status` reports the tracked runtime and its availability. `make colab-stop` releases it and can be repeated. If automatic cleanup fails, the tracked name is retained for manual cleanup. After a force kill during allocation, also inspect `colab sessions` for assignments the CLI may have created.
 
@@ -53,14 +67,15 @@ If execution fails, times out, or loses its reply, the local server checks the o
 
 ## Manual verification
 
-With the environment variables above set, run the following from the repository root. This exercises the existing MCP evaluation handler twice on one L4 while keeping the editable research workspace untouched. Select `all` in place of `navigation` to run the full development benchmark twice.
+With the environment variables above set, run the following from the repository root. This exercises the existing MCP evaluation handler twice on one L4 while keeping the editable research workspace untouched. To run the full development benchmark twice, prepare all environments, start the session with `start all`, and set `WORLDSMITH_RESEARCH_SUITE=all`.
 
 ```sh
+make colab-build-envs SIMULATOR=pymunk
 (
     set -e
     export WORLDSMITH_RESEARCH_WORKSPACE="$(mktemp -d)"
     cp worldsmith/research_baseline/controller.py "$WORLDSMITH_RESEARCH_WORKSPACE/controller.py"
-    uv run --locked python -m worldsmith.colab start
+    uv run --locked python -m worldsmith.colab start pymunk
     trap 'make colab-stop' EXIT
     make colab-status
     export WORLDSMITH_EVALUATION_BACKEND=colab
@@ -80,4 +95,4 @@ make colab-status
 
 Check that the status calls inside the subshell show the same session and that the final call reports no tracked runtime. The two calls should produce different job IDs with the same seed list and score for the same candidate. After stopping Colab, use the R2 dashboard to download `output/artifacts.tar.gz` for both jobs and check for each `output/completed.json`. Run `make autoresearch` to verify startup and shutdown with the actual Codex MCP connection.
 
-Repeat the start and stop with the same checkout and R2 bucket to verify a warm start. The existing package, wheelhouse, and asset keys under `worldsmith/cache/` should be reused. The startup history should show offline simulator installs and smoke episodes in the new runtime.
+Repeat `make colab-build-envs SIMULATOR=pymunk` to verify that the prepared caches are reused without allocating another CPU session. Repeat the research start and stop to verify that the new L4 session uses the same cache keys and installs offline.

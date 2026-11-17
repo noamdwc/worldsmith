@@ -9,7 +9,10 @@ from contextlib import suppress
 
 from worldsmith.research_lifecycle import ROOT
 
-from .session import ColabError, ColabSession, session_lock, start_session, stop_after_run, tracked_session
+from .packaging import ENVIRONMENT_PYTHONS
+from .session import (
+    ColabError, ColabSession, build_environments, session_lock, start_session, stop_after_run, tracked_session,
+)
 from .storage import StorageError
 
 
@@ -25,7 +28,7 @@ def run_research(suite: str) -> int:
     if backend == "local":
         return subprocess.call([str(ROOT / "scripts/run-autoresearch.sh"), suite], env=env)
 
-    session = start_session()
+    session = start_session(suite)
     status = 1
     try:
         env["WORLDSMITH_COLAB_SESSION"] = session.name
@@ -60,8 +63,11 @@ def run_research(suite: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subcommands = parser.add_subparsers(dest="action", required=True)
-    for action in ("start", "status", "stop"):
+    for action in ("status", "stop"):
         subcommands.add_parser(action)
+    for action in ("start", "build-envs"):
+        command = subcommands.add_parser(action)
+        command.add_argument("simulator", nargs="?", default="all", choices=("all", *ENVIRONMENT_PYTHONS))
     run = subcommands.add_parser("run")
     run.add_argument("suite", nargs="?", default="all", choices=("all", "maniskill", "libero", "robosuite"))
     args = parser.parse_args()
@@ -71,8 +77,10 @@ def main() -> int:
     try:
         if args.action == "run":
             return run_research(args.suite)
+        if args.action == "build-envs":
+            return build_environments(args.simulator)
         if args.action == "start":
-            start_session()
+            start_session(args.simulator)
         elif args.action == "status":
             state = tracked_session()
             if state is None:
