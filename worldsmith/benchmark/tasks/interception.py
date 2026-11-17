@@ -11,7 +11,6 @@ from worldsmith.api import INTERCEPTION_GOAL, Action, Observation
 from worldsmith.benchmark.simulation import Entity, Simulation
 
 BENCHMARK = "interception-v2"
-SPLITS = {"dev": range(32), "heldout": range(1000, 1032)}
 CAPTURE_RADIUS = 0.3
 TARGET_NOISE = 0.12
 

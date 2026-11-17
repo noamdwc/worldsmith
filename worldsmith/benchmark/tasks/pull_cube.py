@@ -2,7 +2,7 @@
 
 from functools import partial
 
-from worldsmith.benchmark.maniskill_adapter import open_maniskill
+from worldsmith.benchmark.adapters.maniskill_adapter import open_maniskill
 from worldsmith.benchmark.tasks.push_cube import PushController
 
 

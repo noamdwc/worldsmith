@@ -4,5 +4,5 @@ __pycache__/
 /runs/
 /autoresearch/runs/
 /research-history/
-/libero/source/
-/libero/config/
+/simulation_environments/libero/source/
+/simulation_environments/libero/config/

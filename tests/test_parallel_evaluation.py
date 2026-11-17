@@ -220,8 +220,7 @@ def test_parallel_rejects_unpicklable_factory(tmp_path):
 
 @pytest.mark.parametrize("cli", [
     ["worldsmith.benchmark.evaluator"],
-    ["worldsmith", "evaluate"],
-    ["worldsmith.owner_evaluation", "pymunk", "unused"],
+    ["worldsmith.evaluation.owner_evaluation", "pymunk", "unused"],
 ])
 def test_cli_rejects_zero_workers(cli):
     extra = ["--task", "interception", "--output", "unused"] if "pymunk" not in cli else []
@@ -231,19 +230,6 @@ def test_cli_rejects_zero_workers(cli):
     )
     assert result.returncode == 2
     assert "worker count must be a positive integer" in result.stderr
-
-
-def test_legacy_cli_parallel_preserves_heldout_split_and_trace(tmp_path):
-    for workers in (1, 2):
-        subprocess.run(
-            [sys.executable, "-m", "worldsmith", "evaluate", "--task", "all", "--split", "heldout",
-             "--workers", str(workers), "--output", str(tmp_path / str(workers))],
-            check=True, stdout=subprocess.DEVNULL, timeout=30,
-        )
-    for name in ("summary.json", "episodes.jsonl"):
-        assert (tmp_path / "1" / name).read_bytes() == (tmp_path / "2" / name).read_bytes()
-    summary = json.loads((tmp_path / "2/summary.json").read_text())
-    assert summary["seeds"] == list(range(1000, 1008))
 
 
 @pytest.mark.parametrize("expanded", [False, True])
@@ -257,7 +243,7 @@ def test_research_cli_parallel_uses_owner_seed_file(tmp_path, expanded):
     seed_file.write_text(json.dumps(starts))
     output = tmp_path / "owner"
     subprocess.run(
-        [sys.executable, "-B", "-m", "worldsmith.owner_evaluation", "pymunk", str(output),
+        [sys.executable, "-B", "-m", "worldsmith.evaluation.owner_evaluation", "pymunk", str(output),
          "--heldout-seed-file", str(seed_file), "--workers", "2"],
         check=True, timeout=30,
     )

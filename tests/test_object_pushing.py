@@ -1,14 +1,12 @@
-import json
 import math
 from dataclasses import asdict
-from io import StringIO
 
 import pytest
 
 from autoresearch.controller import make_controller
 from worldsmith.api import OBJECT_PUSHING_GOAL, Action
 from worldsmith.benchmark.simulation import TIME_STEP
-from worldsmith.benchmark.tasks.constants import COMBINED_SPLITS
+from worldsmith.benchmark.task_catalog import DEV_SEEDS
 from worldsmith.benchmark.tasks.object_pushing import (
     DESTINATION_RADIUS, SETTLED_SPEED, SETTLE_STEPS, ObjectPushing,
 )
@@ -99,17 +97,13 @@ def test_scene_varies_across_seeds_and_exposes_only_position_measurements():
     }
 
 
-def test_successful_starter_episodes_move_and_settle_via_contact(research_metrics):
-    trace = StringIO()
-    task = ObjectPushing()
-    metrics = research_metrics(
-        {OBJECT_PUSHING_GOAL: task}, make_controller, list(COMBINED_SPLITS["dev"]), trace
-    )
-    assert 0 < metrics["success_rate"] < 1
-    for line in trace.getvalue().splitlines():
-        episode = json.loads(line)
+def test_successful_starter_episodes_move_and_settle_via_contact(evaluate_pymunk):
+    summary, episodes = evaluate_pymunk(OBJECT_PUSHING_GOAL, make_controller, list(DEV_SEEDS))
+    assert 0 < summary["success_rate"] < 1
+    for episode in episodes:
         if episode["success"]:
             assert episode["contact_seconds"] > 0
-            for frame in episode["frames"][-SETTLE_STEPS:]:
-                assert frame["object_distance"] <= DESTINATION_RADIUS
-                assert frame["object_speed"] <= SETTLED_SPEED
+            for step in episode["steps"][-SETTLE_STEPS:]:
+                measurements = step["info"]["measurements"]
+                assert measurements["object_distance"] <= DESTINATION_RADIUS
+                assert measurements["object_speed"] <= SETTLED_SPEED

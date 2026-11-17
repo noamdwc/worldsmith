@@ -9,7 +9,7 @@ from time import monotonic
 import pytest
 
 from worldsmith import research_lifecycle
-from worldsmith.research_mcp import research_mcp
+from worldsmith.research_mcp import evaluation_io, research_mcp
 from worldsmith.benchmark.task_catalog import DEV_SEEDS, TASK_GROUPS, VALIDATION_ONLY_TASKS, VALIDATION_SEEDS
 from worldsmith.research_feedback import publish_feedback
 
@@ -23,7 +23,7 @@ def workspace(tmp_path, monkeypatch):
     shutil.copyfile(research_lifecycle.BASELINE / "controller.py", workspace / "controller.py")
     monkeypatch.setattr(research_mcp, "WORKSPACE", workspace)
     monkeypatch.setattr(research_mcp, "SUITE", "all")
-    monkeypatch.setattr(research_mcp, "WORKER_OVERRIDE", None)
+    monkeypatch.setattr(evaluation_io, "WORKER_OVERRIDE", None)
     monkeypatch.setattr(research_mcp, "OWNER_RUNS", tmp_path / "owner")
     monkeypatch.setattr(research_mcp, "latest_feedback", None)
     monkeypatch.setattr(research_mcp, "retained_summary", None)
@@ -45,7 +45,7 @@ def native_workers(workspace, monkeypatch):
             self.after_pymunk = None
 
         def run(self, command, *, cwd, **kwargs):
-            if "worldsmith.research_evaluation" not in command:
+            if "worldsmith.evaluation.research_evaluation" not in command:
                 return RUN(command, cwd=cwd, **kwargs)
             output = Path(command[4])
             group = output.name
@@ -104,13 +104,13 @@ def native_workers(workspace, monkeypatch):
             return subprocess.CompletedProcess(command, 0)
 
     worker = Worker()
-    monkeypatch.setattr(research_mcp, "run_group_process", worker.run)
+    monkeypatch.setattr(evaluation_io, "run_group_process", worker.run)
     return worker
 
 
 @pytest.mark.parametrize("workers", [None, 3])
 def test_full_suite_snapshot_scoring_and_public_feedback(workspace, native_workers, monkeypatch, workers):
-    monkeypatch.setattr(research_mcp, "WORKER_OVERRIDE", workers)
+    monkeypatch.setattr(evaluation_io, "WORKER_OVERRIDE", workers)
     source = '''from worldsmith.api import Action
 
 def make_controller(*, task):
@@ -236,14 +236,36 @@ def test_arm_suite_dispatch_and_public_feedback(
 
 
 def test_per_task_changes_use_retained_run(workspace, native_workers):
+    controller = workspace / "controller.py"
+    starter = controller.read_text()
+    native_workers.successes = 6
     baseline = research_mcp.evaluate_controller()
+
+    controller.write_text(starter + "\n# improved candidate\n")
+    native_workers.successes = 8
+    improved = research_mcp.evaluate_controller()
+    assert improved["aggregate_score"] > baseline["aggregate_score"]
+    assert improved["retained_controller_snapshot_sha256"] == baseline["controller_snapshot_sha256"]
+    assert improved["tasks"]["push_cube"]["success_rate_change"] == 0.25
+
+    controller.write_text(starter + "\n# tied candidate\n")
+    tie = research_mcp.evaluate_controller()
+    assert tie["aggregate_score"] == improved["aggregate_score"]
+    assert tie["tasks"]["push_cube"]["success_rate_change"] == 0
+
+    controller.write_text(starter + "\n# weaker candidate\n")
     native_workers.successes = 6
     weaker = research_mcp.evaluate_controller()
-    tie = research_mcp.evaluate_controller()
-    assert weaker["aggregate_score"] < baseline["aggregate_score"]
-    assert weaker["retained_aggregate_score"] == tie["retained_aggregate_score"] == baseline["aggregate_score"]
-    assert tie["tasks"]["push_cube"]["success_rate_change"] == -0.25
-    assert tie["tasks"]["interception"]["success_rate_change"] == 0
+    assert weaker["aggregate_score"] < improved["aggregate_score"]
+    assert weaker["tasks"]["push_cube"]["success_rate_change"] == -0.25
+    assert weaker["tasks"]["interception"]["success_rate_change"] == 0
+
+    assert len({run["controller_snapshot_sha256"] for run in (baseline, improved, tie, weaker)}) == 4
+    retained = improved["controller_snapshot_sha256"]
+    for run in (tie, weaker):
+        assert run["retained_controller_snapshot_sha256"] == retained
+        assert run["retained_aggregate_score"] == improved["aggregate_score"]
+    assert research_mcp.retained_summary["controller_snapshot_sha256"] == retained
 
 
 def test_feedback_refuses_incomplete_or_heldout_results(workspace, native_workers, tmp_path):
@@ -309,7 +331,7 @@ def test_failed_task_keeps_previous_feedback_and_diagnostics_private(workspace, 
             raise subprocess.TimeoutExpired(command, timeout)
         return subprocess.CompletedProcess(command, 1)
 
-    monkeypatch.setattr(research_mcp, "run_group_process", fail)
+    monkeypatch.setattr(evaluation_io, "run_group_process", fail)
     with pytest.raises(RuntimeError, match="while evaluating push_cube") as failure:
         research_mcp.evaluate_controller()
     assert research_mcp.latest_feedback is previous_feedback
@@ -369,7 +391,7 @@ def test_interrupted_evaluation_keeps_snapshot(workspace, monkeypatch):
     def interrupt(*args, **kwargs):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(research_mcp, "run_group_process", interrupt)
+    monkeypatch.setattr(evaluation_io, "run_group_process", interrupt)
     with pytest.raises(KeyboardInterrupt):
         research_mcp.evaluate_controller()
     [run] = (workspace / "runs").iterdir()
@@ -392,7 +414,7 @@ with open(sys.argv[1], "w") as lock:
 """
     group = "import subprocess, sys; subprocess.run([sys.executable, '-c', *sys.argv[1:]], check=True)"
     with pytest.raises(subprocess.TimeoutExpired):
-        research_mcp.run_group_process(
+        evaluation_io.run_group_process(
             [sys.executable, "-c", group, descendant, str(lock)], timeout=2,
         )
     assert lock.read_text() == "ready"

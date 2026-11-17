@@ -8,7 +8,7 @@ def _load(module_name: str, *args):
     return import_module(module_name).evaluation_setup(*args)
 
 
-_PYMUNK = "worldsmith.benchmark.pymunk_adapter"
+_PYMUNK = "worldsmith.benchmark.adapters.pymunk_adapter"
 _MANISKILL_TASKS = {
     "push_cube": partial(_load, "worldsmith.benchmark.tasks.push_cube"),
     "pick_cube": partial(_load, "worldsmith.benchmark.tasks.pick_cube"),
@@ -27,14 +27,14 @@ _PYMUNK_TASKS = {
     "object_pushing": partial(_load, _PYMUNK, "object_pushing"),
 }
 
-_LIBERO = "worldsmith.benchmark.libero_adapter"
+_LIBERO = "worldsmith.benchmark.adapters.libero_adapter"
 _LIBERO_TASKS = {
     "open_middle_drawer": partial(_load, _LIBERO, "open_middle_drawer"),
     "place_bowl_on_plate": partial(_load, _LIBERO, "place_bowl_on_plate"),
     "place_two_items_in_basket": partial(_load, _LIBERO, "place_two_items_in_basket"),
 }
 
-_ROBOSUITE = "worldsmith.benchmark.robosuite_adapter"
+_ROBOSUITE = "worldsmith.benchmark.adapters.robosuite_adapter"
 _ROBOSUITE_TASKS = {
     "open_latched_door": partial(_load, _ROBOSUITE, "open_latched_door"),
     "assemble_nuts": partial(_load, _ROBOSUITE, "assemble_nuts"),

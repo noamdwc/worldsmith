@@ -3,7 +3,7 @@
 import argparse
 import json
 import platform
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from functools import partial
 from importlib import import_module
 from pathlib import Path
@@ -35,24 +35,6 @@ def evaluate_episodes(
     episodes = (run_scored_episode(adapter, controller_factory, seed, task) for seed in seeds)
     rows, scores = record_episodes(episodes, record)
     return TaskEvaluation(rows, adapter.summarize(scores))
-
-
-def evaluate(
-    tasks: Mapping[str, EvaluationAdapter],
-    controller_factory: ControllerFactory,
-    seeds: list[int],
-    record: Callable[[dict, dict], None],
-    *,
-    summarize: Callable[[dict[str, TaskEvaluation]], dict] | None = None,
-) -> dict:
-    """Evaluate open adapters in task order, with a shared factory and seed set.
-
-    Return the task results directly or pass them to the supplied summary policy.
-    """
-    results = {}
-    for name, adapter in tasks.items():
-        results[name] = evaluate_episodes(adapter, controller_factory, seeds, record, task=name)
-    return results if summarize is None else summarize(results)
 
 
 def evaluate_task(

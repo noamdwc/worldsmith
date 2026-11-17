@@ -7,7 +7,7 @@ import pytest
 
 from worldsmith.api import INTERCEPTION_GOAL, Action
 from worldsmith.benchmark.evaluator import evaluate_to_directory
-from worldsmith.benchmark.pymunk_adapter import PymunkAdapter
+from worldsmith.benchmark.adapters.pymunk_adapter import PymunkAdapter
 from worldsmith.benchmark.simulation import Entity, PhysicalEntity, Simulation
 from worldsmith.benchmark.tasks.interception import Chase, Interception
 from worldsmith.research_feedback import public_episode

@@ -8,7 +8,7 @@ import pytest
 from scipy.spatial.transform import Rotation
 
 from worldsmith.benchmark.evaluator import evaluate_episodes
-from worldsmith.benchmark.libero_adapter import INSTALL, SOURCE, SOURCE_REVISION, idle
+from worldsmith.benchmark.adapters.libero_adapter import INSTALL, SOURCE, SOURCE_REVISION, idle
 from worldsmith.benchmark.runner import InvalidAction
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
 from worldsmith.research_feedback import public_episode
