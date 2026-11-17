@@ -20,7 +20,7 @@ from worldsmith.benchmark.task_catalog import DEV_SEEDS, DEV_TASK_GROUPS, VALIDA
 from worldsmith.benchmark.tasks.constants import TASKS
 from worldsmith.benchmark.tasks.navigation import COLLISION_DISTANCE, Navigation
 from worldsmith.benchmark.tasks.rendezvous import HOLD_STEPS, TRACKING_RADIUS, Rendezvous
-from worldsmith.research_evaluation import evaluate_tasks
+from worldsmith.evaluation.evaluation_utils import evaluate_tasks
 from worldsmith.research_feedback import publish_feedback
 
 

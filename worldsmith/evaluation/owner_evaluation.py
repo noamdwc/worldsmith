@@ -8,7 +8,7 @@ from worldsmith.benchmark.evaluator import worker_count
 from worldsmith.benchmark.task_catalog import (
     DEFAULT_WORKERS, DEV_SEEDS, DEV_TASK_GROUPS, TASK_GROUPS, VALIDATION_SEEDS,
 )
-from worldsmith.research_evaluation import evaluate_tasks
+from worldsmith.evaluation.evaluation_utils import evaluate_tasks
 
 LEGACY_HELDOUT_GROUPS = ("pymunk", "maniskill")
 EXPANSION_TASKS = {"roll_ball", "quadruped_reach", "wipe_table"}

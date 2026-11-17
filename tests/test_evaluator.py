@@ -7,11 +7,11 @@ from functools import partial
 import pytest
 
 from autoresearch import controller as research_controller
-from worldsmith import owner_evaluation
+from worldsmith.evaluation import owner_evaluation
 from worldsmith.benchmark import evaluator
 from worldsmith.benchmark.evaluator import evaluate_to_directory, main
 from worldsmith.benchmark.task_catalog import DEV_TASK_GROUPS, TASK_CATALOG, TASK_GROUPS
-from worldsmith.research_evaluation import evaluate_tasks
+from worldsmith.evaluation.evaluation_utils import evaluate_tasks
 
 
 class CounterAdapter:

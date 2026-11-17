@@ -220,7 +220,7 @@ def test_parallel_rejects_unpicklable_factory(tmp_path):
 
 @pytest.mark.parametrize("cli", [
     ["worldsmith.benchmark.evaluator"],
-    ["worldsmith.owner_evaluation", "pymunk", "unused"],
+    ["worldsmith.evaluation.owner_evaluation", "pymunk", "unused"],
 ])
 def test_cli_rejects_zero_workers(cli):
     extra = ["--task", "interception", "--output", "unused"] if "pymunk" not in cli else []
@@ -243,7 +243,7 @@ def test_research_cli_parallel_uses_owner_seed_file(tmp_path, expanded):
     seed_file.write_text(json.dumps(starts))
     output = tmp_path / "owner"
     subprocess.run(
-        [sys.executable, "-B", "-m", "worldsmith.owner_evaluation", "pymunk", str(output),
+        [sys.executable, "-B", "-m", "worldsmith.evaluation.owner_evaluation", "pymunk", str(output),
          "--heldout-seed-file", str(seed_file), "--workers", "2"],
         check=True, timeout=30,
     )

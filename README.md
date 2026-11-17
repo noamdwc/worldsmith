@@ -62,9 +62,9 @@ output="$repo/runs/validation/$selected_run"
 (
   cd "$repo/runs/owner/$selected_run/code" || exit 1
   export PYTHONPATH="$repo"
-  "$repo/.venv/bin/python" -B -m worldsmith.owner_evaluation pymunk "$output/pymunk" --validation || exit 1
+  "$repo/.venv/bin/python" -B -m worldsmith.evaluation.owner_evaluation pymunk "$output/pymunk" --validation || exit 1
   for group in maniskill libero robosuite; do
-    "$repo/$group/.venv/bin/python" -B -m worldsmith.owner_evaluation "$group" "$output/$group" --validation || exit 1
+    "$repo/$group/.venv/bin/python" -B -m worldsmith.evaluation.owner_evaluation "$group" "$output/$group" --validation || exit 1
   done
 )
 ```

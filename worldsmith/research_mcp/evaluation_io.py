@@ -67,7 +67,7 @@ def run_group(
     log = output.parent.parent / f"{group}-stderr.txt"
     with log.open("w", encoding="utf-8") as stderr:
         result = run_group_process(
-            [python, "-B", "-m", "worldsmith.research_evaluation", str(output),
+            [python, "-B", "-m", "worldsmith.evaluation.research_evaluation", str(output),
              "--workers", str(workers), "--tasks", *tasks, "--seeds", *map(str, seeds)],
             cwd=code,
             env={**os.environ, "PYTHONPATH": str(ROOT)},

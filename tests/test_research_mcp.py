@@ -45,7 +45,7 @@ def native_workers(workspace, monkeypatch):
             self.after_pymunk = None
 
         def run(self, command, *, cwd, **kwargs):
-            if "worldsmith.research_evaluation" not in command:
+            if "worldsmith.evaluation.research_evaluation" not in command:
                 return RUN(command, cwd=cwd, **kwargs)
             output = Path(command[4])
             group = output.name

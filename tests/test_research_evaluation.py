@@ -7,7 +7,7 @@ from time import monotonic
 
 import pytest
 
-from worldsmith import owner_evaluation
+from worldsmith.evaluation import owner_evaluation
 from worldsmith.benchmark.task_catalog import (
     DEV_SEEDS, TASK_CATALOG, TASK_GROUPS, VALIDATION_ONLY_TASKS, VALIDATION_SEEDS,
 )
@@ -82,14 +82,14 @@ def test_runner_uses_selected_snapshot_and_seeds(tmp_path, validation):
     )
     output = tmp_path / "raw/pymunk"
     if validation:
-        command = ["worldsmith.owner_evaluation", "pymunk", str(output), "--validation"]
+        command = ["worldsmith.evaluation.owner_evaluation", "pymunk", str(output), "--validation"]
         tasks = list(TASK_GROUPS["pymunk"])
         seeds = list(VALIDATION_SEEDS)
     else:
         tasks = ["rendezvous", "interception"]
         seeds = [12, 2]
         command = [
-            "worldsmith.research_evaluation", str(output), "--workers", "2",
+            "worldsmith.evaluation.research_evaluation", str(output), "--workers", "2",
             "--tasks", *tasks, "--seeds", *map(str, seeds),
         ]
     subprocess.run(
@@ -125,7 +125,7 @@ def test_validation_only_task_is_still_available_for_direct_execution(tmp_path):
     task = "rendezvous"
     output = tmp_path / "debug"
     result = subprocess.run(
-        [sys.executable, "-m", "worldsmith.owner_evaluation", "pymunk", str(output), "--task", task],
+        [sys.executable, "-m", "worldsmith.evaluation.owner_evaluation", "pymunk", str(output), "--task", task],
         capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 2
