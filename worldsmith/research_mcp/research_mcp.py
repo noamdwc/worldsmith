@@ -66,7 +66,7 @@ def evaluate_controller() -> dict[str, object]:
             python = Path(sys.executable)
             if group != "pymunk":
                 variable = f"WORLDSMITH_{group.upper()}_PYTHON"
-                python = Path(os.environ.get(variable, ROOT / group / ".venv/bin/python")).expanduser()
+                python = Path(os.environ.get(variable, ROOT / "simulation_environments" / group / ".venv/bin/python")).expanduser()
                 if not python.is_absolute() or not os.access(python, os.X_OK):
                     raise EvaluationFailure("Evaluation environment is unavailable") from ValueError(
                         f"Set {variable} to the absolute path of the pinned interpreter"

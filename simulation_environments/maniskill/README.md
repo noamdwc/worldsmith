@@ -9,14 +9,14 @@ brew install molten-vk vulkan-loader
 export VK_ICD_FILENAMES="$(brew --prefix molten-vk)/etc/vulkan/icd.d/MoltenVK_icd.json"
 export DYLD_LIBRARY_PATH="$(brew --prefix vulkan-loader)/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
-uv sync --project maniskill --locked --python 3.11
-uv run --project maniskill --locked --python 3.11 python -m mani_skill.utils.download_asset unitree_go2 -y
+uv sync --project simulation_environments/maniskill --locked --python 3.11
+uv run --project simulation_environments/maniskill --locked --python 3.11 python -m mani_skill.utils.download_asset unitree_go2 -y
 ```
 
 Keep the Vulkan exports in the shell used for testing or launching research.
 
 ```sh
-maniskill/.venv/bin/python -m pytest -q \
+simulation_environments/maniskill/.venv/bin/python -m pytest -q \
   tests/maniskill_push_cube.py tests/maniskill_manipulation.py tests/maniskill_diversity.py
 make autoresearch-maniskill
 ```

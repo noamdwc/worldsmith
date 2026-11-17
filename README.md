@@ -11,7 +11,7 @@ uv sync --locked
 uv run --locked python -m pytest
 ```
 
-The other simulators use separate environments. Follow their setup guides to install the runtime and run its opt-in tests. [ManiSkill](maniskill/README.md) · [LIBERO-PRO](libero/README.md) · [Robosuite](robosuite/README.md)
+The other simulators use separate environments. Follow their setup guides to install the runtime and run its opt-in tests. [ManiSkill](simulation_environments/maniskill/README.md) · [LIBERO-PRO](simulation_environments/libero/README.md) · [Robosuite](simulation_environments/robosuite/README.md)
 
 For single-task debugging, use the task's pinned interpreter and an explicit seed and episode count.
 
@@ -24,7 +24,7 @@ Supply a different zero-argument controller factory with `--controller module:fa
 
 ## AutoResearch
 
-With all four environments set up, run `make autoresearch` from the repository root. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for one simulator. Pymunk uses the root interpreter. The server defaults to `<simulator>/.venv/bin/python` for the other simulators. Set `WORLDSMITH_MANISKILL_PYTHON`, `WORLDSMITH_LIBERO_PYTHON`, or `WORLDSMITH_ROBOSUITE_PYTHON` to an absolute path to override it.
+With all four environments set up, run `make autoresearch` from the repository root. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for one simulator. Pymunk uses the root interpreter. The server defaults to `simulation_environments/<simulator>/.venv/bin/python` for the other simulators. Set `WORLDSMITH_MANISKILL_PYTHON`, `WORLDSMITH_LIBERO_PYTHON`, or `WORLDSMITH_ROBOSUITE_PYTHON` to an absolute path to override it.
 
 The launcher starts from the clean starter, runs the research session, archives it under `research-history/`, and restores the starter after success. If Codex exits with an error, the archive and workspace are both kept. After closing a session and waiting for evaluations to finish, use `make clear-autoresearch` to archive and reset the workspace manually.
 
@@ -64,7 +64,7 @@ output="$repo/runs/validation/$selected_run"
   export PYTHONPATH="$repo"
   "$repo/.venv/bin/python" -B -m worldsmith.evaluation.owner_evaluation pymunk "$output/pymunk" --validation || exit 1
   for group in maniskill libero robosuite; do
-    "$repo/$group/.venv/bin/python" -B -m worldsmith.evaluation.owner_evaluation "$group" "$output/$group" --validation || exit 1
+    "$repo/simulation_environments/$group/.venv/bin/python" -B -m worldsmith.evaluation.owner_evaluation "$group" "$output/$group" --validation || exit 1
   done
 )
 ```
