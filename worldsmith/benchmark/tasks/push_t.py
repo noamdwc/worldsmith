@@ -4,7 +4,7 @@ from functools import partial
 
 import numpy as np
 
-from worldsmith.benchmark.maniskill_adapter import open_maniskill
+from worldsmith.benchmark.adapters.maniskill_adapter import open_maniskill
 
 
 class PushTController:

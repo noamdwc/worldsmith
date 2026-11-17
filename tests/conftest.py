@@ -10,7 +10,7 @@ import pytest
 @pytest.fixture
 def evaluate_pymunk(tmp_path_factory):
     from worldsmith.benchmark.evaluator import evaluate_seeds_to_directory
-    from worldsmith.benchmark.pymunk_adapter import open_pymunk
+    from worldsmith.benchmark.adapters.pymunk_adapter import open_pymunk
 
     def run(task, factory, seeds):
         output = tmp_path_factory.mktemp(task) / "results"

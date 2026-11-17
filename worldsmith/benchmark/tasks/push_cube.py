@@ -4,7 +4,7 @@ from functools import partial
 
 import numpy as np
 
-from worldsmith.benchmark.maniskill_adapter import make_env as make_maniskill_env, open_maniskill
+from worldsmith.benchmark.adapters.maniskill_adapter import make_env as make_maniskill_env, open_maniskill
 
 TASK_ID = "PushCube-v1"
 ROBOT = "panda"
