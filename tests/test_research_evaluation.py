@@ -78,15 +78,20 @@ def test_runner_uses_selected_snapshot_and_seeds(tmp_path, validation):
         assert first_step["action"]["throttle"] == 0.125
 
     if not validation:
-        feedback = publish_feedback(
-            output.parent, tmp_path / "public", benchmark="explicit-inputs",
-            tasks_by_group={"pymunk": tasks}, seeds=seeds,
-            controller_sha256="", started=monotonic(), retained=None,
+        # A missing source directory also verifies that rejection precedes reads.
+        owner_results = tmp_path / "missing"
+        public = tmp_path / "public"
+        feedback_args = dict(
+            benchmark="explicit-inputs", controller_sha256="", started=monotonic(), retained=None,
         )
-        assert list(feedback.summary["tasks"]) == tasks
-        assert [(row["task"], row["seed"]) for row in feedback.episodes] == [
-            (task, seed) for task in tasks for seed in seeds
-        ]
+        with pytest.raises(ValueError, match="validation-only tasks"):
+            publish_feedback(owner_results, public, tasks_by_group={"pymunk": tasks}, seeds=[2], **feedback_args)
+        with pytest.raises(ValueError, match="requires development seeds"):
+            publish_feedback(
+                owner_results, public, tasks_by_group={"pymunk": ["interception"]}, seeds=seeds, **feedback_args,
+            )
+        assert not public.exists()
+        assert not public.with_suffix(".tmp").exists()
 
 
 def test_validation_only_task_is_still_available_for_direct_execution(tmp_path):

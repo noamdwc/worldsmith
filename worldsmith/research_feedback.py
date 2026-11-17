@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
 
+from worldsmith.benchmark.task_catalog import DEV_SEEDS, VALIDATION_ONLY_TASKS
+
 CONTROLLER = "autoresearch.controller:make_controller"
 TASK_METRICS = {
     "interception": ("captures", "capture_rate", "mean_closest_distance"),
@@ -92,6 +94,11 @@ def publish_feedback(
     started: float,
     retained: dict | None,
 ) -> ResearchFeedback:
+    if any(not VALIDATION_ONLY_TASKS.isdisjoint(tasks) for tasks in tasks_by_group.values()):
+        raise ValueError("Research feedback cannot include validation-only tasks")
+    if any(seed not in DEV_SEEDS for seed in seeds):
+        raise ValueError("Research feedback requires development seeds")
+
     tasks = {}
     episodes = []
     episode_indices = {}
