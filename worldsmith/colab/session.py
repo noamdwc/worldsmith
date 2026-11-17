@@ -78,15 +78,14 @@ class ColabSession:
             if f"Session '{self.name}' not found" in result.stdout or "appears to be lost" in result.stdout:
                 raise ColabError("Colab session disappeared or is unavailable")
             if action == "new":
-                runtime = "L4" if args else "CPU"
-                raise ColabError(f"Colab {runtime} allocation failed. Check CLI authentication and quota")
+                raise ColabError("Colab L4 allocation failed. Check CLI authentication and L4 quota")
             raise ColabError(f"Colab {action} failed for {self.name}")
         return result.stdout
 
     def execute(self, code: str, *, timeout: int) -> str:
         return self.command("exec", "--timeout", str(timeout), timeout=timeout + 15, code=code)
 
-    def allocate(self, *, gpu: bool = True):
+    def allocate(self):
         # Let the CLI record the assignment before cleanup handles a signal.
         interrupted = None
 
@@ -96,8 +95,7 @@ class ColabSession:
 
         previous = {sig: signal.signal(sig, remember) for sig in (signal.SIGINT, signal.SIGTERM)}
         try:
-            accelerator = ("--gpu", "L4") if gpu else ()
-            self.command("new", *accelerator, timeout=180)
+            self.command("new", "--gpu", "L4", timeout=180)
         finally:
             for sig, handler in previous.items():
                 signal.signal(sig, handler)
@@ -153,7 +151,7 @@ def build_environments(selector: str) -> int:
             package_bootstrap(config, archive)
             try:
                 print(f"Starting temporary Colab session {session.name}", flush=True)
-                session.allocate(gpu=False)
+                session.allocate()
                 initialize(session, archive, marker="WORLDSMITH_COLAB_PREPARED")
                 for key in missing:
                     if prepared_etag(storage, key) is None:

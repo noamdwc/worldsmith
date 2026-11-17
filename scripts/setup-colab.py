@@ -217,23 +217,22 @@ def main():
     if sys.platform != "linux" or platform.machine() != "x86_64":
         raise RuntimeError("Worldsmith requires a Linux x86-64 Colab VM")
 
+    print("WORLDSMITH_SETUP NVIDIA L4 verification", flush=True)
+    gpus = subprocess.check_output(
+        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True,
+    ).strip().splitlines()
+    if not gpus or any(gpu not in {"NVIDIA L4", "Tesla L4"} for gpu in gpus):
+        print("WORLDSMITH_SETUP GPU mismatch (expected NVIDIA L4)", flush=True)
+        raise RuntimeError(f"Expected NVIDIA L4, got {gpus!r}")
+
     prepare = config["mode"] == "prepare"
-    if prepare:
-        if any("put" in cache for cache in config["wheelhouses"].values()):
-            os.environ["DEBIAN_FRONTEND"] = "noninteractive"
-            stage("Linux build package index", "apt-get", "update", "-qq")
-            stage(
-                "Linux wheel build dependencies", "apt-get", "install", "-y", "-qq",
-                "build-essential", "linux-libc-dev",
-            )
-    else:
-        print("WORLDSMITH_SETUP NVIDIA L4 verification", flush=True)
-        gpus = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True,
-        ).strip().splitlines()
-        if not gpus or any(gpu not in {"NVIDIA L4", "Tesla L4"} for gpu in gpus):
-            print("WORLDSMITH_SETUP GPU mismatch (expected NVIDIA L4)", flush=True)
-            raise RuntimeError(f"Expected NVIDIA L4, got {gpus!r}")
+    if prepare and any("put" in cache for cache in config["wheelhouses"].values()):
+        os.environ["DEBIAN_FRONTEND"] = "noninteractive"
+        stage("Linux build package index", "apt-get", "update", "-qq")
+        stage(
+            "Linux wheel build dependencies", "apt-get", "install", "-y", "-qq",
+            "build-essential", "linux-libc-dev",
+        )
 
     with TemporaryDirectory() as temporary:
         staging = Path(temporary)

@@ -16,6 +16,7 @@ from worldsmith.research_lifecycle import ROOT
 from .storage import StorageError
 
 CACHE_PREFIX = "worldsmith/cache"
+RUNTIME_CACHE_TARGET = "colab-linux-x86_64-l4-cuda"
 REQUIREMENTS = Path("simulation_environments/colab")
 LIBERO = Path("simulation_environments/libero")
 ENVIRONMENT_PYTHONS = {
@@ -64,11 +65,11 @@ def runtime_cache_keys(selector: str) -> dict:
     keys = {"tools": {}, "wheelhouses": {}, "assets": {}}
     for group in groups:
         python_version = ENVIRONMENT_PYTHONS[group]
-        tool_digest = sha256(f"toolchain-v1-linux-x86_64\0{UV_VERSION}\0{python_version}".encode()).hexdigest()
+        tool_digest = sha256(f"toolchain-v1-{RUNTIME_CACHE_TARGET}\0{UV_VERSION}\0{python_version}".encode()).hexdigest()
         keys["tools"][python_version] = f"{CACHE_PREFIX}/tools/{tool_digest}.tar.gz"
         digest = content_key(
             [REQUIREMENTS / f"{group}.txt"],
-            format_id=f"wheelhouse-v2-colab-linux-x86_64-cp{python_version}",
+            format_id=f"wheelhouse-v2-{RUNTIME_CACHE_TARGET}-cp{python_version}",
         )
         keys["wheelhouses"][group] = f"{CACHE_PREFIX}/wheels/{group}/{digest}.tar"
 
@@ -77,10 +78,12 @@ def runtime_cache_keys(selector: str) -> dict:
             line for line in (ROOT / REQUIREMENTS / "maniskill.txt").read_text().splitlines()
             if line.startswith("mani-skill-nightly==")
         )
-        digest = sha256(f"go2-assets-v2\0{maniskill_pin}\0unitree_go2".encode()).hexdigest()
+        digest = sha256(f"go2-assets-v2-{RUNTIME_CACHE_TARGET}\0{maniskill_pin}\0unitree_go2".encode()).hexdigest()
         keys["assets"]["maniskill"] = f"{CACHE_PREFIX}/assets/maniskill/{digest}.tar.gz"
     if "libero" in groups:
-        digest = content_key([LIBERO / "setup.sh", LIBERO / "assets.sha256"], format_id="libero-assets-v2")
+        digest = content_key(
+            [LIBERO / "setup.sh", LIBERO / "assets.sha256"], format_id=f"libero-assets-v2-{RUNTIME_CACHE_TARGET}",
+        )
         keys["assets"]["libero"] = f"{CACHE_PREFIX}/assets/libero/{digest}.tar.gz"
     return keys
 

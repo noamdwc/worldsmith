@@ -32,11 +32,11 @@ make colab-build-envs SIMULATOR=maniskill
 make autoresearch-maniskill
 ```
 
-Preparation starts a temporary Linux x86-64 CPU session only when a required cache is missing. It builds complete wheelhouses from the exact pins in [simulation_environments/colab](simulation_environments/colab), installs each new wheelhouse from its archive with `--no-index`, and checks the installed dependency closure. The Linux pins use CPU builds of the pinned PyTorch releases for the existing simulation settings.
+Preparation starts a temporary Linux x86-64 Colab L4 session only when a required cache is missing. It verifies the NVIDIA L4 before building or validating environments. It builds complete wheelhouses from the exact pins in [simulation_environments/colab](simulation_environments/colab), installs each new wheelhouse from its archive with `--no-index`, and checks the installed dependency closure. The Linux pins use CPU builds of the pinned PyTorch releases for the existing simulation settings.
 
 LIBERO-PRO source and assets and the ManiSkill Go2 assets have separate cache keys and verification. Preparation checks the pinned LIBERO-PRO data and the referenced Go2 meshes. It also caches the pinned standalone CPython and uv tools so a fresh research runtime can install offline.
 
-Each verified archive is published with a conditional, checksum-checked R2 upload under `worldsmith/cache/`. Wheelhouse keys include the dependency pins, Python version, and platform. Asset keys include the relevant pinned simulator or asset revisions. The command checks the committed objects and attempts to release the temporary session on success, failure, or interruption. A later invocation skips completed caches. If an object at a prepared key is invalid, remove the named object before rerunning preparation. The verified cache keys differ from the earlier startup-built cache keys.
+Each verified archive is published with a conditional, checksum-checked R2 upload under `worldsmith/cache/`. Prepared cache keys include the Colab Linux x86-64 L4/CUDA target. Wheelhouse keys also include the dependency pins and Python version, and asset keys include the relevant pinned simulator or asset revisions. The command checks the committed objects and attempts to release the temporary session on success, failure, or interruption. A later invocation skips completed caches. If an object at a prepared key is invalid, remove the named object before rerunning preparation. Run preparation once to populate the L4-specific keys.
 
 ## Start AutoResearch
 
@@ -95,4 +95,4 @@ make colab-status
 
 Check that the status calls inside the subshell show the same session and that the final call reports no tracked runtime. The two calls should produce different job IDs with the same seed list and score for the same candidate. After stopping Colab, use the R2 dashboard to download `output/artifacts.tar.gz` for both jobs and check for each `output/completed.json`. Run `make autoresearch` to verify startup and shutdown with the actual Codex MCP connection.
 
-Repeat `make colab-build-envs SIMULATOR=pymunk` to verify that the prepared caches are reused without allocating another CPU session. Repeat the research start and stop to verify that the new L4 session uses the same cache keys and installs offline.
+Repeat `make colab-build-envs SIMULATOR=pymunk` to verify that the prepared caches are reused without allocating another preparation session. Repeat the research start and stop to verify that the new L4 session uses the same cache keys and installs offline.

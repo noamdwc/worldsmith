@@ -311,8 +311,36 @@ def test_owner_builds_selected_caches_and_releases_temporary_session(tmp_path, m
     else:
         assert session.build_environments("maniskill") == 0
         assert session.build_environments("maniskill") == 0
-    assert actions == [("new", ()), ("stop", ())]
+    assert actions == [("new", ("--gpu", "L4")), ("stop", ())]
     assert session.tracked_session()["name"] == "active-research"
+
+
+@pytest.mark.parametrize("mode", ["prepare", "research"])
+@pytest.mark.parametrize("gpu", ["", "NVIDIA T4\n"])
+def test_colab_rejects_unsupported_gpu_before_environment_work(tmp_path, monkeypatch, mode, gpu):
+    main = runpy.run_path(str(packaging.ROOT / "scripts/setup-colab.py"))["main"]
+    (tmp_path / "setup.json").write_text(json.dumps({
+        "mode": mode, "wheelhouses": {"pymunk": {"put": "cache"}},
+    }))
+    globals_ = main.__globals__
+    monkeypatch.setitem(globals_, "ROOT", tmp_path)
+    monkeypatch.setitem(globals_, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setitem(globals_, "platform", SimpleNamespace(machine=lambda: "x86_64"))
+    monkeypatch.setitem(globals_, "subprocess", SimpleNamespace(check_output=lambda *a, **kw: gpu))
+    monkeypatch.setitem(globals_, "stage", lambda *a: pytest.fail("started build commands before GPU check"))
+    monkeypatch.setitem(globals_, "install_tools", lambda *a, **kw: pytest.fail("started installing tools"))
+
+    with pytest.raises(RuntimeError, match="Expected NVIDIA L4"):
+        main()
+
+
+def test_runtime_cache_families_depend_on_the_l4_cuda_target(monkeypatch):
+    assert packaging.RUNTIME_CACHE_TARGET == "colab-linux-x86_64-l4-cuda"
+    l4_keys = packaging.runtime_cache_keys("all")
+    monkeypatch.setattr(packaging, "RUNTIME_CACHE_TARGET", "colab-linux-x86_64-cpu")
+    cpu_keys = packaging.runtime_cache_keys("all")
+    for family, entries in l4_keys.items():
+        assert set(entries.values()).isdisjoint(cpu_keys[family].values())
 
 
 def test_preparation_plan_skips_other_simulators_with_complete_caches():
