@@ -69,6 +69,8 @@ def open_logged_adapter(directory, mode="normal"):
     try:
         yield LoggedAdapter(directory, mode)
     finally:
+        if mode == "slow-close":
+            sleep(1.2)
         (directory / f"closed-{pid}").touch()
 
 
@@ -107,6 +109,16 @@ def test_parallel_seed_order_scores_and_worker_reuse(tmp_path):
     assert pids[0] != pids[1] and set(pids) == {pids[0], pids[1]}
     assert len(list(log.glob("open-*"))) == 2
     assert {file.name for file in log.glob("closed-*")} == {f"closed-{pid}" for pid in pids}
+
+
+def test_completed_evaluation_waits_for_slow_adapter_shutdown(tmp_path):
+    output = tmp_path / "evaluation"
+    log = tmp_path / "workers"
+    summary = evaluate_to_directory(
+        partial(open_logged_adapter, log, "slow-close"), make_controller, 2, 7, output, workers=2,
+    )
+    assert summary["seeds"] == [7, 8]
+    assert len(list(log.glob("closed-*"))) == 2
 
 
 def test_worker_crash_aborts_wait_and_reaps_other_workers(tmp_path):

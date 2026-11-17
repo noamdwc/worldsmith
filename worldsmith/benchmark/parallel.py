@@ -66,22 +66,22 @@ def _receive(connection, sentinels, task):
     raise WorkerFailure(f"{task}: {process.name} exited unexpectedly (status {process.exitcode})")
 
 
-def _stop_workers(processes, connections):
+def _stop_workers(processes, connections, *, grace_seconds):
     for connection in connections:
         connection.close()
     # Idle workers close their adapters on EOF. A stalled native call must not
     # hold up failure or interrupt handling, and the grace period is shared.
-    deadline = monotonic() + 1
+    deadline = monotonic() + grace_seconds
     for process in processes:
         process.join(max(0, deadline - monotonic()))
-    failed = []
     for process in processes:
         if process.is_alive():
             process.kill()
-        if process.exitcode != 0:
-            failed.append(process.name)
+    failed = []
     for process in processes:
         process.join()
+        if process.exitcode != 0:
+            failed.append(f"{process.name}, exit status {process.exitcode}")
         process.close()
     return failed
 
@@ -91,6 +91,7 @@ def evaluate_parallel(open_adapter, factory, seeds, record, *, task, workers):
     count = min(workers, len(seeds))
     connections = []
     processes = []
+    cleanup_grace_seconds = 1
     # Owner CLIs can be stopped with SIGTERM as well as Ctrl-C. Respect an
     # embedding application's signal handler if it has installed one.
     handle_sigterm = (
@@ -135,9 +136,11 @@ def evaluate_parallel(open_adapter, factory, seeds, record, *, task, workers):
         last = connections[(len(seeds) - 1) % count]
         last.send(("summarize", scores))
         metrics, metadata = _receive(last, sentinels, task)
+        # Native libraries can take longer to exit after a completed run.
+        cleanup_grace_seconds = 5
     finally:
         try:
-            failed = _stop_workers(processes, connections)
+            failed = _stop_workers(processes, connections, grace_seconds=cleanup_grace_seconds)
         finally:
             if handle_sigterm:
                 signal.signal(signal.SIGTERM, signal.SIG_DFL)

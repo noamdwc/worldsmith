@@ -201,7 +201,8 @@ def install_assets(assets, pythons, staging, *, prepare):
                 )
             else:
                 restore(cache, bundle, directory)
-            verify_go2(directory)
+            # ManiSkill adds a data/ directory under MS_ASSET_DIR.
+            verify_go2(directory / "data")
         else:
             directory = LIBERO / "source"
             os.environ["WORLDSMITH_LIBERO_INSTALL"] = str(LIBERO)

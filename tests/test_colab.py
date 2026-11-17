@@ -394,6 +394,30 @@ def test_tool_preparation_uses_uv_directly_from_the_wheel(tmp_path, monkeypatch)
     assert Path(tools[version][0]).read_bytes() == b"uv executable"
 
 
+def test_maniskill_preparation_publishes_assets_under_the_data_directory(tmp_path, monkeypatch):
+    install = runpy.run_path(str(packaging.ROOT / "scripts/setup-colab.py"))["install_assets"]
+    monkeypatch.setenv("MS_ASSET_DIR", str(tmp_path))
+    staging = tmp_path / "staging"
+    staging.mkdir()
+
+    def download(label, *command):
+        assert label == "ManiSkill Go2 asset download"
+        urdf = tmp_path / "maniskill-assets/data/robots/unitree_go2/urdf"
+        urdf.mkdir(parents=True)
+        for name in ("go2_description.urdf", "go2_description_simplified_locomotion.urdf"):
+            (urdf / name).write_text('<robot><mesh filename="foot.stl"/></robot>')
+        (urdf / "foot.stl").touch()
+
+    def publish(cache, bundle):
+        with tarfile.open(bundle) as archive:
+            assert "data/robots/unitree_go2/urdf/foot.stl" in archive.getnames()
+
+    monkeypatch.setitem(install.__globals__, "ROOT", tmp_path)
+    monkeypatch.setitem(install.__globals__, "stage", download)
+    monkeypatch.setitem(install.__globals__, "publish", publish)
+    install({"maniskill": {"put": "cache"}}, {"maniskill": "python"}, staging, prepare=True)
+
+
 @pytest.mark.parametrize("prepare", [True, False])
 def test_wheelhouse_installs_offline_before_publication(tmp_path, monkeypatch, prepare):
     script = runpy.run_path(str(packaging.ROOT / "scripts/setup-colab.py"))

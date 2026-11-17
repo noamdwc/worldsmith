@@ -119,6 +119,8 @@ def open_libero(task):
     # Set before the first native import, including for direct evaluator invocations.
     os.environ["MUJOCO_GL"] = "disable"
     os.environ["LIBERO_CONFIG_PATH"] = str(INSTALL / "config")
+    # The Colab kernel selects an inline backend unavailable in this environment.
+    os.environ["MPLBACKEND"] = "Agg"
     os.environ.setdefault("MPLCONFIGDIR", str(INSTALL / "config"))
     from libero.libero import get_libero_path
     from libero.libero.benchmark import get_benchmark
