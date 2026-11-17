@@ -6,7 +6,6 @@ import re
 import signal
 import subprocess
 import sys
-import tarfile
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,6 +13,7 @@ from uuid import uuid4
 
 from worldsmith.research_lifecycle import ROOT
 
+from .packaging import package_bootstrap
 from .storage import R2
 
 STATE_DIR = ROOT / "runs" / "colab"
@@ -71,6 +71,8 @@ class ColabSession:
             raise ColabError("Google Colab CLI is unavailable. Install google-colab-cli") from None
         except subprocess.TimeoutExpired:
             raise ColabError(f"Colab {action} timed out") from None
+        except OSError:
+            raise ColabError(f"Could not invoke Colab {action}") from None
         # Avoid forwarding raw CLI logs, which may include OAuth or proxy tokens.
         if result.returncode:
             if f"Session '{self.name}' not found" in result.stdout or "appears to be lost" in result.stdout:
@@ -113,43 +115,31 @@ class ColabSession:
         (STATE_DIR / "session.json").unlink(missing_ok=True)
 
 
-def package_project(archive_path: Path):
-    # Include new runtime source files from the working tree, without uploading
-    # candidate code, caches, simulator assets, or local configuration.
-    paths = subprocess.check_output(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--",
-         "worldsmith/*.py", "scripts/setup-colab.py", "pyproject.toml", "uv.lock",
-         "simulation_environments/*/pyproject.toml", "simulation_environments/libero/setup.sh",
-         "simulation_environments/libero/assets.sha256"],
-        cwd=ROOT,
-    ).decode().split("\0")
-    with tarfile.open(archive_path, "w:gz", dereference=False) as archive:
-        for name in paths:
-            path = ROOT / name
-            if name and path.is_file() and not path.is_symlink():
-                archive.add(path, arcname=name, recursive=False)
-
-
 def start_session() -> ColabSession:
     with session_lock("lifecycle"):
         if tracked_session() is not None:
             raise ColabError("A Colab session is already tracked. Inspect it with make colab-status")
-        R2().check()
+        storage = R2()
+        storage.check()
         session = ColabSession(f"worldsmith-{uuid4().hex[:12]}")
         with TemporaryDirectory() as temporary:
-            archive = Path(temporary) / "worldsmith.tar.gz"
-            package_project(archive)
+            archive = Path(temporary) / "bootstrap.tar.gz"
+            try:
+                package_bootstrap(storage, archive, expires=SETUP_TIMEOUT * 2)
+            except subprocess.CalledProcessError:
+                raise ColabError("Could not build the local Worldsmith wheel") from None
             save_session(session.name, ready=False)
             try:
                 print(f"Starting Colab L4 session {session.name}", flush=True)
                 session.allocate()
-                session.command("upload", str(archive), "/content/worldsmith.tar.gz")
+                session.command("upload", str(archive), "/content/bootstrap.tar.gz")
                 output = session.execute(
                     "import runpy, tarfile\n"
                     "from pathlib import Path\n"
                     f"Path({REMOTE_PROJECT!r}).mkdir()\n"
-                    "with tarfile.open('/content/worldsmith.tar.gz') as archive:\n"
+                    "with tarfile.open('/content/bootstrap.tar.gz') as archive:\n"
                     f"    archive.extractall({REMOTE_PROJECT!r}, filter='data')\n"
+                    "Path('/content/bootstrap.tar.gz').unlink()\n"
                     f"runpy.run_path({(REMOTE_PROJECT + '/scripts/setup-colab.py')!r}, run_name='__main__')\n",
                     timeout=SETUP_TIMEOUT,
                 )

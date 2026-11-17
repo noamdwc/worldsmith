@@ -1,41 +1,57 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")"
-source_revision=eafdb809426b13153aa1e4c42d6601844217dfec
-data_revision=c86fc3b8293185a6f373677018ff3e37f8391602
-if [ ! -d source/.git ]; then
-    git init -q source
-fi
-if ! git -C source rev-parse --verify HEAD >/dev/null 2>&1; then
-    git -C source fetch --depth 1 https://github.com/Zxy-MLlab/LIBERO-PRO.git "$source_revision"
-    git -C source checkout --detach FETCH_HEAD
-fi
-if [ "$(git -C source rev-parse HEAD)" != "$source_revision" ]; then
-    printf 'Expected LIBERO-PRO source at %s\n' "$source_revision" >&2
-    exit 1
-fi
-case "$(uname -s)" in
-    Linux)
-        # The checked-in lock targets Apple Silicon. Keep the same direct pins on Linux.
-        uv venv --python 3.11
-        uv pip install --python .venv/bin/python -r pyproject.toml
-        ;;
-    *) uv sync --locked --python 3.11 ;;
-esac
 root="$(pwd -P)"
-cd source/libero/libero
-while read -r _ path; do
-    if [ ! -f "$path" ]; then
-        mkdir -p "$(dirname "$path")"
-        curl -fsSL --retry 2 "https://huggingface.co/datasets/zhouxueyang/LIBERO-Pro/resolve/$data_revision/$path" -o "$path.download"
-        mv "$path.download" "$path"
+mode=${1:-all}
+case "$mode" in
+    all|--assets-only|--configure) ;;
+    *) printf 'Usage: %s [--assets-only|--configure]\n' "$0" >&2; exit 2 ;;
+esac
+
+if [ "$mode" != --configure ]; then
+    source_revision=eafdb809426b13153aa1e4c42d6601844217dfec
+    data_revision=c86fc3b8293185a6f373677018ff3e37f8391602
+    if [ ! -d source/.git ]; then
+        git init -q source
     fi
-done < "$root/assets.sha256"
+    if ! git -C source rev-parse --verify HEAD >/dev/null 2>&1; then
+        git -C source fetch --depth 1 https://github.com/Zxy-MLlab/LIBERO-PRO.git "$source_revision"
+        git -C source checkout --detach FETCH_HEAD
+    fi
+    if [ "$(git -C source rev-parse HEAD)" != "$source_revision" ]; then
+        printf 'Expected LIBERO-PRO source at %s\n' "$source_revision" >&2
+        exit 1
+    fi
+    cd source/libero/libero
+    while read -r _ path; do
+        if [ ! -f "$path" ]; then
+            mkdir -p "$(dirname "$path")"
+            curl -fsSL --retry 2 "https://huggingface.co/datasets/zhouxueyang/LIBERO-Pro/resolve/$data_revision/$path" -o "$path.download"
+            mv "$path.download" "$path"
+        fi
+    done < "$root/assets.sha256"
+else
+    cd source/libero/libero
+fi
+
 case "$(uname -s)" in
     Linux) sha256sum -c "$root/assets.sha256" ;;
     *) shasum -a 256 -c "$root/assets.sha256" ;;
 esac
 cd "$root"
+
+case "$mode" in
+    --assets-only) exit 0 ;;
+    all)
+        case "$(uname -s)" in
+            Linux)
+                uv venv --python 3.11
+                uv pip install --python .venv/bin/python -r pyproject.toml
+                ;;
+            *) uv sync --locked --python 3.11 ;;
+        esac
+        ;;
+esac
 mkdir -p config
 .venv/bin/python - <<'PY'
 from pathlib import Path

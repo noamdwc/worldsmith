@@ -12,11 +12,11 @@ from tempfile import TemporaryDirectory
 from time import monotonic
 from urllib.request import Request, urlopen
 
-from worldsmith.research_lifecycle import ROOT
 from worldsmith.research_mcp.evaluation_io import group_command, run_group_process, snapshot_hash
 
 UPLOAD_FAILED = 10
 SESSION_BUSY = 11
+JOB_ALREADY_STARTED = 12
 
 
 def regular_tar_member(member, destination):
@@ -25,12 +25,12 @@ def regular_tar_member(member, destination):
     return tarfile.data_filter(member, destination)
 
 
-def evaluate(request, code: Path, artifacts: Path, deadline: float):
+def evaluate(request, code: Path, artifacts: Path, deadline: float, runtime: Path):
     digest = request["controller_sha256"]
     if snapshot_hash(code) != digest:
         return {"status": "snapshot_changed"}
     for group, settings in request["groups"].items():
-        environment = ROOT if group == "pymunk" else ROOT / "simulation_environments" / group
+        environment = runtime if group == "pymunk" else runtime / "simulation_environments" / group
         output = artifacts / "results" / group
         command = group_command(
             str(environment / ".venv/bin/python"), output,
@@ -39,7 +39,11 @@ def evaluate(request, code: Path, artifacts: Path, deadline: float):
         with (artifacts / f"{group}-stderr.txt").open("w") as log:
             try:
                 result = run_group_process(
-                    command, cwd=code, env={**os.environ, "PYTHONPATH": str(ROOT)},
+                    command, cwd=code, env={
+                        **os.environ,
+                        "WORLDSMITH_LIBERO_INSTALL": str(runtime / "simulation_environments/libero"),
+                        "MS_ASSET_DIR": str(runtime / "maniskill-assets"),
+                    },
                     stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                     timeout=max(0, deadline - monotonic()),
                 )
@@ -57,13 +61,16 @@ def evaluate(request, code: Path, artifacts: Path, deadline: float):
 def run_job(job_id: str, budget: float, staging: Path) -> int:
     config = staging / f"{job_id}.json"
     candidate = staging / f"{job_id}.tar.gz"
-    try:
-        with (staging / "worldsmith-evaluation.lock").open("a") as lock:
+    with (staging / "worldsmith-evaluation.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return SESSION_BUSY
+        try:
             try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return SESSION_BUSY
-
+                (staging / f"{job_id}.started").touch(exist_ok=False)
+            except FileExistsError:
+                return JOB_ALREADY_STARTED
             deadline = monotonic() + budget
             dispatch = json.loads(config.read_text())
             config.unlink()
@@ -77,8 +84,9 @@ def run_job(job_id: str, budget: float, staging: Path) -> int:
 
                 artifacts = directory / "artifacts"
                 artifacts.mkdir()
-                outcome = evaluate(dispatch["request"], code, artifacts, deadline)
-                (artifacts / "manifest.json").write_text(json.dumps({"job_id": job_id, **outcome}))
+                request = dispatch["request"]
+                outcome = evaluate(request, code, artifacts, deadline, Path.cwd())
+                (artifacts / "manifest.json").write_text(json.dumps({**request, **outcome}))
                 bundle = directory / "output.tar.gz"
                 with tarfile.open(bundle, "w:gz") as archive:
                     archive.add(artifacts, arcname=".")
@@ -93,9 +101,9 @@ def run_job(job_id: str, budget: float, staging: Path) -> int:
                         pass
                 except (OSError, HTTPException):
                     return UPLOAD_FAILED
-    finally:
-        config.unlink(missing_ok=True)
-        candidate.unlink(missing_ok=True)
+        finally:
+            config.unlink(missing_ok=True)
+            candidate.unlink(missing_ok=True)
     return 0
 
 

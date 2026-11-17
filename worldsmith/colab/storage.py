@@ -1,4 +1,4 @@
-"""Local R2 access. Colab gets a short-lived PUT URL for one job object."""
+"""Local R2 access and short-lived, object-specific URLs for Colab."""
 
 import os
 import re
@@ -15,6 +15,10 @@ PREFIX = "worldsmith/evaluations"
 
 
 class StorageError(RuntimeError):
+    pass
+
+
+class ObjectMissing(StorageError):
     pass
 
 
@@ -63,20 +67,41 @@ class R2:
         with transfer("bucket check"):
             self.client.head_bucket(Bucket=self.bucket)
 
-    def put(self, key: str, source: Path):
-        with transfer("upload"), source.open("rb") as body:
-            self.client.put_object(Bucket=self.bucket, Key=key, Body=body, IfNoneMatch="*")
+    def exists(self, key: str) -> bool:
+        with transfer("cache check"):
+            try:
+                self.client.head_object(Bucket=self.bucket, Key=key)
+            except ClientError as error:
+                if error.response["Error"]["Code"] not in {"404", "NotFound", "NoSuchKey"}:
+                    raise
+                return False
+        return True
 
-    def output_url(self, key: str, *, expires: int) -> str:
-        with transfer("output signing"):
+    def put(self, key: str, source: Path, *, cache: bool = False):
+        with transfer("upload"), source.open("rb") as body:
+            try:
+                self.client.put_object(Bucket=self.bucket, Key=key, Body=body, IfNoneMatch="*")
+            except ClientError as error:
+                if not cache or error.response["Error"]["Code"] != "PreconditionFailed":
+                    raise
+
+    def signed_url(self, key: str, *, expires: int, upload: bool = False) -> str:
+        params = {"Bucket": self.bucket, "Key": key}
+        if upload:
+            params["IfNoneMatch"] = "*"
+        with transfer("URL signing"):
             return self.client.generate_presigned_url(
-                "put_object", Params={"Bucket": self.bucket, "Key": key, "IfNoneMatch": "*"},
-                ExpiresIn=expires,
+                "put_object" if upload else "get_object", Params=params, ExpiresIn=expires,
             )
 
     def download(self, key: str, destination: Path):
         with transfer("download"):
-            response = self.client.get_object(Bucket=self.bucket, Key=key)
+            try:
+                response = self.client.get_object(Bucket=self.bucket, Key=key)
+            except ClientError as error:
+                if error.response["Error"]["Code"] in {"NoSuchKey", "404"}:
+                    raise ObjectMissing("R2 has no artifact bundle for this job") from None
+                raise
             with response["Body"] as body, destination.open("wb") as file:
                 for chunk in body.iter_chunks(chunk_size=1024 * 1024):
                     file.write(chunk)

@@ -10,7 +10,10 @@ from pathlib import Path
 
 from worldsmith.benchmark.runner import InvalidAction
 
-INSTALL = Path(__file__).resolve().parents[3] / "simulation_environments" / "libero"
+INSTALL = Path(os.environ.get(
+    "WORLDSMITH_LIBERO_INSTALL",
+    Path(__file__).resolve().parents[3] / "simulation_environments" / "libero",
+))
 SOURCE = INSTALL / "source"
 SOURCE_REVISION = "eafdb809426b13153aa1e4c42d6601844217dfec"
 DATA_REVISION = "c86fc3b8293185a6f373677018ff3e37f8391602"

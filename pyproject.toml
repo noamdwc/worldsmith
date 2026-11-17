@@ -2,18 +2,32 @@
 name = "worldsmith"
 version = "0.1.0"
 description = "A small robotics experimentation harness"
-requires-python = ">=3.12"
-dependencies = [
+requires-python = ">=3.11"
+
+[dependency-groups]
+local = [
     "boto3>=1.40,<2",
     "mcp>=1.20,<2",
     "numpy>=2.4.6",
     "pymunk>=7.3.1",
 ]
-
-[dependency-groups]
 dev = [
     "pytest>=9.2.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["worldsmith*"]
+
+[tool.setuptools.package-data]
+"worldsmith.research_baseline" = ["JOURNAL.md"]
+
+[tool.uv]
+package = false
+default-groups = ["local", "dev"]

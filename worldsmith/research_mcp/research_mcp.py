@@ -2,6 +2,7 @@
 
 import os
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from time import monotonic
 from traceback import format_exc
@@ -81,16 +82,18 @@ def evaluate_controller() -> dict[str, object]:
         backend = os.environ.get("WORLDSMITH_EVALUATION_BACKEND", "local")
         settings = {"tasks_by_group": tasks_by_group, "seeds": seeds, "digest": digest}
         if backend == "colab":
-            run_colab(run_id, code, owner_results, deadline, **settings)
+            evaluation = run_colab(run_id, code, owner_results, deadline, **settings)
         elif backend == "local":
             run_local(code, owner_results, deadline, **settings)
+            evaluation = nullcontext()
         else:
             raise EvaluationFailure("WORLDSMITH_EVALUATION_BACKEND must be local or colab")
-        feedback = publish_feedback(
-            owner_results, output / "results", benchmark=benchmark, tasks_by_group=tasks_by_group,
-            seeds=seeds, controller_sha256=digest,
-            started=started, retained=retained_summary,
-        )
+        with evaluation as confirm:
+            feedback = publish_feedback(
+                owner_results, output / "results", benchmark=benchmark, tasks_by_group=tasks_by_group,
+                seeds=seeds, controller_sha256=digest,
+                started=started, retained=retained_summary, confirm=confirm,
+            )
     except EvaluationTimeout as exc:
         (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
         message = f"Evaluation timed out after {timeout} seconds{exc}"
