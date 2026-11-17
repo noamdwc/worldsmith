@@ -28,6 +28,20 @@ With all four environments set up, run `make autoresearch` from the repository r
 
 The launcher starts from the clean starter, runs the research session, archives it under `research-history/`, and restores the starter after success. If Codex exits with an error, the archive and workspace are both kept. After closing a session and waiting for evaluations to finish, use `make clear-autoresearch` to archive and reset the workspace manually.
 
+### Manual sessions
+
+Run these commands from the repository root. For a single-task session, the owner sets `WORLDSMITH_RESEARCH_SUITE` to a development task ID before launching Codex, for example `export WORLDSMITH_RESEARCH_SUITE=navigation`. Close the session and wait for evaluations to finish before archiving and resetting.
+
+```sh
+uv run --locked python -m worldsmith.research_lifecycle start
+# Use the same low reasoning effort as make autoresearch.
+(cd autoresearch && codex -c 'model_reasoning_effort="low"' "Run the three-iteration AutoResearch session in RESEARCH.md.")
+archive_id=$(uv run --locked python -m worldsmith.research_lifecycle archive)
+uv run --locked python -m worldsmith.research_lifecycle reset "$archive_id"
+```
+
+### Evaluation results
+
 `evaluate_controller()` uses development seeds 0–7 for each active task. The full `worldsmith-all-v5` suite covers 16 tasks and 128 episodes. The aggregate is the equal-weight mean of the task success rates. Each evaluation writes two views under the same run ID.
 
 - `autoresearch/runs/<run-id>/` contains a code copy, status, and filtered results. The research archive preserves this view.
@@ -38,6 +52,8 @@ The tool and saved research results expose development feedback. The launcher an
 ## Owner validation and replay
 
 From the repository root, run final validation against the retained controller snapshot from development. It evaluates all 20 tasks on seeds 8–15. Use the shared tasks to assess seed generalization and the validation-only tasks to assess task generalization. [Owner task reference](BENCHMARKS.md#owner-reference-for-validation-only-tasks)
+
+The development and validation task separation applies to sessions after PR21. Earlier research sessions exposed all four validation-only tasks to the researcher.
 
 ```sh
 repo=$PWD
