@@ -1,6 +1,7 @@
 """Publish the development feedback exposed to AutoResearch."""
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
@@ -83,6 +84,19 @@ def public_episode(task: str, group: str, episode: dict) -> dict:
     }
 
 
+def read_task_results(task_results: Path, seeds: list[int]) -> tuple[dict, list[dict]]:
+    native = json.loads((task_results / "summary.json").read_text(encoding="utf-8"))
+    with (task_results / "episodes.jsonl").open(encoding="utf-8") as trace:
+        rows = [json.loads(line) for line in trace]
+    if (
+        native["seeds"] != seeds
+        or [row["seed"] for row in native["episodes"]] != seeds
+        or [row["seed"] for row in rows] != seeds
+    ):
+        raise ValueError(f"Incomplete development split for {task_results.name}")
+    return native, rows
+
+
 def publish_feedback(
     owner_results: Path,
     results: Path,
@@ -93,6 +107,7 @@ def publish_feedback(
     controller_sha256: str,
     started: float,
     retained: dict | None,
+    confirm: Callable[[], None] | None = None,
 ) -> ResearchFeedback:
     if any(not VALIDATION_ONLY_TASKS.isdisjoint(tasks) for tasks in tasks_by_group.values()):
         raise ValueError("Research feedback cannot include validation-only tasks")
@@ -105,15 +120,7 @@ def publish_feedback(
     for group, selected_tasks in tasks_by_group.items():
         for task in selected_tasks:
             task_results = owner_results / group / task
-            native = json.loads((task_results / "summary.json").read_text(encoding="utf-8"))
-            with (task_results / "episodes.jsonl").open(encoding="utf-8") as trace:
-                rows = [json.loads(line) for line in trace]
-            if (
-                native["seeds"] != seeds
-                or [row["seed"] for row in native["episodes"]] != seeds
-                or [row["seed"] for row in rows] != seeds
-            ):
-                raise ValueError(f"Incomplete development split for {task}")
+            native, rows = read_task_results(task_results, seeds)
 
             metric_fields = TASK_METRICS[task] if group == "pymunk" else ()
             rate_field = "capture_rate" if "capture_rate" in metric_fields else "success_rate"
@@ -148,6 +155,8 @@ def publish_feedback(
         "retained_controller_snapshot_sha256": None if retained is None else retained["controller_snapshot_sha256"],
         "tasks": tasks,
     }
+    if confirm is not None:
+        confirm()
     staging = results.with_suffix(".tmp")
     staging.mkdir()
     with (staging / "episodes.jsonl").open("w", encoding="utf-8") as trace:
