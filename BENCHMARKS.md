@@ -27,6 +27,8 @@ Worldsmith v2 has 20 tasks across four CPU simulator families. The phase column 
 
 The shared runner creates a fresh controller per episode and reports native success for the 3D tasks. AutoResearch compares controllers on the 16 shared tasks with eight fixed development seeds per task and averages task success rates with equal weight. Owner validation includes all 20 tasks on seeds 8–15. Use the same suite ID and split when comparing runs. The development guides cover shared task field names, action limits, and horizons. [Development tasks](autoresearch/TASKS.md) · [Controller API](autoresearch/API.md)
 
+The development and validation task separation applies to sessions after PR21. Earlier research sessions exposed all four validation-only tasks to the researcher.
+
 The 3D tasks use structured state observations with no cameras. Most still use fixed-base arms. Controllers are Python code evaluated in the simulator process. The observation and feedback interfaces filter private diagnostics, and process isolation remains outside their scope.
 
 ## Owner reference for validation-only tasks
