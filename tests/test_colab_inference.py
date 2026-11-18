@@ -81,6 +81,74 @@ def test_smoke_requires_ready_session(tmp_path, monkeypatch):
         colab_smoke.smoke_test()
 
 
+@pytest.mark.parametrize("environment", ["new", "matching", "outdated", "missing dependency", "missing owner wheel"])
+def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monkeypatch, environment):
+    import importlib.metadata
+    import subprocess
+    from contextlib import nullcontext
+
+    pins = {"vllm": "0.10.2", "openai": "1.99.9", "transformers": "4.55.2", "worldsmith": "0.1.0"}
+    installed = pins.copy()
+    if environment == "new":
+        installed.clear()
+    elif environment == "outdated":
+        installed["vllm"] = "0.10.1"
+    elif environment == "missing dependency":
+        del installed["transformers"]
+    elif environment == "missing owner wheel":
+        del installed["worldsmith"]
+    (tmp_path / "tools/3.12.13").mkdir(parents=True)
+    (tmp_path / "packages").mkdir()
+    (tmp_path / "packages/worldsmith.whl").touch()
+    python = tmp_path / ".slm/bin/python"
+    if environment != "new":
+        python.parent.mkdir(parents=True)
+        python.touch()
+    installs = []
+    smokes = []
+
+    def version(name):
+        if name not in installed:
+            raise importlib.metadata.PackageNotFoundError(name)
+        return installed[name]
+
+    def run(command, **kwargs):
+        if "venv" in command:
+            python.parent.mkdir(parents=True)
+            python.touch()
+        elif "-c" in command:
+            # Run the actual emitted metadata check with controlled installed versions.
+            with pytest.raises(SystemExit) as result:
+                exec(command[2], {})
+            return subprocess.CompletedProcess(command, result.value.code)
+        elif "install" in command:
+            installs.append(command)
+            installed.update(pins)
+        elif "worldsmith.inference.smoke" in command:
+            smokes.append(command)
+            kwargs["stdout"].write("chat and tool passed\n")
+        else:
+            pytest.fail(f"Unexpected command: {command}")
+        return subprocess.CompletedProcess(command, 0)
+
+    def execute(self, code, *, timeout):
+        exec(code, {})
+        return "WORLDSMITH_SLM_SMOKE_PASSED\n"
+
+    monkeypatch.setattr(importlib.metadata, "version", version)
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(colab_smoke, "REMOTE_PROJECT", str(tmp_path))
+    monkeypatch.setattr(colab_smoke, "session_lock", lambda name: nullcontext())
+    monkeypatch.setattr(session, "tracked_session", lambda: {"ready": True, "name": "test-session"})
+    monkeypatch.setattr(session.ColabSession, "execute", execute)
+    colab_smoke.smoke_test()
+    colab_smoke.smoke_test()
+    assert len(installs) == (0 if environment == "matching" else 1)
+    assert len(smokes) == 2
+    if installs:
+        assert {"vllm==0.10.2", "openai==1.99.9", "transformers==4.55.2"} <= set(installs[0])
+
+
 @pytest.mark.parametrize("failure", [None, "smoke", "interrupt", "download"])
 def test_new_session_smoke_always_releases_its_session(tmp_path, monkeypatch, failure):
     calls = []

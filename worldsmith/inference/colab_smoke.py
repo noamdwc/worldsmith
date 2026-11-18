@@ -40,6 +40,20 @@ def smoke_test():
     # finish before owner shutdown or another evaluation starts.
     with session_lock("lifecycle"), session_lock("evaluation"):
         session = ColabSession.active()
+        pins = dict(requirement.split("==") for requirement in (
+            VLLM_REQUIREMENT, OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT,
+        ))
+        check_versions = dedent(f"""\
+            import sys
+            from importlib.metadata import PackageNotFoundError, version
+
+            try:
+                ready = all(version(name) == expected for name, expected in {pins!r}.items())
+                version('worldsmith')
+            except PackageNotFoundError:
+                ready = False
+            sys.exit(0 if ready else 1)
+        """)
         code = dedent(f"""\
             import subprocess
             from pathlib import Path
@@ -54,12 +68,14 @@ def smoke_test():
                         [uv, 'venv', str(root / '.slm'), '--python', str(tool / 'python/bin/python3')],
                         check=True, stdout=log, stderr=subprocess.STDOUT,
                     )
-                subprocess.run(
-                    [uv, 'pip', 'install', '--python', python,
-                     {VLLM_REQUIREMENT!r}, {OPENAI_REQUIREMENT!r}, {TRANSFORMERS_REQUIREMENT!r},
-                     str(next((root / 'packages').glob('*.whl')))],
-                    check=True, stdout=log, stderr=subprocess.STDOUT,
-                )
+                versions = subprocess.run([python, '-c', {check_versions!r}], stdout=log, stderr=subprocess.STDOUT)
+                if versions.returncode:
+                    subprocess.run(
+                        [uv, 'pip', 'install', '--python', python,
+                         {VLLM_REQUIREMENT!r}, {OPENAI_REQUIREMENT!r}, {TRANSFORMERS_REQUIREMENT!r},
+                         str(next((root / 'packages').glob('*.whl')))],
+                        check=True, stdout=log, stderr=subprocess.STDOUT,
+                    )
             with (root / 'slm-smoke.log').open('w') as log:
                 subprocess.run(
                     [python, '-m', 'worldsmith.inference.smoke'], cwd=root,

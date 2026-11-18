@@ -44,34 +44,43 @@ class ModelServer:
                 except (URLError, TimeoutError):
                     sleep(1)
             raise TimeoutError(f"vLLM did not become ready within {self.startup_timeout}s; see {self.log}")
-        except BaseException:
-            self.stop()
+        except BaseException as error:
+            try:
+                self.stop()
+            except Exception as cleanup_error:
+                error.add_note(f"vLLM cleanup also failed: {cleanup_error}")
             raise
 
     def stop(self):
         if self.process is None:
             return
-        # vLLM creates engine workers. Signal the entire owned process group,
-        # including when the API process has already exited.
         try:
-            os.killpg(self.process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            self.process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            pass
-        # Reaping the API process does not imply every engine worker exited.
-        # Remove any survivors after giving the server time for graceful cleanup.
-        try:
-            os.killpg(self.process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        self.process.wait(timeout=10)
-        self.process = None
+            try:
+                os.killpg(self.process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                self.process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                pass
+        finally:
+            # Always reach surviving workers, even if graceful shutdown failed
+            # or the API process exited first. Retain ownership if cleanup fails
+            # so stop() can be retried and start() cannot launch a second server.
+            try:
+                os.killpg(self.process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            self.process.wait(timeout=10)
+            self.process = None
 
     def __enter__(self):
         return self.start()
 
-    def __exit__(self, *exc):
-        self.stop()
+    def __exit__(self, exc_type, error, traceback):
+        try:
+            self.stop()
+        except Exception as cleanup_error:
+            if error is None:
+                raise
+            error.add_note(f"vLLM cleanup also failed: {cleanup_error}")

@@ -172,6 +172,114 @@ def test_stop_kills_unresponsive_process_group(server_process):
     assert signals == [(process.pid, signal.SIGTERM), (process.pid, signal.SIGKILL)]
 
 
+@pytest.mark.parametrize("failure", ["signal", "wait"])
+def test_graceful_shutdown_errors_still_force_cleanup(server_process, monkeypatch, failure):
+    model_server, process, _, signals = server_process
+    model_server.process = process
+    waits = []
+
+    def killpg(pid, sig):
+        signals.append((pid, sig))
+        if failure == "signal" and sig == signal.SIGTERM:
+            raise PermissionError("graceful signal failed")
+
+    def wait(*, timeout):
+        waits.append(timeout)
+        if failure == "wait" and timeout == 30:
+            raise OSError("graceful wait failed")
+
+    monkeypatch.setattr(server.os, "killpg", killpg)
+    process.wait = wait
+    with pytest.raises(OSError, match="graceful"):
+        model_server.stop()
+    assert signals == [(process.pid, signal.SIGTERM), (process.pid, signal.SIGKILL)]
+    assert waits[-1] == 10
+    assert model_server.process is None
+    model_server.stop()
+    assert len(signals) == 2
+
+
+@pytest.mark.parametrize("failure", ["signal", "wait"])
+def test_failed_forced_cleanup_retains_process_for_retry(server_process, monkeypatch, failure):
+    model_server, process, _, signals = server_process
+    model_server.process = process
+
+    def killpg(pid, sig):
+        signals.append((pid, sig))
+        if failure == "signal" and sig == signal.SIGKILL:
+            raise PermissionError("forced signal failed")
+
+    def wait(*, timeout):
+        if failure == "wait" and timeout == 10:
+            raise subprocess.TimeoutExpired("vllm", timeout)
+
+    monkeypatch.setattr(server.os, "killpg", killpg)
+    process.wait = wait
+    with pytest.raises((PermissionError, subprocess.TimeoutExpired)):
+        model_server.stop()
+    assert model_server.process is process
+    with pytest.raises(RuntimeError, match="already been started"):
+        model_server.start()
+
+    monkeypatch.setattr(server.os, "killpg", lambda *args: signals.append(args))
+    process.wait = lambda **kwargs: None
+    model_server.stop()
+    assert model_server.process is None
+    model_server.stop()
+    assert len(signals) == 4
+
+
+def test_stop_handles_already_gone_process_group(server_process, monkeypatch):
+    model_server, process, _, signals = server_process
+    model_server.process = process
+
+    def killpg(pid, sig):
+        signals.append((pid, sig))
+        raise ProcessLookupError
+
+    monkeypatch.setattr(server.os, "killpg", killpg)
+    model_server.stop()
+    model_server.stop()
+    assert model_server.process is None
+    assert len(signals) == 2
+
+
+def test_startup_error_is_preserved_when_cleanup_fails(server_process, monkeypatch):
+    model_server, process, _, _ = server_process
+    process.returncode = 1
+    process.poll = lambda: 1
+
+    def killpg(pid, sig):
+        raise PermissionError("cleanup denied")
+
+    monkeypatch.setattr(server.os, "killpg", killpg)
+    with pytest.raises(RuntimeError, match="vLLM exited with status 1") as error:
+        model_server.start()
+    assert error.value.__notes__ == ["vLLM cleanup also failed: cleanup denied"]
+    assert model_server.process is process
+
+
+@pytest.mark.parametrize("caller_error", [None, ValueError("caller failed")])
+def test_context_cleanup_failure_reports_error_without_masking_caller(server_process, monkeypatch, caller_error):
+    from contextlib import nullcontext
+    model_server, process, _, _ = server_process
+    monkeypatch.setattr(server, "urlopen", lambda *args, **kwargs: nullcontext())
+
+    def killpg(pid, sig):
+        raise PermissionError("cleanup denied")
+
+    monkeypatch.setattr(server.os, "killpg", killpg)
+    expected = PermissionError if caller_error is None else ValueError
+    with pytest.raises(expected) as error:
+        with model_server:
+            if caller_error is not None:
+                raise caller_error
+    if caller_error is not None:
+        assert error.value is caller_error
+        assert error.value.__notes__ == ["vLLM cleanup also failed: cleanup denied"]
+    assert model_server.process is process
+
+
 @pytest.mark.parametrize("timeout", [0, -1])
 def test_server_rejects_invalid_startup_timeout(timeout):
     with pytest.raises(ValueError, match="positive"):
