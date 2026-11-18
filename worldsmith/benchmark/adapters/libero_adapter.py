@@ -10,7 +10,10 @@ from pathlib import Path
 
 from worldsmith.benchmark.runner import InvalidAction
 
-INSTALL = Path(__file__).resolve().parents[3] / "simulation_environments" / "libero"
+INSTALL = Path(os.environ.get(
+    "WORLDSMITH_LIBERO_INSTALL",
+    Path(__file__).resolve().parents[3] / "simulation_environments" / "libero",
+))
 SOURCE = INSTALL / "source"
 SOURCE_REVISION = "eafdb809426b13153aa1e4c42d6601844217dfec"
 DATA_REVISION = "c86fc3b8293185a6f373677018ff3e37f8391602"
@@ -116,6 +119,8 @@ def open_libero(task):
     # Set before the first native import, including for direct evaluator invocations.
     os.environ["MUJOCO_GL"] = "disable"
     os.environ["LIBERO_CONFIG_PATH"] = str(INSTALL / "config")
+    # The Colab kernel selects an inline backend unavailable in this environment.
+    os.environ["MPLBACKEND"] = "Agg"
     os.environ.setdefault("MPLCONFIGDIR", str(INSTALL / "config"))
     from libero.libero import get_libero_path
     from libero.libero.benchmark import get_benchmark
