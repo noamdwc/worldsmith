@@ -1,8 +1,8 @@
 """Local MCP tools for the AutoResearch development benchmark."""
 
 import os
-import subprocess
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from time import monotonic
 from traceback import format_exc
@@ -11,17 +11,34 @@ from uuid import uuid4
 from mcp.server.fastmcp import FastMCP
 
 from worldsmith.benchmark.task_catalog import DEV_SEEDS, DEV_TASK_GROUPS, TASK_CATALOG
+from worldsmith.colab.backend import run_colab
 from worldsmith.research_feedback import ResearchFeedback, publish_feedback
 from worldsmith.research_lifecycle import ROOT, copy_entry
 
 from .constant import (
     EVALUATION_TIMEOUT_SECONDS, OWNER_RUNS, SUITE, SUITE_TIMEOUT_SECONDS, SUITES, WORKSPACE,
 )
-from .evaluation_io import EvaluationFailure, now, run_group, snapshot_code, snapshot_hash, write_json
+from .evaluation_io import EvaluationFailure, EvaluationTimeout, now, run_group, snapshot_code, snapshot_hash, write_json
 
 mcp = FastMCP("worldsmith")
 latest_feedback: ResearchFeedback | None = None
 retained_summary: dict | None = None
+
+
+def run_local(code, results, deadline, *, tasks_by_group, seeds, digest):
+    for group, tasks in tasks_by_group.items():
+        python = Path(sys.executable)
+        if group != "pymunk":
+            variable = f"WORLDSMITH_{group.upper()}_PYTHON"
+            default = ROOT / "simulation_environments" / group / ".venv/bin/python"
+            python = Path(os.environ.get(variable, default)).expanduser()
+            if not python.is_absolute() or not os.access(python, os.X_OK):
+                raise EvaluationFailure("Evaluation environment is unavailable") from ValueError(
+                    f"Set {variable} to the absolute path of the pinned interpreter"
+                )
+        run_group(group, str(python), code, results / group, deadline, tasks=tasks, seeds=seeds)
+        if snapshot_hash(code) != digest:
+            raise EvaluationFailure("Controller snapshot changed during evaluation")
 
 
 @mcp.tool(structured_output=True)
@@ -62,33 +79,26 @@ def evaluate_controller() -> dict[str, object]:
         copy_entry(code, output / "code", skip_cache=True)
         digest = snapshot_hash(code)
         save_status("running")
-        for group, tasks in tasks_by_group.items():
-            python = Path(sys.executable)
-            if group != "pymunk":
-                variable = f"WORLDSMITH_{group.upper()}_PYTHON"
-                python = Path(os.environ.get(variable, ROOT / "simulation_environments" / group / ".venv/bin/python")).expanduser()
-                if not python.is_absolute() or not os.access(python, os.X_OK):
-                    raise EvaluationFailure("Evaluation environment is unavailable") from ValueError(
-                        f"Set {variable} to the absolute path of the pinned interpreter"
-                    )
-            group_results = owner_results / group
-            try:
-                run_group(group, str(python), code, group_results, deadline, tasks=tasks, seeds=seeds)
-            except subprocess.TimeoutExpired:
-                marker = group_results / "task.txt"
-                (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
-                message = f"Evaluation timed out after {timeout} seconds"
-                if marker.is_file():
-                    message += f" while evaluating {marker.read_text(encoding='utf-8')}"
-                save_status("timed_out", error=message, ended_at=now())
-                raise RuntimeError(f"{message}. Run: {run_id}") from None
-            if snapshot_hash(code) != digest:
-                raise EvaluationFailure("Controller snapshot changed during evaluation")
-        feedback = publish_feedback(
-            owner_results, output / "results", benchmark=benchmark, tasks_by_group=tasks_by_group,
-            seeds=seeds, controller_sha256=digest,
-            started=started, retained=retained_summary,
-        )
+        backend = os.environ.get("WORLDSMITH_EVALUATION_BACKEND", "local")
+        settings = {"tasks_by_group": tasks_by_group, "seeds": seeds, "digest": digest}
+        if backend == "colab":
+            evaluation = run_colab(run_id, code, owner_results, deadline, **settings)
+        elif backend == "local":
+            run_local(code, owner_results, deadline, **settings)
+            evaluation = nullcontext()
+        else:
+            raise EvaluationFailure("WORLDSMITH_EVALUATION_BACKEND must be local or colab")
+        with evaluation as confirm:
+            feedback = publish_feedback(
+                owner_results, output / "results", benchmark=benchmark, tasks_by_group=tasks_by_group,
+                seeds=seeds, controller_sha256=digest,
+                started=started, retained=retained_summary, confirm=confirm,
+            )
+    except EvaluationTimeout as exc:
+        (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
+        message = f"Evaluation timed out after {timeout} seconds{exc}"
+        save_status("timed_out", error=message, ended_at=now())
+        raise RuntimeError(f"{message}. Run: {run_id}") from None
     except EvaluationFailure as exc:
         (owner_run / "error.txt").write_text(format_exc(), encoding="utf-8")
         message = f"Evaluation failed: {exc}"
