@@ -1,10 +1,38 @@
 """Run the owner inference smoke test in the existing assigned Colab VM."""
 
+import sys
 from textwrap import dedent
 
-from worldsmith.colab.session import ColabError, ColabSession, REMOTE_PROJECT, session_lock
+from worldsmith.colab.session import (
+    ColabError, ColabSession, REMOTE_PROJECT, STATE_DIR, build_environments,
+    session_lock, start_session, stop_tracked_session,
+)
 
 from .config import OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT, VLLM_REQUIREMENT
+
+
+def run_session_smoke() -> int:
+    status = build_environments("pymunk")
+    if status:
+        return status
+    session = start_session("pymunk")
+    try:
+        smoke_test()
+    finally:
+        try:
+            # Retain diagnostics before releasing the VM, including failed loads.
+            logs = STATE_DIR / session.name
+            logs.mkdir(parents=True, exist_ok=True)
+            for filename in ("slm-install.log", "slm-smoke.log", "vllm.log"):
+                try:
+                    session._command("download", f"{REMOTE_PROJECT}/{filename}", str(logs / filename))
+                except (ColabError, OSError) as error:
+                    # Early installation failures may not have created all logs.
+                    print(f"Could not retrieve {filename}: {error}", file=sys.stderr)
+            print(f"Smoke logs: {logs}")
+        finally:
+            stop_tracked_session(expected_name=session.name)
+    return 0
 
 
 def smoke_test():

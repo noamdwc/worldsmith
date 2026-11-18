@@ -52,13 +52,24 @@ AutoResearch requires an authenticated Google Colab CLI and configured Cloudflar
 
 ### SLM inference smoke test (owner workflow)
 
-Reuse a ready Colab session, or start one through the existing workflow:
+Prepare the Pymunk cache, create an L4 session, test vLLM, and release the session:
 
 ```sh
-make colab-build-envs SIMULATOR=pymunk  # prepare caches if starting a new session
-uv run --locked python -m worldsmith.colab start pymunk  # only if no session is tracked
+make colab-slm-smoke
+```
+
+As with AutoResearch, set `R2_BUCKET` and `R2_CREDENTIALS_FILE` in your terminal first,
+have `colab`, `aws`, and `uv` on PATH, and authenticate the Colab CLI. The credential file
+must be outside the repository. If your CLI needs an explicit CA bundle, set
+`SSL_CERT_FILE` and `WEBSOCKET_CLIENT_CA_BUNDLE` to a trusted bundle such as
+`/etc/ssl/cert.pem` on macOS.
+
+The target releases its session on success, failure, or interruption and saves logs
+under `runs/colab/<session-name>/`. An already tracked session is left alone;
+`start` rejects creating another one. To test an existing ready session instead:
+
+```sh
 uv run --locked python -m worldsmith.colab slm-smoke
-make colab-stop  # release the VM when finished
 ```
 
 The smoke command installs pinned vLLM and the OpenAI client in `/content/worldsmith/.slm`,
@@ -76,7 +87,7 @@ Qwen3-8B offers more capacity at higher memory/latency cost. These are practical
 tradeoffs, not benchmark results. Model/tokenizer revision and serving settings live in
 `worldsmith/inference/config.py`, outside the researcher workspace. This first setup
 targets the existing L4 runtime with FP16, an 8K context, and one concurrent sequence;
-GPU fit, latency, and tool reliability still require the live smoke test.
+the live smoke test has passed on L4. Broader latency and tool reliability are unmeasured.
 
 For repeated requests, run Python with `/content/worldsmith/.slm/bin/python` in Colab:
 
