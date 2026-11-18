@@ -3,16 +3,16 @@
 SIMULATOR ?= all
 
 autoresearch:
-	@uv run --locked python -m worldsmith.colab run
+	@uv run --locked python -m worldsmith.research_launcher
 
 autoresearch-maniskill:
-	@uv run --locked python -m worldsmith.colab run maniskill
+	@uv run --locked python -m worldsmith.research_launcher maniskill
 
 autoresearch-libero:
-	@uv run --locked python -m worldsmith.colab run libero
+	@uv run --locked python -m worldsmith.research_launcher libero
 
 autoresearch-robosuite:
-	@uv run --locked python -m worldsmith.colab run robosuite
+	@uv run --locked python -m worldsmith.research_launcher robosuite
 
 colab-status:
 	@uv run --locked python -m worldsmith.colab status

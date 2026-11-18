@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-ROOT = Path(__file__).resolve().parents[1]
+from worldsmith.project_paths import ROOT
+
 WORKSPACE = ROOT / "autoresearch"
 HISTORY = ROOT / "research-history"
 BASELINE = Path(__file__).with_name("research_baseline")

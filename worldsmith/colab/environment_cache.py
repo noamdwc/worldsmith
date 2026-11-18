@@ -7,7 +7,7 @@ import tomllib
 from hashlib import sha256
 from pathlib import Path
 
-from worldsmith.research_lifecycle import ROOT
+from worldsmith.project_paths import ROOT
 
 from .storage import StorageError
 
