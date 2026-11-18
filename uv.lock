@@ -782,7 +782,7 @@ wheels = [
 
 [[package]]
 name = "jupyter-kernel-client"
-version = "1.0.2"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jupyter-client", marker = "python_full_version >= '3.12'" },
@@ -794,7 +794,7 @@ dependencies = [
     { name = "websocket-client", marker = "python_full_version >= '3.12'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/01/4c/186ef5cd16335435a12f55a6b661c85d05842bbe1f9d2c1569d3ccd3b7f2/jupyter_kernel_client-1.0.2-py3-none-any.whl", hash = "sha256:4357298d622041017ae946ef1f4418edf7cdcf6b6049ad3119214e278457dfb5", size = 45702, upload-time = "2026-08-24T10:07:34.247Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/68/287315ba355aa93bda2e344de5febc45e6de1b47d8f4a5b69400b24cfdfd/jupyter_kernel_client-0.9.0-py3-none-any.whl", hash = "sha256:77acb8f2f738d97625d6bd01ee8cf21c4d59790b7ba464108712db3870416f20", size = 40097, upload-time = "2026-02-11T06:42:05.133Z" },
 ]
 
 [[package]]
@@ -2112,6 +2112,7 @@ local = [
     { name = "awscli", marker = "python_full_version >= '3.12'" },
     { name = "boto3", marker = "python_full_version >= '3.12'" },
     { name = "google-colab-cli", marker = "python_full_version >= '3.12'" },
+    { name = "jupyter-kernel-client", marker = "python_full_version >= '3.12'" },
     { name = "mcp", marker = "python_full_version >= '3.12'" },
     { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pymunk", marker = "python_full_version >= '3.12'" },
@@ -2134,6 +2135,7 @@ local = [
     { name = "awscli", marker = "python_full_version >= '3.12'", specifier = "==1.46.3" },
     { name = "boto3", marker = "python_full_version >= '3.12'", specifier = ">=1.40,<2" },
     { name = "google-colab-cli", marker = "python_full_version >= '3.12'", specifier = "==0.6.0" },
+    { name = "jupyter-kernel-client", marker = "python_full_version >= '3.12'", specifier = "==0.9.0" },
     { name = "mcp", marker = "python_full_version >= '3.12'", specifier = ">=1.20,<2" },
     { name = "numpy", marker = "python_full_version >= '3.12'", specifier = ">=2.4.6" },
     { name = "pymunk", marker = "python_full_version >= '3.12'", specifier = ">=7.3.1" },
