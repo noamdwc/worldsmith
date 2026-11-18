@@ -50,7 +50,6 @@ The other simulators use separate environments with their own setup instructions
 
 ## Documentation
 
-- [Running research and evaluation](docs/RUNNING.md): AutoResearch sessions, evaluation, owner validation, and historical replay.
 - [Research workflow](autoresearch/RESEARCH.md): experiment process and comparison rules.
 - [Controller API](autoresearch/API.md): observations, actions, and feedback tools.
 - [Development task guide](autoresearch/TASKS.md): task fields, limits, and horizons.
