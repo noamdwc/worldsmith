@@ -6,7 +6,11 @@ requires-python = ">=3.11"
 
 [dependency-groups]
 local = [
+    "awscli==1.46.3",
     "boto3>=1.40,<2",
+    "google-colab-cli==0.6.0",
+    # Colab CLI needs both KernelClient and JupyterSubprotocol from this release.
+    "jupyter-kernel-client==0.9.0",
     "mcp>=1.20,<2",
     { include-group = "simulation" },
 ]
@@ -16,6 +20,10 @@ simulation = [
 ]
 dev = [
     "pytest>=9.2.0",
+    { include-group = "inference" },
+]
+inference = [
+    "openai==1.99.9",
 ]
 
 [tool.pytest.ini_options]
@@ -34,3 +42,6 @@ include = ["worldsmith*"]
 [tool.uv]
 package = false
 default-groups = ["local", "dev"]
+
+[tool.uv.dependency-groups]
+local = { requires-python = ">=3.12" }

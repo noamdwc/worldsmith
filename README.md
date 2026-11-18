@@ -48,7 +48,33 @@ The other simulators use separate environments with their own setup instructions
 - [LIBERO-PRO](simulation_environments/libero/README.md)
 - [RoboSuite](simulation_environments/robosuite/README.md)
 
-AutoResearch requires an authenticated Google Colab CLI and configured Cloudflare R2 credentials. Run `make colab-build-envs` to prepare the environments, then `make autoresearch` to start a research session.
+The locked local environment uses Python 3.12+ and includes the Google Colab and
+AWS CLIs. For Colab and AutoResearch, copy `.env.example` to `.env` and set your R2
+bucket and external credentials-file path. Make loads this git-ignored file automatically through uv;
+existing terminal settings take precedence. Keep the credential file outside the
+repository, with plain `R2_ACCOUNT_ID=...`, `R2_ACCESS_KEY_ID=...`, and
+`R2_SECRET_ACCESS_KEY=...` lines. The keys stay in that external file.
+
+```sh
+cp .env.example .env  # edit the bucket and credentials-file path
+uv run --locked --env-file .env colab sessions  # authenticate when prompted, if needed
+make colab-build-envs
+make autoresearch
+```
+
+If the CLI reports a certificate error, uncomment the CA-bundle settings in `.env`
+and point them to a trusted bundle (`/etc/ssl/cert.pem` on macOS).
+
+### SLM inference
+
+[Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) is served
+by vLLM with Hermes tool calling through the OpenAI-compatible API and Python client.
+
+```sh
+make colab-slm-smoke
+```
+
+Diagnostic logs: `runs/colab/<session-name>/{slm-install.log,slm-smoke.log,vllm.log}`.
 
 ## Documentation
 
