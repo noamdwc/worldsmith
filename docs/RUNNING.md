@@ -76,4 +76,3 @@ uv run --locked python -m worldsmith evaluate --task all --output runs/combined-
 uv run --locked python -m worldsmith evaluate --task all --split heldout --output runs/combined-heldout
 uv run --locked python -m worldsmith evaluate --task interception --split heldout --output runs/interception-heldout
 ```
-
