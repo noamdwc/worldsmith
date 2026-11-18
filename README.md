@@ -24,7 +24,8 @@ Supply a different zero-argument controller factory with `--controller module:fa
 
 ## AutoResearch
 
-Run `make autoresearch` from the repository root after configuring Google Colab and Cloudflare R2. The launcher starts a Colab L4 runtime before starting Codex, reuses it for the session's evaluations, and stops it when the research process exits. Use `make autoresearch-maniskill`, `make autoresearch-libero`, or `make autoresearch-robosuite` for one simulator. [Colab operations guide](COLAB.md)
+Install and authenticate the Google Colab CLI and configure your R2 credentials and bucket.\
+From the repository root, run `make colab-build-envs`, then `make autoresearch`.
 
 The launcher starts from the clean starter, runs the research session, archives it under `research-history/`, and restores the starter after success. If Codex exits with an error, the archive and workspace are both kept. After closing a session and waiting for evaluations to finish, use `make clear-autoresearch` to archive and reset the workspace manually.
 
