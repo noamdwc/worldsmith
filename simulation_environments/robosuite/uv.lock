@@ -3,12 +3,15 @@ revision = 3
 requires-python = "==3.12.*"
 resolution-markers = [
     "platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 supported-markers = [
     "platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 required-markers = [
     "platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 
 [[package]]
@@ -31,9 +34,9 @@ wheels = [
 
 [package.optional-dependencies]
 epath = [
-    { name = "fsspec", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "typing-extensions", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "zipp", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "fsspec", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "typing-extensions", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "zipp", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 
 [[package]]
@@ -59,6 +62,8 @@ sdist = { url = "https://files.pythonhosted.org/packages/b2/89/fa9cb2611314b84ff
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/65/c728be098d0a2fb1c81070386384640e577ec2db096e885d14ba8c3a0ffd/glfw-2.11.0-py2.py3-none-macosx_10_6_intel.whl", hash = "sha256:4f40b141657b014148893f3b8950906389f9d4d3b2bced41fbefcdcda776e9ad", size = 110341, upload-time = "2026-10-16T08:46:24.538Z" },
     { url = "https://files.pythonhosted.org/packages/ac/2c/dc36e841a6a0db69c19db71a8fb4bbb211924bcf587735caea8afdd230ed/glfw-2.11.0-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:7405d3e3041add442e40a15ef5a880178ff90f486d576a82e112240c66f59555", size = 107194, upload-time = "2026-10-16T08:46:25.797Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/09/e3a95b97b4b174686e1b0340f9ee5b283ed65bb7cc09089fb228d36c351b/glfw-2.11.0-py2.py3-none-manylinux2014_x86_64.whl", hash = "sha256:a08e1135d02c9408d7622db3d391e3e33e4187754ec45633e9a482c775f4846c", size = 247001, upload-time = "2026-10-16T08:46:28.442Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/b2/ee7afd7e84bc1a8a490710c3c0a7ad472b57f17909549dc7400d17f19c8b/glfw-2.11.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:76484fae4a4ef0f778a05e02422ecbe6960ae23039087fe2e0ad9742ab8c7bbe", size = 248539, upload-time = "2026-10-16T08:46:30.8Z" },
 ]
 
 [[package]]
@@ -77,6 +82,7 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/11/c5/907cec40688a34eb489cded74d555e1ee4af8cf49d83e03dba2c2d4cfe27/llvmlite-0.50.0.tar.gz", hash = "sha256:f2a2cd6ec9ffcc1b7147dea0d7a49efebf17a2b434e0c2844fe175999d571eb4", size = 194522, upload-time = "2026-09-29T18:44:46.782Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d9/1f/2576416b3e9b73f77b8331b7f2e41ce5ae7bbff0489eb16d98099a71693c/llvmlite-0.50.0-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:55f50a6b7c0b8de88b05d6bc407d70a60486ce024013997dc97e202bd187c75b", size = 40534277, upload-time = "2026-09-29T18:42:56.244Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/72/22b6449e15bec4cc86c62b659e6c625ab777d01e87aaec717ecef440f87a/llvmlite-0.50.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d501e5103076b9a14be885d2574dc2f6793171aa54a853d1244e011d476f1399", size = 59696588, upload-time = "2026-09-29T18:43:04.763Z" },
 ]
 
 [[package]]
@@ -84,10 +90,10 @@ name = "mink"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mujoco", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "numpy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "qpsolvers", extra = ["quadprog"], marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "typing-extensions", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "mujoco", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "qpsolvers", extra = ["quadprog"], marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "typing-extensions", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8d/11/0db7b950753b26b124c9697f8fae1e8cdaf0147dd3a369449a6bbd3c5456/mink-0.0.5.tar.gz", hash = "sha256:ecab92fd3d6176ea53cc92d9ca224bafaaeaa01eaaf48a60eacc8f7cbd7e453f", size = 678943, upload-time = "2024-09-28T02:13:41.332Z" }
 wheels = [
@@ -99,15 +105,16 @@ name = "mujoco"
 version = "3.3.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "absl-py", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "etils", extra = ["epath"], marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "glfw", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "numpy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "pyopengl", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "absl-py", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "etils", extra = ["epath"], marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "glfw", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "pyopengl", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7b/ec/395f6bee3cde4c6d59a599737b4a0b845c1a174c92efd4bc2ed7bb24859c/mujoco-3.3.7.tar.gz", hash = "sha256:970dbc44013371c2de645f9c37a9b41f18b4fc368adc8c5f8057988121be610b", size = 816707, upload-time = "2025-10-14T17:34:40.256Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/c5/518b9608648a59c333f46573787862633592974870ebdce750eaf3b152f6/mujoco-3.3.7-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:e9c845f5eabd43caea6064be5d6605fab7865ac5c7812c612fd4aee9ff7f5e30", size = 6582714, upload-time = "2025-10-14T17:34:08.103Z" },
+    { url = "https://files.pythonhosted.org/packages/27/45/f59df4d11130799bbded258ead963d7d58c93430b90ad93fc4b109e90179/mujoco-3.3.7-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:1afdf8880badccc6fdbef33e09967b6d8feeed3b951da881c4cc41addd1ecde9", size = 6853281, upload-time = "2025-10-14T17:34:12.278Z" },
 ]
 
 [[package]]
@@ -115,12 +122,13 @@ name = "numba"
 version = "0.68.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "llvmlite", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "numpy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "llvmlite", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0f/a4/a60b14d955b898ce00d815dfe14435ae3b30c1dd2587aa0a172e92310cf8/numba-0.68.1.tar.gz", hash = "sha256:9de461812470173a14eeb7e0bbd27c897dffe835402a33861166842fc5f6ea57", size = 2858572, upload-time = "2026-10-27T18:13:04.352Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d4/a7/2e54558d08bb64c8718ad398314605b6c73d154a593cf2bbf1360047fa4e/numba-0.68.1-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:7de5e5d00e6c8967fc861be2a015eb8ad701ab3cf65d7f4a2c4d950990cf65d3", size = 2762483, upload-time = "2026-10-27T18:12:24.865Z" },
+    { url = "https://files.pythonhosted.org/packages/43/23/0813ab091f60403c33cb741392ae77db13324587748df6f52167bf3a2404/numba-0.68.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8b33fee239194b9b6cb9b176f3c2563b94e5882fd846748ad0cf960daeee5406", size = 3890001, upload-time = "2026-10-27T18:12:27.988Z" },
 ]
 
 [[package]]
@@ -130,6 +138,8 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b8cd166c1ac8438307c14058/numpy-1.26.4.tar.gz", hash = "sha256:2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010", size = 15786129, upload-time = "2024-02-06T00:26:44.495Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/75/5b/ca6c8bd14007e5ca171c7c03102d17b4f4e0ceb53957e8c44343a9546dcc/numpy-1.26.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:03a8c78d01d9781b28a6989f6fa1bb2c4f2d51201cf99d3dd875df6fbd96b23b", size = 13685868, upload-time = "2024-02-05T23:55:56.28Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/50/de23fde84e45f5c4fda2488c759b69990fd4512387a8632860f3ac9cd225/numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:675d61ffbfa78604709862923189bad94014bef562cc35cf61d3a07bba02a7ed", size = 17950613, upload-time = "2024-02-05T23:56:56.054Z" },
+    { url = "https://files.pythonhosted.org/packages/76/8c/2ba3902e1a0fc1c74962ea9bb33a534bb05984ad7ff9515bf8d07527cadd/numpy-1.26.4-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:1dda2e7b4ec9dd512f84935c5f126c8bd8b9f2fc001e9f54af255e8c5f16b0e0", size = 17786643, upload-time = "2024-02-05T23:57:56.585Z" },
 ]
 
 [[package]]
@@ -137,11 +147,12 @@ name = "opencv-python"
 version = "4.11.0.86"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/17/06/68c27a523103dad5837dc5b87e71285280c4f098c60e4fe8a8db6486ab09/opencv-python-4.11.0.86.tar.gz", hash = "sha256:03d60ccae62304860d232272e4a4fda93c39d595780cb40b161b310244b736a4", size = 95171956, upload-time = "2025-01-16T13:52:24.737Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/4d/53b30a2a3ac1f75f65a59eb29cf2ee7207ce64867db47036ad61743d5a23/opencv_python-4.11.0.86-cp37-abi3-macosx_13_0_arm64.whl", hash = "sha256:432f67c223f1dc2824f5e73cdfcd9db0efc8710647d4e813012195dc9122a52a", size = 37326322, upload-time = "2025-01-16T13:52:25.887Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/8b/90eb44a40476fa0e71e05a0283947cfd74a5d36121a11d926ad6f3193cc4/opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6b02611523803495003bd87362db3e1d2a0454a6a63025dc6658a9830570aa0d", size = 62986597, upload-time = "2025-01-16T13:52:08.836Z" },
 ]
 
 [[package]]
@@ -160,7 +171,10 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ce/a4/9cc30690a394a8305e8be4c9036aa16d0dfddadd09079860b582f562496d/pillow-13.0.0.tar.gz", hash = "sha256:cdcd1ba258178f7356d74170c9a81ba4eab6a5d55748bc402a5a2a6fe6be3510", size = 47058631, upload-time = "2026-10-16T22:18:09.718Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/4b/f2ed53d83aa44ac19599ac0a54897f867fafb95f406980d1e24083f8cbe3/pillow-13.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:fc481f742ccda20e9ed760b8f978dff50f2a4e9bc253ac167fb0a05b0783ef52", size = 4852329, upload-time = "2026-10-16T22:15:46.284Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/99/fdf65cc539e266ab93546c261bdf98411fe165c6e4e13f9dbf597097192b/pillow-13.0.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:42d63be3af4f9b951b199b0a9d23365d37ab14687e6d77b74940432c8515c4ca", size = 7144542, upload-time = "2026-10-16T22:15:50.093Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/7c/45ee28531f89ee4582967d8a17f7a26d71ca64cd902b93c269590cd60a00/pillow-13.0.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:23edf4ec4b6f4f240e8df6e4985e9ee2ced86474632433e55fb1e2548744bf40", size = 7228137, upload-time = "2026-10-16T22:15:54.009Z" },
     { url = "https://files.pythonhosted.org/packages/e4/b0/2594f202d743a35d4fe80682bfd96f277e5ca7aecb27cf64ef5bfc1d000b/pillow-13.0.0-pp312-pypy312_pp80-macosx_11_0_arm64.whl", hash = "sha256:7e91e97a929232cdb828889ee6ad0e48d7f40f4ec38818f4e4a8968b2b1af22e", size = 4806808, upload-time = "2026-10-16T22:18:01.188Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/fe/a10aba5503ca13e9e009b8bd0a1a4ce5584bdce246245fd6f3a83701369c/pillow-13.0.0-pp312-pypy312_pp80-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e65dd6e75de67b2362a4fa3e16aa627595f65054dc4ec73d64680c84d592fa61", size = 6043514, upload-time = "2026-10-16T22:18:04.538Z" },
 ]
 
 [[package]]
@@ -186,11 +200,11 @@ name = "pynput"
 version = "1.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "evdev", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and 'linux' in sys_platform" },
+    { name = "evdev", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin' and 'linux' in sys_platform) or (platform_machine == 'x86_64' and sys_platform == 'linux' and 'linux' in sys_platform)" },
     { name = "pyobjc-framework-applicationservices", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
     { name = "pyobjc-framework-quartz", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "python-xlib", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and 'linux' in sys_platform" },
-    { name = "six", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "python-xlib", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin' and 'linux' in sys_platform) or (platform_machine == 'x86_64' and sys_platform == 'linux' and 'linux' in sys_platform)" },
+    { name = "six", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/86/c6/e2d415610cfbc78308bee44218a46124aaa3301b1df08814df819b2254a1/pynput-1.8.2.tar.gz", hash = "sha256:f493c87157cd3861b4468f7f896857051762f44ed26f1b641e7cc5840a457087", size = 82818, upload-time = "2026-05-12T19:11:39.464Z" }
 wheels = [
@@ -274,10 +288,10 @@ name = "pytest"
 version = "9.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "iniconfig", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "packaging", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "pluggy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "pygments", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "iniconfig", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "packaging", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "pluggy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "pygments", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/79/42/bb4641652e58dedeac2ec51abc1f8cae4fee4ec63899a0999016229a0f2a/pytest-9.2.0.tar.gz", hash = "sha256:97c4f3b1f3c7414aa36465e09b8220f1d03627993bd51b1282e193753c80557b", size = 1797555, upload-time = "2026-10-27T21:30:20.728Z" }
 wheels = [
@@ -289,7 +303,7 @@ name = "python-xlib"
 version = "0.33"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "six", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/86/f5/8c0653e5bb54e0cbdfe27bf32d41f27bc4e12faa8742778c17f2a71be2c0/python-xlib-0.33.tar.gz", hash = "sha256:55af7906a2c75ce6cb280a584776080602444f75815a7aff4d287bb2d7018b32", size = 269068, upload-time = "2022-12-25T18:53:00.824Z" }
 wheels = [
@@ -301,8 +315,8 @@ name = "qpsolvers"
 version = "4.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "scipy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "scipy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d1/aa/4d60a7065de30f07d7ead935eed364cf94fb0ad5607ddf1461f2bdf7ba17/qpsolvers-4.13.0.tar.gz", hash = "sha256:e86c4c16bf7c16fdbb8e6c0e4050bc1bfef72a25755211be66a492ac4c939a1c", size = 77317, upload-time = "2026-07-19T07:46:03.087Z" }
 wheels = [
@@ -311,7 +325,7 @@ wheels = [
 
 [package.optional-dependencies]
 quadprog = [
-    { name = "quadprog", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "quadprog", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 
 [[package]]
@@ -319,11 +333,12 @@ name = "quadprog"
 version = "0.1.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a0/ad/87bf3e68e741a33141b2c6029de14f43b7229dfa47d0ee5b2ed6e05e6536/quadprog-0.1.14.tar.gz", hash = "sha256:16a1ae6715793d82f016b7ad3502192bcd8db661c6368badc5bba8017382577b", size = 17052, upload-time = "2026-10-19T23:38:56.954Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/21/b6/0067969da7ec9c709891c93fff24931c2a785a0bfbf5b631517f7f52fbb4/quadprog-0.1.14-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:cba4439f1d5844b99c4c8243db987f5344dbdf841f1c1e2fee5a06704a779d57", size = 101420, upload-time = "2026-10-19T23:38:27.42Z" },
+    { url = "https://files.pythonhosted.org/packages/37/84/38f11bdb7b148eb31aecd1a0edb26c98562fa78c78be2a3360c57fd36cb0/quadprog-0.1.14-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:78a4a6497c969b6eb52bf83eb4b7891ddc76cee1d267ae984f5742768f7f8d42", size = 610007, upload-time = "2026-10-19T23:38:30.298Z" },
 ]
 
 [[package]]
@@ -331,18 +346,18 @@ name = "robosuite"
 version = "1.5.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mink", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "mujoco", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "numba", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "numpy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "opencv-python", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "pillow", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "pynput", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "pytest", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "qpsolvers", extra = ["quadprog"], marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "scipy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "termcolor", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "tqdm", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "mink", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "mujoco", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "numba", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "opencv-python", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "pillow", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "pynput", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "pytest", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "qpsolvers", extra = ["quadprog"], marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "scipy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "termcolor", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "tqdm", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/27/96/13c4c63860a3809740efa7406d01ff8ea3ebbdbd5d35eec0e8ead486f654/robosuite-1.5.2.tar.gz", hash = "sha256:9f128d57e4f090a9d78d93b246bd2a862b7fa6fc2ccb837aac06cf0ab19fde78", size = 155629116, upload-time = "2025-12-24T22:31:47.394Z" }
 wheels = [
@@ -354,12 +369,14 @@ name = "scipy"
 version = "1.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b2/02/cf107b01494c19dc100f1d0b7ac3cc08666e96ba2d64db7626066cee895e/scipy-1.17.1-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:fcb310ddb270a06114bb64bbe53c94926b943f5b7f0842194d585c65eb4edd76", size = 28172662, upload-time = "2026-02-23T00:18:01.64Z" },
     { url = "https://files.pythonhosted.org/packages/cf/a9/599c28631bad314d219cf9ffd40e985b24d603fc8a2f4ccc5ae8419a535b/scipy-1.17.1-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:cc90d2e9c7e5c7f1a482c9875007c095c3194b1cfedca3c2f3291cdc2bc7c086", size = 20344366, upload-time = "2026-02-23T00:18:12.015Z" },
+    { url = "https://files.pythonhosted.org/packages/01/8e/1e35281b8ab6d5d72ebe9911edcdffa3f36b04ed9d51dec6dd140396e220/scipy-1.17.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:02ae3b274fde71c5e92ac4d54bc06c42d80e399fec704383dcd99b301df37458", size = 35235890, upload-time = "2026-02-23T00:18:49.188Z" },
+    { url = "https://files.pythonhosted.org/packages/65/94/7698add8f276dbab7a9de9fb6b0e02fc13ee61d51c7c3f85ac28b65e1239/scipy-1.17.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:f590cd684941912d10becc07325a3eeb77886fe981415660d9265c4c418d0bea", size = 37625856, upload-time = "2026-02-23T00:19:00.307Z" },
 ]
 
 [[package]]
@@ -403,13 +420,13 @@ name = "worldsmith-robosuite"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "mujoco", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "robosuite", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "mujoco", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "robosuite", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "pytest", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "pytest", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 
 [package.metadata]

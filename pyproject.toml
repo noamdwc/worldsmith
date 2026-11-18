@@ -8,6 +8,9 @@ requires-python = ">=3.11"
 local = [
     "boto3>=1.40,<2",
     "mcp>=1.20,<2",
+    { include-group = "simulation" },
+]
+simulation = [
     "numpy>=2.4.6",
     "pymunk>=7.3.1",
 ]
