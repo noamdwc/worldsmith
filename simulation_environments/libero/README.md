@@ -10,4 +10,4 @@ make autoresearch-libero
 
 The evaluator disables the MuJoCo graphics backend, camera observations, and offscreen rendering. LIBERO-PRO uses its own Robosuite and MuJoCo pins.
 
-For a historical seed-file replay, keep each task's eight distinct layout indices within 8–49, with no overlap between tasks. Out-of-range seeds fail. [Owner replay instructions](../../README.md#owner-validation-and-replay)
+For a historical seed-file replay, keep each task's eight distinct layout indices within 8–49, with no overlap between tasks. Out-of-range seeds fail.
