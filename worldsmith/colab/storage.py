@@ -9,7 +9,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-from worldsmith.research_lifecycle import ROOT
+from worldsmith.project_paths import ROOT
 
 PREFIX = "worldsmith/evaluations"
 

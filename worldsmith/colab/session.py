@@ -11,7 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from worldsmith.research_lifecycle import ROOT
+from worldsmith.project_paths import ROOT
 
 from .environment_cache import package_bootstrap, plan_runtime, prepared_etag
 from .storage import R2
@@ -198,16 +198,17 @@ def start_session(selector: str = "all") -> ColabSession:
                 initialize(session, archive, marker="WORLDSMITH_COLAB_READY")
                 save_session(session.name, ready=True)
             except BaseException:
-                stop_after_run(session)
+                try:
+                    session.stop()
+                except (ColabError, OSError) as error:
+                    print(f"{error}. Retry cleanup with make colab-stop.", file=sys.stderr)
                 raise
         print(f"Colab session {session.name} is ready on NVIDIA L4", flush=True)
         return session
 
 
-def stop_after_run(session: ColabSession) -> bool:
-    try:
-        session.stop()
-    except (ColabError, OSError) as error:
-        print(f"{error}. Retry cleanup with make colab-stop.", file=sys.stderr)
-        return False
-    return True
+def stop_tracked_session(*, expected_name: str | None = None):
+    with session_lock("lifecycle"):
+        state = tracked_session()
+        if state is not None and (expected_name is None or state["name"] == expected_name):
+            ColabSession(state["name"]).stop()
