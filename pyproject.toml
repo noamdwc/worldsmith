@@ -16,6 +16,10 @@ simulation = [
 ]
 dev = [
     "pytest>=9.2.0",
+    { include-group = "inference" },
+]
+inference = [
+    "openai==1.99.9",
 ]
 
 [tool.pytest.ini_options]

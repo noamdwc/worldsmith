@@ -18,7 +18,7 @@ def handle_interrupt(signum, frame):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subcommands = parser.add_subparsers(dest="action", required=True)
-    for action in ("status", "stop"):
+    for action in ("status", "stop", "slm-smoke"):
         subcommands.add_parser(action)
     for action in ("start", "build-envs"):
         command = subcommands.add_parser(action)
@@ -30,6 +30,11 @@ def main() -> int:
     try:
         if args.action == "build-envs":
             return build_environments(args.simulator)
+        if args.action == "slm-smoke":
+            from .inference import smoke_test
+
+            smoke_test()
+            return 0
         if args.action == "start":
             session = start_session(args.simulator)
             print(f"Inspect {session.name} with `make colab-status`.")
