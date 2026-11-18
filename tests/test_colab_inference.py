@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from worldsmith.colab import inference, session
+from worldsmith.colab import session
+from worldsmith.inference import colab_smoke
 
 
 def test_bootstrap_retains_owner_wheel_for_inference(tmp_path, monkeypatch):
@@ -62,19 +63,19 @@ def test_smoke_dispatches_to_assigned_session(monkeypatch, capsys, success):
         assert "vllm==0.10.2" in code
         return "chat and tool passed\nWORLDSMITH_SLM_SMOKE_PASSED\n" if success else "remote failure"
 
-    monkeypatch.setattr(inference, "session_lock", lock)
+    monkeypatch.setattr(colab_smoke, "session_lock", lock)
     monkeypatch.setattr(session, "tracked_session", lambda: {"ready": True, "name": "existing-session"})
     monkeypatch.setattr(session.ColabSession, "execute", execute)
     if success:
-        inference.smoke_test()
+        colab_smoke.smoke_test()
         assert "chat and tool passed" in capsys.readouterr().out
     else:
         with pytest.raises(session.ColabError, match="slm-install.log,slm-smoke.log,vllm.log"):
-            inference.smoke_test()
+            colab_smoke.smoke_test()
     assert locks == ["lifecycle", "evaluation"]
 
 
 def test_smoke_requires_ready_session(tmp_path, monkeypatch):
     monkeypatch.setattr(session, "STATE_DIR", tmp_path)
     with pytest.raises(session.ColabError, match="unavailable"):
-        inference.smoke_test()
+        colab_smoke.smoke_test()

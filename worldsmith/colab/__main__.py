@@ -31,7 +31,7 @@ def main() -> int:
         if args.action == "build-envs":
             return build_environments(args.simulator)
         if args.action == "slm-smoke":
-            from .inference import smoke_test
+            from worldsmith.inference.colab_smoke import smoke_test
 
             smoke_test()
             return 0

@@ -2,9 +2,9 @@
 
 from textwrap import dedent
 
-from worldsmith.inference.config import OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT, VLLM_REQUIREMENT
+from worldsmith.colab.session import ColabError, ColabSession, REMOTE_PROJECT, session_lock
 
-from .session import ColabError, ColabSession, REMOTE_PROJECT, session_lock
+from .config import OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT, VLLM_REQUIREMENT
 
 
 def smoke_test():
