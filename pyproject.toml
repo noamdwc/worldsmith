@@ -6,7 +6,9 @@ requires-python = ">=3.11"
 
 [dependency-groups]
 local = [
+    "awscli==1.46.3",
     "boto3>=1.40,<2",
+    "google-colab-cli==0.6.0",
     "mcp>=1.20,<2",
     { include-group = "simulation" },
 ]
@@ -38,3 +40,6 @@ include = ["worldsmith*"]
 [tool.uv]
 package = false
 default-groups = ["local", "dev"]
+
+[tool.uv.dependency-groups]
+local = { requires-python = ">=3.12" }

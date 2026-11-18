@@ -1,5 +1,10 @@
 .PHONY: autoresearch autoresearch-maniskill autoresearch-libero autoresearch-robosuite clear-autoresearch colab-build-envs colab-status colab-stop colab-slm-smoke
 
+# Let uv load owner settings for every target without shell-specific exports.
+ifneq ($(wildcard .env),)
+export UV_ENV_FILE ?= $(CURDIR)/.env
+endif
+
 SIMULATOR ?= all
 
 autoresearch:
