@@ -1177,6 +1177,11 @@ local = [
     { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pymunk" },
 ]
+simulation = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pymunk" },
+]
 
 [package.metadata]
 
@@ -1185,6 +1190,10 @@ dev = [{ name = "pytest", specifier = ">=9.2.0" }]
 local = [
     { name = "boto3", specifier = ">=1.40,<2" },
     { name = "mcp", specifier = ">=1.20,<2" },
+    { name = "numpy", specifier = ">=2.4.6" },
+    { name = "pymunk", specifier = ">=7.3.1" },
+]
+simulation = [
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "pymunk", specifier = ">=7.3.1" },
 ]

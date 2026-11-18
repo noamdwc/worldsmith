@@ -59,6 +59,13 @@ def run_group_process(command: list[str], *, timeout: float, **options) -> subpr
     return subprocess.CompletedProcess(command, returncode)
 
 
+def group_command(python: str, output: Path, *, tasks: list[str], seeds: list[int], workers: int):
+    return [
+        python, "-B", "-m", "worldsmith.evaluation.research_evaluation", str(output),
+        "--workers", str(workers), "--tasks", *tasks, "--seeds", *map(str, seeds),
+    ]
+
+
 def run_group(
     group: str, python: str, code: Path, output: Path, deadline: float,
     *, tasks: list[str], seeds: list[int],
@@ -66,25 +73,33 @@ def run_group(
     workers = DEFAULT_WORKERS[group] if WORKER_OVERRIDE is None else WORKER_OVERRIDE
     log = output.parent.parent / f"{group}-stderr.txt"
     with log.open("w", encoding="utf-8") as stderr:
-        result = run_group_process(
-            [python, "-B", "-m", "worldsmith.evaluation.research_evaluation", str(output),
-             "--workers", str(workers), "--tasks", *tasks, "--seeds", *map(str, seeds)],
-            cwd=code,
-            env={**os.environ, "PYTHONPATH": str(ROOT)},
-            stdout=stderr,
-            stderr=subprocess.STDOUT,
-            timeout=max(0, deadline - monotonic()),
-        )
+        try:
+            result = run_group_process(
+                group_command(python, output, tasks=tasks, seeds=seeds, workers=workers),
+                cwd=code,
+                env={**os.environ, "PYTHONPATH": str(ROOT)},
+                stdout=stderr,
+                stderr=subprocess.STDOUT,
+                timeout=max(0, deadline - monotonic()),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise EvaluationTimeout(task_context(output)) from exc
     if result.returncode:
         diagnostic = output / "controller_feedback.txt"
         if diagnostic.is_file():
             raise EvaluationFailure(diagnostic.read_text(encoding="utf-8").strip())
-        marker = output / "task.txt"
-        message = "Evaluator could not complete the run"
-        if marker.is_file():
-            message += f" while evaluating {marker.read_text(encoding='utf-8')}"
+        message = "Evaluator could not complete the run" + task_context(output)
         raise EvaluationFailure(message) from subprocess.CalledProcessError(result.returncode, result.args)
+
+
+def task_context(output: Path) -> str:
+    marker = output / "task.txt"
+    return f" while evaluating {marker.read_text(encoding='utf-8')}" if marker.is_file() else ""
 
 
 class EvaluationFailure(RuntimeError):
     """Evaluation failure whose message can be included in public feedback."""
+
+
+class EvaluationTimeout(EvaluationFailure):
+    """The suite reached its evaluation deadline."""

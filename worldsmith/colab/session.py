@@ -2,14 +2,19 @@
 
 import fcntl
 import json
+import re
 import signal
 import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from uuid import uuid4
 
-from worldsmith.research_lifecycle import ROOT
+from worldsmith.project_paths import ROOT
 
+from .environment_cache import package_bootstrap, plan_runtime, prepared_etag
+from .storage import R2
 
 STATE_DIR = ROOT / "runs" / "colab"
 REMOTE_PROJECT = "/content/worldsmith"
@@ -70,8 +75,16 @@ class ColabSession:
             raise ColabError(f"Could not invoke Colab {action}") from None
         # Avoid forwarding raw CLI logs, which may include OAuth or proxy tokens.
         if result.returncode:
-            if f"Session '{self.name}' not found" in result.stdout or "appears to be lost" in result.stdout:
+            output = f"{result.stdout}\n{result.stderr}"
+            if f"Session '{self.name}' not found" in output or f"Session '{self.name}' appears to be lost" in output:
                 raise ColabError("Colab session disappeared or is unavailable")
+            if "CERTIFICATE_VERIFY_FAILED" in output:
+                raise ColabError(f"Colab {action} certificate verification failed. Set SSL_CERT_FILE to a trusted CA bundle")
+            if action == "exec":
+                if "RuntimeError: Connection was lost." in output:
+                    raise ColabError(f"Colab exec lost the connection to {self.name}. See the local Colab CLI log")
+                if "TimeoutError: Timeout waiting for reply" in output:
+                    raise ColabError(f"Colab exec timed out waiting for a reply from {self.name}")
             if action == "new":
                 raise ColabError("Colab L4 allocation failed. Check CLI authentication and L4 quota")
             raise ColabError(f"Colab {action} failed for {self.name}")
@@ -117,10 +130,93 @@ class ColabSession:
         (STATE_DIR / "session.json").unlink(missing_ok=True)
 
 
-def stop_after_run(session: ColabSession) -> bool:
-    try:
-        session.stop()
-    except (ColabError, OSError) as error:
-        print(f"{error}. Retry cleanup with make colab-stop.", file=sys.stderr)
-        return False
-    return True
+def initialize(session: ColabSession, archive: Path, *, marker: str):
+    session._command("upload", str(archive), "/content/bootstrap.tar.gz")
+    output = session.execute(
+        "import runpy, tarfile\n"
+        "from pathlib import Path\n"
+        f"Path({REMOTE_PROJECT!r}).mkdir()\n"
+        "with tarfile.open('/content/bootstrap.tar.gz') as archive:\n"
+        f"    archive.extractall({REMOTE_PROJECT!r}, filter='data')\n"
+        "Path('/content/bootstrap.tar.gz').unlink()\n"
+        f"runpy.run_path({(REMOTE_PROJECT + '/scripts/setup-colab.py')!r}, run_name='__main__')\n",
+        timeout=SETUP_TIMEOUT,
+    )
+    lines = output.splitlines()
+    if marker not in lines:
+        stages = [line for line in lines if re.fullmatch(r"WORLDSMITH_SETUP [a-zA-Z0-9 ._()/-]+", line)]
+        stage = stages[-1].removeprefix("WORLDSMITH_SETUP ") if stages else "project extraction"
+        raise ColabError(f"Colab initialization failed at {stage}. See the local Colab CLI history")
+
+
+def build_environments(selector: str) -> int:
+    with session_lock("environment-build"):
+        storage = R2()
+        storage.check()
+        config, missing = plan_runtime(storage, selector, prepare=True, expires=SETUP_TIMEOUT * 2)
+        if config is None:
+            print(f"Prepared Colab caches already exist for {selector}.")
+            return 0
+        session = ColabSession(f"worldsmith-env-{uuid4().hex[:12]}")
+        with TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "bootstrap.tar.gz"
+            package_bootstrap(config, archive)
+            try:
+                print(f"Starting temporary Colab session {session.name}", flush=True)
+                session.allocate()
+                initialize(session, archive, marker="WORLDSMITH_COLAB_PREPARED")
+                for key in missing:
+                    if prepared_etag(storage, key) is None:
+                        raise ColabError(f"Prepared cache was not found at {key}")
+                print(f"Verified prepared Colab caches for {selector}.")
+            finally:
+                try:
+                    session.release()
+                    cleaned = True
+                except (ColabError, OSError) as error:
+                    print(f"{error}. Retry with colab stop -s {session.name}.", file=sys.stderr)
+                    cleaned = False
+        return 0 if cleaned else 1
+
+
+def start_session(selector: str = "all") -> ColabSession:
+    with session_lock("lifecycle"):
+        if tracked_session() is not None:
+            raise ColabError("A Colab session is already tracked. Inspect it with make colab-status")
+        storage = R2()
+        storage.check()
+        config, _ = plan_runtime(storage, selector, prepare=False, expires=SETUP_TIMEOUT * 2)
+        session = ColabSession(f"worldsmith-{uuid4().hex[:12]}")
+        with TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "bootstrap.tar.gz"
+            try:
+                package = subprocess.run(
+                    ["bash", str(ROOT / "scripts/prepare-colab-wheel.sh"), str(SETUP_TIMEOUT * 2)],
+                    cwd=ROOT, check=True, capture_output=True, text=True,
+                )
+            except subprocess.CalledProcessError as error:
+                raise ColabError(error.stderr.strip() or "Could not prepare the Worldsmith wheel") from None
+            filename, url = package.stdout.splitlines()
+            config["wheel"] = {"filename": filename, "url": url}
+            package_bootstrap(config, archive)
+            save_session(session.name, ready=False)
+            try:
+                print(f"Starting Colab L4 session {session.name}", flush=True)
+                session.allocate()
+                initialize(session, archive, marker="WORLDSMITH_COLAB_READY")
+                save_session(session.name, ready=True)
+            except BaseException:
+                try:
+                    session.stop()
+                except (ColabError, OSError) as error:
+                    print(f"{error}. Retry cleanup with make colab-stop.", file=sys.stderr)
+                raise
+        print(f"Colab session {session.name} is ready on NVIDIA L4", flush=True)
+        return session
+
+
+def stop_tracked_session(*, expected_name: str | None = None):
+    with session_lock("lifecycle"):
+        state = tracked_session()
+        if state is not None and (expected_name is None or state["name"] == expected_name):
+            ColabSession(state["name"]).stop()

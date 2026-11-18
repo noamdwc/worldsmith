@@ -1,5 +1,7 @@
 """R2 storage contracts for the Colab infrastructure."""
 
+import subprocess
+import tomllib
 from io import BytesIO
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -7,7 +9,31 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from botocore.response import StreamingBody
 
-from worldsmith.colab import storage
+from worldsmith.colab import session, storage
+
+
+@pytest.mark.parametrize("stderr, message", [
+    ("[colab] Session 'test-runtime' appears to be lost (404/401).", "Colab session disappeared"),
+    ("RuntimeError: Connection was lost.", "Colab exec lost the connection"),
+    ("TimeoutError: Timeout waiting for reply", "Colab exec timed out waiting for a reply"),
+    ("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed", "Set SSL_CERT_FILE"),
+    ("Unrecognized CLI error", "Colab exec failed for test-runtime"),
+])
+def test_colab_cli_errors_report_safe_diagnostics(monkeypatch, stderr, message):
+    monkeypatch.setattr(session.subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(
+        args[0], 1, "private stdout", f"{stderr}\nprivate stderr",
+    ))
+    with pytest.raises(session.ColabError, match=message) as error:
+        session.ColabSession("test-runtime").execute("print(1)", timeout=10)
+    assert "private" not in str(error.value)
+
+
+def test_research_mcp_forwards_ca_configuration():
+    config = storage.ROOT / "autoresearch/.codex/config.toml"
+    with config.open("rb") as source:
+        environment = tomllib.load(source)["mcp_servers"]["worldsmith"]["env_vars"]
+    assert {"SSL_CERT_FILE", "SSL_CERT_DIR", "WEBSOCKET_CLIENT_CA_BUNDLE"} <= set(environment)
+
 
 def test_r2_download_streams_the_sdk_body(tmp_path):
     contents = b"evaluation artifacts"

@@ -48,6 +48,8 @@ The other simulators use separate environments with their own setup instructions
 - [LIBERO-PRO](simulation_environments/libero/README.md)
 - [RoboSuite](simulation_environments/robosuite/README.md)
 
+AutoResearch requires an authenticated Google Colab CLI and configured Cloudflare R2 credentials. Run `make colab-build-envs` to prepare the environments, then `make autoresearch` to start a research session.
+
 ## Documentation
 
 - [Research workflow](autoresearch/RESEARCH.md): experiment process and comparison rules.
