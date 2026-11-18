@@ -75,8 +75,16 @@ class ColabSession:
             raise ColabError(f"Could not invoke Colab {action}") from None
         # Avoid forwarding raw CLI logs, which may include OAuth or proxy tokens.
         if result.returncode:
-            if f"Session '{self.name}' not found" in result.stdout or "appears to be lost" in result.stdout:
+            output = f"{result.stdout}\n{result.stderr}"
+            if f"Session '{self.name}' not found" in output or f"Session '{self.name}' appears to be lost" in output:
                 raise ColabError("Colab session disappeared or is unavailable")
+            if "CERTIFICATE_VERIFY_FAILED" in output:
+                raise ColabError(f"Colab {action} certificate verification failed. Set SSL_CERT_FILE to a trusted CA bundle")
+            if action == "exec":
+                if "RuntimeError: Connection was lost." in output:
+                    raise ColabError(f"Colab exec lost the connection to {self.name}. See the local Colab CLI log")
+                if "TimeoutError: Timeout waiting for reply" in output:
+                    raise ColabError(f"Colab exec timed out waiting for a reply from {self.name}")
             if action == "new":
                 raise ColabError("Colab L4 allocation failed. Check CLI authentication and L4 quota")
             raise ColabError(f"Colab {action} failed for {self.name}")

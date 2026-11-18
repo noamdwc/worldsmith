@@ -116,11 +116,12 @@ def researcher(tmp_path, monkeypatch):
     return candidate
 
 
-def test_mcp_reuses_session_and_isolates_candidate_processes(fake_cli, researcher, monkeypatch):
+@pytest.mark.parametrize("override, workers", [(None, 4), (2, 2)])
+def test_mcp_reuses_session_and_isolates_candidate_processes(fake_cli, researcher, monkeypatch, override, workers):
     calls, objects, requests = fake_cli
     runtime = session.start_session()
     monkeypatch.setenv("WORLDSMITH_COLAB_SESSION", runtime.name)
-    monkeypatch.setattr(backend, "WORKER_OVERRIDE", 2)
+    monkeypatch.setattr(backend, "WORKER_OVERRIDE", override)
     # The two evaluations import the same module name. An interpreter reused
     # across jobs would either cache the old source or retain this global.
     prefix = (
@@ -146,7 +147,7 @@ def test_mcp_reuses_session_and_isolates_candidate_processes(fake_cli, researche
     for result, request in zip((first, second), requests, strict=True):
         run_id = result["run_id"]
         job = f"{backend.PREFIX}/{run_id}"
-        assert request["groups"] == {"pymunk": {"tasks": ["navigation"], "workers": 2}}
+        assert request["groups"] == {"pymunk": {"tasks": ["navigation"], "workers": workers}}
         assert request == json.loads(objects[f"{job}/input/request.json"])
         assert request["job_id"] == run_id
         with tarfile.open(fileobj=BytesIO(objects[f"{job}/input/candidate.tar.gz"])) as archive:
@@ -306,19 +307,36 @@ def test_recovery_rejects_mismatched_or_incomplete_artifacts(fake_cli, researche
     assert all(not key.endswith("completed.json") for key in objects)
 
 
-def test_missing_artifacts_after_exec_failure_are_reported_without_resubmission(fake_cli, researcher, monkeypatch):
+@pytest.mark.parametrize("assigned, notice, message", [
+    (True, "Colab exec timed out", "Colab exec timed out[.] R2 has no artifact bundle"),
+    (False, "Colab exec lost the connection", "Colab exec lost the connection.*Colab session disappeared.*R2 has no artifact bundle"),
+])
+def test_missing_artifacts_fail_without_resubmission_or_state_change(
+    fake_cli, researcher, monkeypatch, assigned, notice, message,
+):
     _, objects, requests = fake_cli
     session.start_session()
+    baseline = research_mcp.evaluate_controller()
+    retained = research_mcp.retained_summary
+    trace = research_mcp.get_episode_trace(0)
+    outputs = {key for key in objects if "/output/" in key}
+    researcher.write_text(researcher.read_text() + "\n# Candidate under test\n")
 
     def fail(*a, **kw):
         requests.append("submitted")
-        raise session.ColabError("Colab exec timed out")
+        raise session.ColabError(notice)
 
     monkeypatch.setattr(session.ColabSession, "execute", fail)
-    with pytest.raises(RuntimeError, match="Colab exec timed out.*R2 has no artifact bundle"):
+    monkeypatch.setattr(session.ColabSession, "is_assigned", lambda self: assigned)
+    with pytest.raises(RuntimeError, match=message):
         research_mcp.evaluate_controller()
-    assert requests == ["submitted"]
-    assert all("/output/" not in key for key in objects)
+    assert requests[1:] == ["submitted"]
+    assert {key for key in objects if "/output/" in key} == outputs
+    assert research_mcp.retained_summary is retained
+    assert research_mcp.get_episode_trace(0) == trace
+    [failed_run] = [path for path in (researcher.parent / "runs").iterdir() if path.name != baseline["run_id"]]
+    assert json.loads((failed_run / "evaluation.json").read_text())["status"] == "failed"
+    assert not (failed_run / "results").exists()
 
 
 def test_remote_job_id_cannot_be_started_twice(fake_cli, researcher, tmp_path, monkeypatch):

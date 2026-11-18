@@ -11,7 +11,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import monotonic, sleep
 
-from worldsmith.benchmark.task_catalog import DEFAULT_WORKERS
 from worldsmith.research_feedback import read_task_results
 from worldsmith.research_mcp.constant import WORKER_OVERRIDE
 from worldsmith.research_mcp.evaluation_io import EvaluationFailure, EvaluationTimeout, task_context
@@ -19,6 +18,10 @@ from worldsmith.research_mcp.evaluation_io import EvaluationFailure, EvaluationT
 from .remote_job import JOB_ALREADY_STARTED, SESSION_BUSY, UPLOAD_FAILED, regular_tar_member
 from .session import REMOTE_PROJECT, ColabError, ColabSession, session_lock
 from .storage import PREFIX, R2, ObjectMissing, StorageError
+
+# Four workers per simulator completed the full development suite on Colab L4
+# within the existing deadline. Local evaluations use their own defaults.
+COLAB_DEFAULT_WORKERS = 4
 
 # The remote supervisor enforces the evaluator deadline. Allow CLI and storage
 # overhead outside that budget so diagnostics can also arrive for timed-out jobs.
@@ -42,12 +45,13 @@ def run_colab(
         with session_lock("evaluation"):
             session = ColabSession.active(os.environ.get("WORLDSMITH_COLAB_SESSION"))
             storage = R2()
+            workers = WORKER_OVERRIDE if WORKER_OVERRIDE is not None else COLAB_DEFAULT_WORKERS
             request = {
                 "job_id": job_id,
                 "controller_sha256": digest,
                 "seeds": seeds,
                 "groups": {
-                    group: {"tasks": tasks, "workers": WORKER_OVERRIDE or DEFAULT_WORKERS[group]}
+                    group: {"tasks": tasks, "workers": workers}
                     for group, tasks in tasks_by_group.items()
                 },
             }
@@ -134,10 +138,10 @@ def dispatch(session, storage, request, code, output, staging, deadline):
         except ObjectMissing as error:
             remaining = recovery_deadline - monotonic()
             if remaining <= 0:
-                if notice == "Colab remote evaluation command did not complete":
+                if wait_for_artifacts:
                     with suppress(ColabError):
                         if not session.is_assigned():
-                            notice = "Colab session disappeared during evaluation"
+                            notice += ". Colab session disappeared during evaluation"
                 detail = f"{notice}. " if notice else ""
                 raise ColabError(detail + str(error)) from None
             sleep(min(1, remaining))
