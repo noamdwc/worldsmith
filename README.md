@@ -65,6 +65,10 @@ uv pip install --python .venv/bin/python vllm==0.10.2 transformers==4.55.2
 
 The smoke test starts and stops its own server. Server diagnostics are in `vllm.log`.
 
+With the Colab CLI and R2 credentials configured as above, `make colab-slm-smoke`
+prepares, starts, tests, and releases a Colab session. Diagnostic logs are saved to
+`runs/colab/<session-name>/{slm-install.log,slm-smoke.log,vllm.log}`.
+
 ## Documentation
 
 - [Research workflow](autoresearch/RESEARCH.md): experiment process and comparison rules.
