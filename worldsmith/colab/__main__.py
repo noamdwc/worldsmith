@@ -20,8 +20,6 @@ def main() -> int:
     subcommands = parser.add_subparsers(dest="action", required=True)
     for action in ("status", "stop"):
         subcommands.add_parser(action)
-    smoke = subcommands.add_parser("slm-smoke")
-    smoke.add_argument("--new-session", action="store_true", help="Prepare, start, test, and release a session")
     for action in ("start", "build-envs"):
         command = subcommands.add_parser(action)
         command.add_argument("simulator", nargs="?", default="all", choices=("all", *ENVIRONMENT_PYTHONS))
@@ -32,13 +30,6 @@ def main() -> int:
     try:
         if args.action == "build-envs":
             return build_environments(args.simulator)
-        if args.action == "slm-smoke":
-            from worldsmith.inference.colab_smoke import run_session_smoke, smoke_test
-
-            if args.new_session:
-                return run_session_smoke()
-            smoke_test()
-            return 0
         if args.action == "start":
             session = start_session(args.simulator)
             print(f"Inspect {session.name} with `make colab-status`.")

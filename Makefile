@@ -1,9 +1,4 @@
-.PHONY: autoresearch autoresearch-maniskill autoresearch-libero autoresearch-robosuite clear-autoresearch colab-build-envs colab-status colab-stop colab-slm-smoke
-
-# Let uv load owner settings for every target without shell-specific exports.
-ifneq ($(wildcard .env),)
-export UV_ENV_FILE ?= $(CURDIR)/.env
-endif
+.PHONY: autoresearch autoresearch-maniskill autoresearch-libero autoresearch-robosuite clear-autoresearch colab-build-envs colab-status colab-stop
 
 SIMULATOR ?= all
 
@@ -27,9 +22,6 @@ colab-stop:
 
 colab-build-envs:
 	@uv run --locked python -m worldsmith.colab build-envs "$(SIMULATOR)"
-
-colab-slm-smoke:
-	@uv run --locked python -m worldsmith.colab slm-smoke --new-session
 
 clear-autoresearch:
 	@archive_id=$$(uv run --locked python -m worldsmith.research_lifecycle archive) && \

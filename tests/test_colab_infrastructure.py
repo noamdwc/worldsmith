@@ -12,19 +12,6 @@ from botocore.response import StreamingBody
 from worldsmith.colab import session, storage
 
 
-def test_colab_cli_can_construct_its_jupyter_client(monkeypatch):
-    import jupyter_kernel_client
-    from colab_cli.runtime import ColabRuntime
-
-    # Exercise the installed CLI/client API boundary without connecting to Colab.
-    monkeypatch.setattr(jupyter_kernel_client.KernelClient, "start", lambda self: None)
-    monkeypatch.setattr(ColabRuntime, "_apply_ws_hook", lambda self: None)
-    runtime = ColabRuntime(
-        "https://example.invalid", "local-test", session_id="test-session",
-    )
-    assert isinstance(runtime.kernel_client, jupyter_kernel_client.KernelClient)
-
-
 @pytest.mark.parametrize("stderr, message", [
     ("[colab] Session 'test-runtime' appears to be lost (404/401).", "Colab session disappeared"),
     ("RuntimeError: Connection was lost.", "Colab exec lost the connection"),

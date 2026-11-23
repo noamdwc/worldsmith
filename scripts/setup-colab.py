@@ -259,11 +259,7 @@ def main():
         }
         install_assets(config["assets"], pythons, staging, prepare=prepare)
         if not prepare:
-            # Keep the owner-built wheel for optional inference installation in
-            # this same runtime, without copying researcher code into that env.
-            packages = ROOT / "packages"
-            packages.mkdir()
-            wheel = packages / config["wheel"]["filename"]
+            wheel = staging / config["wheel"]["filename"]
             print("WORLDSMITH_SETUP Worldsmith wheel download", flush=True)
             download(config["wheel"]["url"], wheel)
             for group, python in pythons.items():
