@@ -48,7 +48,24 @@ The other simulators use separate environments with their own setup instructions
 - [LIBERO-PRO](simulation_environments/libero/README.md)
 - [RoboSuite](simulation_environments/robosuite/README.md)
 
-AutoResearch requires an authenticated Google Colab CLI and configured Cloudflare R2 credentials. Run `make colab-build-envs` to prepare the environments, then `make autoresearch` to start a research session.
+AutoResearch requires an authenticated Google Colab CLI and configured Cloudflare R2 credentials.
+Copy `.env.example` to `.env` in the repository root and set your bucket name and
+the absolute path to your credentials file. Keep the credentials file outside
+the repository, with plain `KEY=value` lines:
+
+```dotenv
+R2_ACCOUNT_ID=your-32-character-account-id
+R2_ACCESS_KEY_ID=your-access-key
+R2_SECRET_ACCESS_KEY=your-secret-key
+```
+
+Make targets automatically load `.env` when it exists. Exported environment
+variables take precedence over its values. `.env` is ignored by Git; commit only
+the placeholder `.env.example`. For direct commands, use
+`uv run --env-file .env --locked python ...`.
+
+Run `make colab-build-envs` to prepare the environments, then `make autoresearch`
+to start a research session.
 
 ### SLM inference
 
@@ -66,8 +83,15 @@ uv pip install --python .venv/bin/python vllm==0.10.2 transformers==4.55.2
 The smoke test starts and stops its own server. Server diagnostics are in `vllm.log`.
 
 With the Colab CLI and R2 credentials configured as above, `make colab-slm-smoke`
-prepares, starts, tests, and releases a Colab session. Diagnostic logs are saved to
+prepares, starts, tests, and releases a Colab session. To try a T4 or A100 instead of
+the default L4, set `COLAB_GPU=T4` or `COLAB_GPU=A100` on that command. Diagnostic logs are saved to
 `runs/colab/<session-name>/{slm-install.log,slm-smoke.log,vllm.log}`.
+
+The smoke workflow stores the pinned model snapshot in R2 under
+`worldsmith/cache/models/<model>/<revision>/`. Missing files are downloaded with
+Hugging Face's snapshot downloader and saved to R2; later runs restore them from
+R2 and set `HF_HUB_CACHE` to that directory with `HF_HUB_OFFLINE=1`. This caches
+the model, not Python dependencies or GPU compilation. Progress is in `slm-install.log`.
 
 ## Documentation
 

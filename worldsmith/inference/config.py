@@ -2,6 +2,13 @@
 
 MODEL = "Qwen/Qwen3-4B-Instruct-2507"
 MODEL_REVISION = "cdbee75f17c01a7cc42f958dc650907174af0554"
+MODEL_FILES = (
+    "LICENSE", "config.json", "generation_config.json", "merges.txt",
+    "model-00001-of-00003.safetensors", "model-00002-of-00003.safetensors",
+    "model-00003-of-00003.safetensors", "model.safetensors.index.json",
+    "tokenizer.json", "tokenizer_config.json", "vocab.json",
+)
+
 VLLM_REQUIREMENT = "vllm==0.10.2"
 OPENAI_REQUIREMENT = "openai==1.99.9"
 # vLLM 0.10.2 predates Transformers 5; pin the model loader as well.
@@ -20,6 +27,7 @@ def server_command(python: str) -> list[str]:
         # The pinned tokenizer supplies the tool-aware chat template. Bound KV
         # cache and concurrency for Colab; do not allocate the native 256K context.
         "--dtype", "half", "--max-model-len", "8192",
-        "--max-num-seqs", "1", "--gpu-memory-utilization", "0.6",
+        # The 4B FP16 model plus an 8K KV cache exceeds a 60% budget on T4.
+        "--max-num-seqs", "1", "--gpu-memory-utilization", "0.8",
         "--generation-config", "vllm", "--seed", "0",
     ]

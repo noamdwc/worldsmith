@@ -22,6 +22,7 @@ def main() -> int:
         subcommands.add_parser(action)
     smoke = subcommands.add_parser("slm-smoke")
     smoke.add_argument("--new-session", action="store_true", help="Prepare, start, test, and release a session")
+    smoke.add_argument("--gpu", choices=("L4", "T4", "A100"), default="L4", help="GPU for a new smoke-test session")
     for action in ("start", "build-envs"):
         command = subcommands.add_parser(action)
         command.add_argument("simulator", nargs="?", default="all", choices=("all", *ENVIRONMENT_PYTHONS))
@@ -36,7 +37,7 @@ def main() -> int:
             from worldsmith.inference.colab_smoke import run_session_smoke, smoke_test
 
             if args.new_session:
-                return run_session_smoke()
+                return run_session_smoke(gpu=args.gpu)
             smoke_test()
             return 0
         if args.action == "start":

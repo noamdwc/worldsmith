@@ -1,21 +1,25 @@
 """Run the owner inference smoke test in the existing assigned Colab VM."""
 
+import json
 import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from textwrap import dedent
 
 from worldsmith.colab.session import (
     ColabError, ColabSession, REMOTE_PROJECT, STATE_DIR, build_environments,
     session_lock, start_session, stop_tracked_session,
 )
+from worldsmith.colab.storage import R2
 
-from .config import OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT, VLLM_REQUIREMENT
+from .config import MODEL, MODEL_FILES, MODEL_REVISION, OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT, VLLM_REQUIREMENT
 
 
-def run_session_smoke() -> int:
+def run_session_smoke(*, gpu: str = "L4") -> int:
     status = build_environments("pymunk")
     if status:
         return status
-    session = start_session("pymunk")
+    session = start_session("pymunk", gpu=gpu)
     try:
         smoke_test()
     finally:
@@ -40,6 +44,20 @@ def smoke_test():
     # finish before owner shutdown or another evaluation starts.
     with session_lock("lifecycle"), session_lock("evaluation"):
         session = ColabSession.active()
+        storage = R2()
+        files = {}
+        for name in MODEL_FILES:
+            key = f"worldsmith/cache/models/{MODEL}/{MODEL_REVISION}/{name}"
+            cached = storage.head(key)
+            if cached is not None:
+                files[name] = {"get": storage.signed_url(key, expires=3600), "etag": cached["ETag"].strip('"')}
+            else:
+                files[name] = {"put": storage.signed_url(key, expires=3600, upload=True), "headers": {}}
+        # Upload signed URLs as data, never as code recorded in CLI history.
+        with TemporaryDirectory() as temporary:
+            plan = Path(temporary) / "model-cache.json"
+            plan.write_text(json.dumps(files))
+            session._command("upload", str(plan), f"{REMOTE_PROJECT}/model-cache.json")
         pins = dict(requirement.split("==") for requirement in (
             VLLM_REQUIREMENT, OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT,
         ))
@@ -55,6 +73,7 @@ def smoke_test():
             sys.exit(0 if ready else 1)
         """)
         code = dedent(f"""\
+            import os
             import subprocess
             from pathlib import Path
 
@@ -62,6 +81,7 @@ def smoke_test():
             tool = sorted((root / 'tools').iterdir())[0]
             uv = str(tool / 'uv')
             python = str(root / '.slm/bin/python')
+            model_cache = root / 'hf-cache'
             with (root / 'slm-install.log').open('w') as log:
                 if not Path(python).is_file():
                     subprocess.run(
@@ -76,9 +96,14 @@ def smoke_test():
                          str(next((root / 'packages').glob('*.whl')))],
                         check=True, stdout=log, stderr=subprocess.STDOUT,
                     )
+                subprocess.run(
+                    [python, '-m', 'worldsmith.inference.model_cache', str(root / 'model-cache.json')],
+                    check=True, stdout=log, stderr=subprocess.STDOUT,
+                )
             with (root / 'slm-smoke.log').open('w') as log:
                 subprocess.run(
                     [python, '-m', 'worldsmith.inference.smoke'], cwd=root,
+                    env={{**os.environ, 'HF_HUB_CACHE': str(model_cache), 'HF_HUB_OFFLINE': '1'}},
                     check=True, stdout=log, stderr=subprocess.STDOUT,
                 )
             print((root / 'slm-smoke.log').read_text())
