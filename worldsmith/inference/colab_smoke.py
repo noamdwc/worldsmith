@@ -11,11 +11,11 @@ from worldsmith.colab.session import (
 from .config import OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT, VLLM_REQUIREMENT
 
 
-def run_session_smoke() -> int:
+def run_session_smoke(*, gpu: str = "L4") -> int:
     status = build_environments("pymunk")
     if status:
         return status
-    session = start_session("pymunk")
+    session = start_session("pymunk", gpu=gpu)
     try:
         smoke_test()
     finally:

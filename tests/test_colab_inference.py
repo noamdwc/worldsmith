@@ -12,11 +12,12 @@ from worldsmith.colab import session
 from worldsmith.inference import colab_smoke
 
 
-def test_bootstrap_retains_owner_wheel_for_inference(tmp_path, monkeypatch):
+@pytest.mark.parametrize("gpu", ["L4", "T4"])
+def test_bootstrap_retains_owner_wheel_for_inference(tmp_path, monkeypatch, gpu):
     main = runpy.run_path(str(session.ROOT / "scripts/setup-colab.py"))["main"]
     namespace = main.__globals__
     (tmp_path / "setup.json").write_text(json.dumps({
-        "mode": "research", "wheelhouses": {"pymunk": {"python": "3.12.13"}},
+        "mode": "research", "gpu": gpu, "wheelhouses": {"pymunk": {"python": "3.12.13"}},
         "assets": {}, "wheel": {"filename": "worldsmith-0.1.0-py3-none-any.whl", "url": "owner-wheel"},
     }))
     installs = []
@@ -32,7 +33,7 @@ def test_bootstrap_retains_owner_wheel_for_inference(tmp_path, monkeypatch):
     monkeypatch.setitem(namespace, "ROOT", tmp_path)
     monkeypatch.setitem(namespace, "sys", SimpleNamespace(platform="linux"))
     monkeypatch.setitem(namespace, "platform", SimpleNamespace(machine=lambda: "x86_64"))
-    monkeypatch.setitem(namespace, "subprocess", SimpleNamespace(check_output=lambda *a, **kw: "NVIDIA L4"))
+    monkeypatch.setitem(namespace, "subprocess", SimpleNamespace(check_output=lambda *a, **kw: f"Tesla {gpu}"))
     monkeypatch.setitem(namespace, "install_tools", lambda *a, **kw: {"3.12.13": ("uv", "python")})
     monkeypatch.setitem(namespace, "install_environment", lambda *a, **kw: "pymunk-python")
     monkeypatch.setitem(namespace, "install_assets", lambda *a, **kw: None)
@@ -145,15 +146,16 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
 
 
 @pytest.mark.parametrize("failure", [None, "smoke", "interrupt", "download"])
-def test_new_session_smoke_always_releases_its_session(tmp_path, monkeypatch, failure):
+@pytest.mark.parametrize("gpu", ["L4", "T4"])
+def test_new_session_smoke_always_releases_its_session(tmp_path, monkeypatch, failure, gpu):
     calls = []
 
     def prepare(selector):
         calls.append(("prepare", selector))
         return 0
 
-    def start(selector):
-        calls.append(("start", selector))
+    def start(selector, *, gpu):
+        calls.append(("start", selector, gpu))
         return SimpleNamespace(name="smoke-session", _command=download)
 
     def smoke():
@@ -176,15 +178,15 @@ def test_new_session_smoke_always_releases_its_session(tmp_path, monkeypatch, fa
     monkeypatch.setattr(colab_smoke, "stop_tracked_session", lambda *, expected_name: calls.append(("stop", expected_name)))
     if failure == "smoke":
         with pytest.raises(session.ColabError, match="model failed"):
-            colab_smoke.run_session_smoke()
+            colab_smoke.run_session_smoke(gpu=gpu)
     elif failure == "interrupt":
         with pytest.raises(SystemExit) as error:
-            colab_smoke.run_session_smoke()
+            colab_smoke.run_session_smoke(gpu=gpu)
         assert error.value.code == 130
     else:
-        assert colab_smoke.run_session_smoke() == 0
+        assert colab_smoke.run_session_smoke(gpu=gpu) == 0
     assert calls == [
-        ("prepare", "pymunk"), ("start", "pymunk"), ("smoke",),
+        ("prepare", "pymunk"), ("start", "pymunk", gpu), ("smoke",),
         ("download", "slm-install.log"), ("download", "slm-smoke.log"), ("download", "vllm.log"),
         ("stop", "smoke-session"),
     ]
@@ -197,7 +199,7 @@ def test_preparation_failure_does_not_start_session(monkeypatch):
 
 
 def test_start_failure_does_not_stop_existing_session(monkeypatch):
-    def start(selector):
+    def start(selector, *, gpu):
         raise session.ColabError("already tracked")
 
     monkeypatch.setattr(colab_smoke, "build_environments", lambda selector: 0)
@@ -207,10 +209,16 @@ def test_start_failure_does_not_stop_existing_session(monkeypatch):
         colab_smoke.run_session_smoke()
 
 
-def test_cli_dispatches_new_session_smoke(monkeypatch):
+@pytest.mark.parametrize("gpu", ["L4", "T4"])
+def test_cli_dispatches_new_session_smoke(monkeypatch, gpu):
     from worldsmith.colab import __main__ as owner
 
-    monkeypatch.setattr(owner.sys, "argv", ["worldsmith.colab", "slm-smoke", "--new-session"])
+    monkeypatch.setattr(owner.sys, "argv", ["worldsmith.colab", "slm-smoke", "--new-session", "--gpu", gpu])
     monkeypatch.setattr(owner.signal, "signal", lambda *args: None)
-    monkeypatch.setattr(colab_smoke, "run_session_smoke", lambda: 1)
+
+    def run(*, gpu):
+        assert gpu == owner.sys.argv[-1]
+        return 1
+
+    monkeypatch.setattr(colab_smoke, "run_session_smoke", run)
     assert owner.main() == 1

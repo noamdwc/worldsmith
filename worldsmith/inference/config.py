@@ -20,6 +20,7 @@ def server_command(python: str) -> list[str]:
         # The pinned tokenizer supplies the tool-aware chat template. Bound KV
         # cache and concurrency for Colab; do not allocate the native 256K context.
         "--dtype", "half", "--max-model-len", "8192",
-        "--max-num-seqs", "1", "--gpu-memory-utilization", "0.6",
+        # The 4B FP16 model plus an 8K KV cache exceeds a 60% budget on T4.
+        "--max-num-seqs", "1", "--gpu-memory-utilization", "0.8",
         "--generation-config", "vllm", "--seed", "0",
     ]

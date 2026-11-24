@@ -28,6 +28,27 @@ def test_colab_cli_errors_report_safe_diagnostics(monkeypatch, stderr, message):
     assert "private" not in str(error.value)
 
 
+@pytest.mark.parametrize("output, message", [
+    ("ColabRequestError: Failed to issue request POST https://colab.research.google.com/tun/m/assign: Service Unavailable",
+     "Service Unavailable \\(HTTP 503\\). Retry later"),
+    ("Unrecognized CLI error", "See ~/.config/colab-cli/colab.log for the underlying error"),
+])
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_colab_allocation_errors_report_safe_diagnostics(monkeypatch, output, message, stream):
+    streams = {"stdout": "private stdout", "stderr": "private stderr"}
+    streams[stream] += f"\n{output}\nhttps://example.com/?token=private"
+    monkeypatch.setattr(session.subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(
+        args[0], 1, **streams,
+    ))
+
+    with pytest.raises(session.ColabError, match=message) as error:
+        session.ColabSession("test-runtime").allocate()
+
+    assert "private" not in str(error.value)
+    assert "https://" not in str(error.value)
+    assert "quota" not in str(error.value)
+
+
 def test_research_mcp_forwards_ca_configuration():
     config = storage.ROOT / "autoresearch/.codex/config.toml"
     with config.open("rb") as source:
