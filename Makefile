@@ -2,6 +2,9 @@
 
 SIMULATOR ?= all
 
+# Load local configuration when present; allow callers to choose another env file.
+export UV_ENV_FILE ?= $(wildcard $(CURDIR)/.env)
+
 autoresearch:
 	@uv run --locked python -m worldsmith.research_launcher
 
