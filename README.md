@@ -83,7 +83,14 @@ uv pip install --python .venv/bin/python vllm==0.10.2 transformers==4.55.2
 The smoke test starts and stops its own server. Server diagnostics are in `vllm.log`.
 
 With the Colab CLI and R2 credentials configured as above, `make colab-slm-smoke`
-prepares, starts, tests, and releases a Colab session. To try a T4 or A100 instead of
+prepares, starts, tests, and releases a Colab session. It runs one closed-loop
+navigation episode with the frozen model and reports task outcome, environment
+steps, and model decisions. The controller uses one native `act` tool, repeats
+each action for up to 5 steps, and trims complete conversation interactions using
+the pinned tokenizer and the server's 8192-token budget.
+`worldsmith.inference.controller.run_slm_episode` accepts a positive integer
+`action_repeat` to change this fixed frequency. The two generic prompt templates
+are in `worldsmith/inference/prompts.py`. To try a T4 or A100 instead of
 the default L4, set `COLAB_GPU=T4` or `COLAB_GPU=A100` on that command. Diagnostic logs are saved to
 `runs/colab/<session-name>/{slm-install.log,slm-smoke.log,vllm.log}`.
 

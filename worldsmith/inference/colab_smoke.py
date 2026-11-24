@@ -68,6 +68,8 @@ def smoke_test():
             try:
                 ready = all(version(name) == expected for name, expected in {pins!r}.items())
                 version('worldsmith')
+                version('pymunk')
+                version('numpy')
             except PackageNotFoundError:
                 ready = False
             sys.exit(0 if ready else 1)
@@ -92,7 +94,7 @@ def smoke_test():
                 if versions.returncode:
                     subprocess.run(
                         [uv, 'pip', 'install', '--python', python,
-                         {VLLM_REQUIREMENT!r}, {OPENAI_REQUIREMENT!r}, {TRANSFORMERS_REQUIREMENT!r},
+                         {VLLM_REQUIREMENT!r}, {OPENAI_REQUIREMENT!r}, {TRANSFORMERS_REQUIREMENT!r}, 'pymunk==7.3.1',
                          str(next((root / 'packages').glob('*.whl')))],
                         check=True, stdout=log, stderr=subprocess.STDOUT,
                     )
@@ -102,7 +104,7 @@ def smoke_test():
                 )
             with (root / 'slm-smoke.log').open('w') as log:
                 subprocess.run(
-                    [python, '-m', 'worldsmith.inference.smoke'], cwd=root,
+                    [python, '-m', 'worldsmith.inference.robot_smoke'], cwd=root,
                     env={{**os.environ, 'HF_HUB_CACHE': str(model_cache), 'HF_HUB_OFFLINE': '1'}},
                     check=True, stdout=log, stderr=subprocess.STDOUT,
                 )

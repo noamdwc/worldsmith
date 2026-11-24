@@ -142,7 +142,7 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
     import subprocess
     from contextlib import nullcontext
 
-    pins = {"vllm": "0.10.2", "openai": "1.99.9", "transformers": "4.55.2", "worldsmith": "0.1.0"}
+    pins = {"vllm": "0.10.2", "openai": "1.99.9", "transformers": "4.55.2", "worldsmith": "0.1.0", "pymunk": "7.3.1", "numpy": "2.2.6"}
     installed = pins.copy()
     if environment == "new":
         installed.clear()
@@ -183,7 +183,7 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
         elif "worldsmith.inference.model_cache" in command:
             restores.append(command)
             assert command[-1] == str(tmp_path / "model-cache.json")
-        elif "worldsmith.inference.smoke" in command:
+        elif "worldsmith.inference.robot_smoke" in command:
             assert kwargs["env"]["HF_HUB_OFFLINE"] == "1"
             assert kwargs["env"]["HF_HUB_CACHE"] == str(tmp_path / "hf-cache")
             smokes.append(command)
