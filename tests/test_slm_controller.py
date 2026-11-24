@@ -12,7 +12,7 @@ from worldsmith.api import Action
 from worldsmith.benchmark.adapters.pymunk_adapter import PymunkAdapter
 from worldsmith.benchmark.runner import ControllerError, run_episode
 from worldsmith.benchmark.tasks.navigation import Navigation
-from worldsmith.inference.controller import ACT_TOOL, SLMController, run_slm_episode
+from worldsmith.inference.controller import ACT_TOOL, SLMController, count_prompt_tokens, run_slm_episode
 
 
 class Tokenizer:
@@ -20,6 +20,9 @@ class Tokenizer:
 
     def apply_chat_template(self, messages, *, tools, tokenize, add_generation_prompt):
         assert tools == [ACT_TOOL] and tokenize and add_generation_prompt
+        for message in messages:
+            if message["role"] == "assistant":
+                assert isinstance(message["tool_calls"][0]["function"]["arguments"], dict)
         return list(range(len(json.dumps(messages)) + len(json.dumps(tools)) + 10))
 
 
@@ -27,7 +30,7 @@ class Inference:
     def __init__(self):
         self.requests = []
         self.message = None
-        self.finish_reason = "tool_calls"
+        self.finish_reason = "stop"
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
 
     def create(self, **request):
@@ -107,9 +110,7 @@ def test_dynamic_trimming_preserves_complete_recent_interactions():
     three = deepcopy(client.requests[-1]["messages"])
     # Budget exactly enough for the newest completed interaction and current query.
     recent = [three[0], *three[4:]]
-    control.context_window = len(Tokenizer().apply_chat_template(
-        recent, tools=[ACT_TOOL], tokenize=True, add_generation_prompt=True,
-    )) + control.response_tokens
+    control.context_window = count_prompt_tokens(Tokenizer(), recent) + control.response_tokens
     control.record_result({"current_step": 5, "executed_steps": 5, "terminated": False, "truncated": False})
     control(obs)
     messages = client.requests[-1]["messages"]
@@ -118,9 +119,7 @@ def test_dynamic_trimming_preserves_complete_recent_interactions():
     assert messages[3]["tool_call_id"] == "call-3"
     assert messages[0] == three[0]
     assert messages[-1] == three[-1]
-    assert len(Tokenizer().apply_chat_template(
-        messages, tools=[ACT_TOOL], tokenize=True, add_generation_prompt=True,
-    )) + control.response_tokens <= control.context_window
+    assert count_prompt_tokens(Tokenizer(), messages) + control.response_tokens <= control.context_window
 
 
 def test_larger_current_observation_evicts_all_history():
@@ -132,9 +131,7 @@ def test_larger_current_observation_evicts_all_history():
     initial = client.requests[-1]["messages"]
     # Leave room for mandatory context only; a larger new observation forces eviction.
     mandatory = [initial[0], initial[-1]]
-    control.context_window = len(Tokenizer().apply_chat_template(
-        mandatory, tools=[ACT_TOOL], tokenize=True, add_generation_prompt=True,
-    )) + control.response_tokens + 100
+    control.context_window = count_prompt_tokens(Tokenizer(), mandatory) + control.response_tokens + 100
     control.record_result({"current_step": 5, "executed_steps": 5, "terminated": False, "truncated": False})
     control(replace(obs, robot_id="r" * 50))
     assert [m["role"] for m in client.requests[-1]["messages"]] == ["system", "user"]

@@ -2,6 +2,7 @@
 
 import json
 import math
+from copy import deepcopy
 from dataclasses import asdict
 
 from worldsmith.api import Action, Observation
@@ -37,6 +38,19 @@ def load_tokenizer():
     return AutoTokenizer.from_pretrained(MODEL, revision=MODEL_REVISION)
 
 
+def count_prompt_tokens(tokenizer, messages) -> int:
+    # Match vLLM's chat preprocessing: templates receive parsed tool arguments,
+    # while the OpenAI API requires JSON strings on the wire.
+    template_messages = deepcopy(messages)
+    for message in template_messages:
+        if message["role"] == "assistant":
+            for call in message["tool_calls"]:
+                call["function"]["arguments"] = json.loads(call["function"]["arguments"])
+    return len(tokenizer.apply_chat_template(
+        template_messages, tools=[ACT_TOOL], tokenize=True, add_generation_prompt=True,
+    ))
+
+
 class SLMController:
     def __init__(
         self, client, tokenizer, *, task_description: str, max_steps: int,
@@ -70,10 +84,7 @@ class SLMController:
         )}
         while True:
             messages = [self.starting, *[message for group in self.interactions for message in group], query]
-            tokens = self.tokenizer.apply_chat_template(
-                messages, tools=[ACT_TOOL], tokenize=True, add_generation_prompt=True,
-            )
-            if len(tokens) + self.response_tokens <= self.context_window:
+            if count_prompt_tokens(self.tokenizer, messages) + self.response_tokens <= self.context_window:
                 break
             if not self.interactions:
                 raise ValueError("Mandatory controller context exceeds token budget")
@@ -84,7 +95,8 @@ class SLMController:
             tool_choice={"type": "function", "function": {"name": "act"}},
             parallel_tool_calls=False, temperature=0, max_tokens=self.response_tokens,
         )
-        if len(reply.choices) != 1 or reply.choices[0].finish_reason != "tool_calls":
+        # vLLM 0.10.2 reports "stop" for named tool choices; automatic calls use "tool_calls".
+        if len(reply.choices) != 1 or reply.choices[0].finish_reason not in ("stop", "tool_calls"):
             raise ValueError("Expected exactly one complete action tool call")
         assistant = reply.choices[0].message
         calls = assistant.tool_calls
