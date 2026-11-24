@@ -183,3 +183,95 @@ def test_repeat_requires_positive_integer(repeat):
         controller(Inference(), action_repeat=repeat)
     with pytest.raises(ValueError, match="positive integer"):
         run_episode(None, None, 0, action_repeat=repeat)
+
+
+@pytest.mark.parametrize("size", [3, 4, 6, 7, 12, 14])
+def test_native_vector_dimensions_and_bounds(size):
+    import numpy as np
+    from worldsmith.inference.action_tools import decode_vector_action, vector_tool
+
+    low, high = -np.ones(size), np.ones(size)
+    tool = vector_tool(low, high, "Native control")
+    assert tool["function"]["name"] == "act"
+    assert tool["function"]["parameters"]["properties"]["action"]["maxItems"] == size
+    action = decode_vector_action({"action": [0.25] * size}, low=low, high=high, dtype=np.float32)
+    assert action.shape == (size,) and action.dtype == np.float32
+    for invalid in ([0] * (size + 1), [True] * size, [float("nan")] * size, [1.01] * size):
+        with pytest.raises(ValueError):
+            decode_vector_action({"action": invalid}, low=low, high=high, dtype=np.float32)
+
+
+@pytest.mark.parametrize("group,task,size", [
+    ("maniskill", "push_cube", 4), ("libero", "open_middle_drawer", 7),
+    ("robosuite", "handover_hammer", 14), ("robosuite", "wipe_table", 6),
+])
+def test_native_observations_actions_time_and_shared_lifecycle(group, task, size):
+    import numpy as np
+
+    class Adapter:
+        def __init__(self):
+            self.low, self.high = -np.ones(size), np.ones(size)
+            space = SimpleNamespace(low=self.low, high=self.high, dtype=np.float32)
+            native = SimpleNamespace(
+                elapsed_steps=SimpleNamespace(item=lambda: self.steps), control_timestep=0.05,
+            )
+            self.env = SimpleNamespace(
+                sim=SimpleNamespace(data=SimpleNamespace(time=0)), action_space=space, unwrapped=native,
+            )
+            self.actions = []
+
+        def metadata(self):
+            return {"max_episode_steps": 6, "action_mode": "pd_ee_delta_pos" if group == "maniskill" else "OSC_POSE"}
+
+        def reset(self, seed):
+            self.steps = 0
+            return {"agent": {"qpos": np.zeros((1, size))}}, {}
+
+        def encode_action(self, action):
+            assert action.shape == (size,)
+            assert action.dtype == (np.float32 if group == "maniskill" else np.float64)
+            return action.tolist()
+
+        def step(self, action):
+            self.steps += 1
+            self.actions.append(action.copy())
+            self.env.sim.data.time += 0.05
+            return {"agent": {"qpos": np.ones((1, size))}}, None, False, self.steps == 6, {}
+
+    requests = []
+
+    def create(**request):
+        requests.append(deepcopy(request))
+        assert len(request["tools"]) == 1
+        assert request["tools"][0]["function"]["parameters"]["properties"]["action"]["minItems"] == size
+        message = ChatCompletionMessage(role="assistant", tool_calls=[{
+            "id": str(len(requests)), "type": "function", "function": {
+                "name": "act", "arguments": json.dumps({"action": [0.1] * size}),
+            },
+        }])
+        return SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason="stop")])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    tokenizer = SimpleNamespace(apply_chat_template=lambda *args, **kwargs: [0])
+    adapter = Adapter()
+    episode, decisions = run_slm_episode(adapter, client, tokenizer, 0, task=task)
+    assert episode["length"] == 6 and decisions == 2 and len(adapter.actions) == 6
+    assert "Current step: 5/6" in requests[1]["messages"][-1]["content"]
+    assert "Elapsed simulation time: 0.25" in requests[1]["messages"][-1]["content"]
+    assert '"qpos": [[1.0' in requests[1]["messages"][-1]["content"]
+
+
+def test_pymunk_evaluation_uses_owner_adapter_without_autoresearch(tmp_path, monkeypatch):
+    from contextlib import nullcontext
+    from worldsmith.inference import evaluate
+
+    output = tmp_path / "navigation.json"
+    monkeypatch.setattr(evaluate, "load_tokenizer", Tokenizer)
+    monkeypatch.setattr(evaluate, "create_client", lambda: nullcontext(Inference()))
+    monkeypatch.setattr(evaluate, "TASK_CATALOG", {"navigation": lambda: pytest.fail("Loaded legacy controller")})
+    monkeypatch.setattr("sys.argv", ["evaluate", "--task", "navigation", "--output", str(output)])
+    assert evaluate.main() == 0
+    result = json.loads(output.read_text())
+    assert result["status"] == "completed"
+    assert result["environment_steps"] == 80
+    assert result["slm_decisions"] == result["model_requests"] == 16

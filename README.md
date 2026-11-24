@@ -90,7 +90,15 @@ each action for up to 5 steps, and trims complete conversation interactions usin
 the pinned tokenizer and the server's 8192-token budget.
 `worldsmith.inference.controller.run_slm_episode` accepts a positive integer
 `action_repeat` to change this fixed frequency. The two generic prompt templates
-are in `worldsmith/inference/prompts.py`. To try a T4 or A100 instead of
+are in `worldsmith/inference/prompts.py`. The controller also supports the native
+vector actions for ManiSkill, LIBERO-PRO, and RoboSuite. It derives dimensions and
+bounds from the simulator and describes the existing control semantics in the tool.
+With an inference server running, use the selected simulator's Python environment
+(with `openai==1.99.9`, `transformers==4.55.2`, and `jinja2==3.1.6` installed) to run
+`python -m worldsmith.inference.evaluate --task TASK --output result.json`.
+This saves one episode's outcome, step count, model decisions, or explicit error.
+
+To try a T4 or A100 instead of
 the default L4, set `COLAB_GPU=T4` or `COLAB_GPU=A100` on that command. Diagnostic logs are saved to
 `runs/colab/<session-name>/{slm-install.log,slm-smoke.log,vllm.log}`.
 
