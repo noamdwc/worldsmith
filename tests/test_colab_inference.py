@@ -12,6 +12,62 @@ from worldsmith.colab import session
 from worldsmith.inference import colab_smoke
 
 
+@pytest.fixture
+def model_plan(monkeypatch):
+    uploads = []
+
+    def upload(self, action, local, remote):
+        assert action == "upload"
+        assert remote.endswith("/model-cache.json")
+        uploads.append(json.loads(Path(local).read_text()))
+
+    monkeypatch.setattr(colab_smoke, "MODEL_FILES", ("model.safetensors",))
+    monkeypatch.setattr(colab_smoke, "R2", lambda: SimpleNamespace(
+        head=lambda key: {"ETag": '"cached-etag"'},
+        signed_url=lambda *args, **kwargs: "https://example.test/model?private-signature",
+    ))
+    monkeypatch.setattr(session.ColabSession, "_command", upload)
+    return uploads
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_model_cache_uses_r2_when_available_and_publishes_missing_files(tmp_path, monkeypatch, cached):
+    import sys
+    from hashlib import md5
+
+    body = b"model weights"
+    plan = tmp_path / "model-cache.json"
+    entry = {"get": "r2-url", "etag": md5(body).hexdigest()} if cached else {"put": "r2-url", "headers": {}}
+    plan.write_text(json.dumps({"model.safetensors": entry}))
+    directory = tmp_path / "hf-cache" / ("models--" + colab_smoke.MODEL.replace("/", "--")) / "snapshots" / colab_smoke.MODEL_REVISION
+    calls = []
+
+    def snapshot(model, **kwargs):
+        calls.append("hub")
+        assert kwargs["revision"] == colab_smoke.MODEL_REVISION
+        assert kwargs["allow_patterns"] == ["model.safetensors"]
+        (directory / "model.safetensors").write_bytes(body)
+
+    def download(url, destination):
+        calls.append("r2")
+        destination.write_bytes(body)
+
+    def publish(cache, destination):
+        calls.append("publish")
+        assert destination.read_bytes() == body
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=snapshot))
+    monkeypatch.setattr(sys, "argv", ["model_cache", str(plan)])
+    monkeypatch.setattr(runpy, "run_path", lambda path: {
+        "download": download, "publish": publish,
+        "cache_digest": lambda path: md5(path.read_bytes()),
+    })
+    runpy.run_module("worldsmith.inference.model_cache", run_name="__main__")
+    assert calls == (["r2"] if cached else ["hub", "publish"])
+    assert (directory / "model.safetensors").read_bytes() == body
+    assert not plan.exists()
+
+
 @pytest.mark.parametrize("gpu", ["L4", "T4"])
 def test_bootstrap_retains_owner_wheel_for_inference(tmp_path, monkeypatch, gpu):
     main = runpy.run_path(str(session.ROOT / "scripts/setup-colab.py"))["main"]
@@ -46,7 +102,7 @@ def test_bootstrap_retains_owner_wheel_for_inference(tmp_path, monkeypatch, gpu)
 
 
 @pytest.mark.parametrize("success", [True, False])
-def test_smoke_dispatches_to_assigned_session(monkeypatch, capsys, success):
+def test_smoke_dispatches_to_assigned_session(monkeypatch, capsys, success, model_plan):
     locks = []
 
     @contextmanager
@@ -57,6 +113,7 @@ def test_smoke_dispatches_to_assigned_session(monkeypatch, capsys, success):
     def execute(self, code, *, timeout):
         assert self.name == "existing-session"
         assert timeout == 3600
+        assert "private-signature" not in code
         return "chat and tool passed\nWORLDSMITH_SLM_SMOKE_PASSED\n" if success else "remote failure"
 
     monkeypatch.setattr(colab_smoke, "session_lock", lock)
@@ -69,6 +126,7 @@ def test_smoke_dispatches_to_assigned_session(monkeypatch, capsys, success):
         with pytest.raises(session.ColabError, match="slm-install.log,slm-smoke.log,vllm.log"):
             colab_smoke.smoke_test()
     assert locks == ["lifecycle", "evaluation"]
+    assert len(model_plan) == 1
 
 
 def test_smoke_requires_ready_session(tmp_path, monkeypatch):
@@ -78,7 +136,7 @@ def test_smoke_requires_ready_session(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("environment", ["new", "matching", "outdated", "missing dependency", "missing owner wheel"])
-def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monkeypatch, environment):
+def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monkeypatch, environment, model_plan):
     import importlib.metadata
     import subprocess
     from contextlib import nullcontext
@@ -102,6 +160,7 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
         python.touch()
     installs = []
     smokes = []
+    restores = []
 
     def version(name):
         if name not in installed:
@@ -120,7 +179,12 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
         elif "install" in command:
             installs.append(command)
             installed.update(pins)
+        elif "worldsmith.inference.model_cache" in command:
+            restores.append(command)
+            assert command[-1] == str(tmp_path / "model-cache.json")
         elif "worldsmith.inference.smoke" in command:
+            assert kwargs["env"]["HF_HUB_OFFLINE"] == "1"
+            assert kwargs["env"]["HF_HUB_CACHE"] == str(tmp_path / "hf-cache")
             smokes.append(command)
             kwargs["stdout"].write("chat and tool passed\n")
         else:
@@ -141,6 +205,7 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
     colab_smoke.smoke_test()
     assert len(installs) == (0 if environment == "matching" else 1)
     assert len(smokes) == 2
+    assert len(restores) == 2
     if installs:
         assert {"vllm==0.10.2", "openai==1.99.9", "transformers==4.55.2"} <= set(installs[0])
 

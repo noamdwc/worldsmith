@@ -87,6 +87,12 @@ prepares, starts, tests, and releases a Colab session. To try a T4 instead of th
 default L4, run `make colab-slm-smoke COLAB_GPU=T4`. Diagnostic logs are saved to
 `runs/colab/<session-name>/{slm-install.log,slm-smoke.log,vllm.log}`.
 
+The smoke workflow stores the pinned model snapshot in R2 under
+`worldsmith/cache/models/<model>/<revision>/`. Missing files are downloaded with
+Hugging Face's snapshot downloader and saved to R2; later runs restore them from
+R2 and set `HF_HUB_CACHE` to that directory with `HF_HUB_OFFLINE=1`. This caches
+the model, not Python dependencies or GPU compilation. Progress is in `slm-install.log`.
+
 ## Documentation
 
 - [Research workflow](autoresearch/RESEARCH.md): experiment process and comparison rules.
