@@ -68,7 +68,7 @@ def test_model_cache_uses_r2_when_available_and_publishes_missing_files(tmp_path
     assert not plan.exists()
 
 
-@pytest.mark.parametrize("gpu", ["L4", "T4"])
+@pytest.mark.parametrize("gpu", ["L4", "T4", "A100"])
 def test_bootstrap_retains_owner_wheel_for_inference(tmp_path, monkeypatch, gpu):
     main = runpy.run_path(str(session.ROOT / "scripts/setup-colab.py"))["main"]
     namespace = main.__globals__
@@ -89,7 +89,8 @@ def test_bootstrap_retains_owner_wheel_for_inference(tmp_path, monkeypatch, gpu)
     monkeypatch.setitem(namespace, "ROOT", tmp_path)
     monkeypatch.setitem(namespace, "sys", SimpleNamespace(platform="linux"))
     monkeypatch.setitem(namespace, "platform", SimpleNamespace(machine=lambda: "x86_64"))
-    monkeypatch.setitem(namespace, "subprocess", SimpleNamespace(check_output=lambda *a, **kw: f"Tesla {gpu}"))
+    reported_gpu = "NVIDIA A100-SXM4-40GB" if gpu == "A100" else f"Tesla {gpu}"
+    monkeypatch.setitem(namespace, "subprocess", SimpleNamespace(check_output=lambda *a, **kw: reported_gpu))
     monkeypatch.setitem(namespace, "install_tools", lambda *a, **kw: {"3.12.13": ("uv", "python")})
     monkeypatch.setitem(namespace, "install_environment", lambda *a, **kw: "pymunk-python")
     monkeypatch.setitem(namespace, "install_assets", lambda *a, **kw: None)
@@ -211,7 +212,7 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
 
 
 @pytest.mark.parametrize("failure", [None, "smoke", "interrupt", "download"])
-@pytest.mark.parametrize("gpu", ["L4", "T4"])
+@pytest.mark.parametrize("gpu", ["L4", "T4", "A100"])
 def test_new_session_smoke_always_releases_its_session(tmp_path, monkeypatch, failure, gpu):
     calls = []
 
@@ -274,7 +275,7 @@ def test_start_failure_does_not_stop_existing_session(monkeypatch):
         colab_smoke.run_session_smoke()
 
 
-@pytest.mark.parametrize("gpu", ["L4", "T4"])
+@pytest.mark.parametrize("gpu", ["L4", "T4", "A100"])
 def test_cli_dispatches_new_session_smoke(monkeypatch, gpu):
     from worldsmith.colab import __main__ as owner
 

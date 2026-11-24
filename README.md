@@ -83,8 +83,8 @@ uv pip install --python .venv/bin/python vllm==0.10.2 transformers==4.55.2
 The smoke test starts and stops its own server. Server diagnostics are in `vllm.log`.
 
 With the Colab CLI and R2 credentials configured as above, `make colab-slm-smoke`
-prepares, starts, tests, and releases a Colab session. To try a T4 instead of the
-default L4, run `make colab-slm-smoke COLAB_GPU=T4`. Diagnostic logs are saved to
+prepares, starts, tests, and releases a Colab session. To try a T4 or A100 instead of
+the default L4, set `COLAB_GPU=T4` or `COLAB_GPU=A100` on that command. Diagnostic logs are saved to
 `runs/colab/<session-name>/{slm-install.log,slm-smoke.log,vllm.log}`.
 
 The smoke workflow stores the pinned model snapshot in R2 under

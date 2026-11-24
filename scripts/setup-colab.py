@@ -238,7 +238,9 @@ def main():
     gpus = subprocess.check_output(
         ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True,
     ).strip().splitlines()
-    if not gpus or any(name not in {f"NVIDIA {gpu}", f"Tesla {gpu}"} for name in gpus):
+    # A100 reports board/memory suffixes, for example NVIDIA A100-SXM4-40GB.
+    models = {name.removeprefix("NVIDIA ").removeprefix("Tesla ").split("-", 1)[0] for name in gpus}
+    if models != {gpu}:
         print(f"WORLDSMITH_SETUP GPU mismatch (expected NVIDIA {gpu})", flush=True)
         raise RuntimeError(f"Expected NVIDIA {gpu}, got {gpus!r}")
 

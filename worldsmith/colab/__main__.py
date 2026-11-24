@@ -22,7 +22,7 @@ def main() -> int:
         subcommands.add_parser(action)
     smoke = subcommands.add_parser("slm-smoke")
     smoke.add_argument("--new-session", action="store_true", help="Prepare, start, test, and release a session")
-    smoke.add_argument("--gpu", choices=("L4", "T4"), default="L4", help="GPU for a new smoke-test session")
+    smoke.add_argument("--gpu", choices=("L4", "T4", "A100"), default="L4", help="GPU for a new smoke-test session")
     for action in ("start", "build-envs"):
         command = subcommands.add_parser(action)
         command.add_argument("simulator", nargs="?", default="all", choices=("all", *ENVIRONMENT_PYTHONS))

@@ -182,10 +182,8 @@ def build_environments(selector: str) -> int:
 
 
 def start_session(selector: str = "all", *, gpu: str = "L4") -> ColabSession:
-    # Only the CPU-based Pymunk cache is reused for the T4 inference smoke test.
-    # The other simulator caches are prepared and verified on L4.
-    if gpu not in {"L4", "T4"} or (gpu == "T4" and selector != "pymunk"):
-        raise ColabError("T4 is supported only with the pymunk environment; other environments require L4")
+    if gpu not in {"L4", "T4", "A100"}:
+        raise ColabError("Supported Colab GPUs are L4, T4, and A100")
     with session_lock("lifecycle"):
         if tracked_session() is not None:
             raise ColabError("A Colab session is already tracked. Inspect it with make colab-status")
