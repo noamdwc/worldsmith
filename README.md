@@ -99,3 +99,7 @@ the model, not Python dependencies or GPU compilation. Progress is in `slm-insta
 - [Controller API](autoresearch/API.md): observations, actions, and feedback tools.
 - [Development task guide](autoresearch/TASKS.md): task fields, limits, and horizons.
 - [Benchmark inventory](BENCHMARKS.md): the full task catalog.
+
+## License
+
+Copyright (c) 2026 Noam Carmon. All rights reserved. See LICENSE for details.
