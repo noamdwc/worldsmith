@@ -50,6 +50,25 @@ The other simulators use separate environments with their own setup instructions
 
 AutoResearch requires an authenticated Google Colab CLI and configured Cloudflare R2 credentials. Run `make colab-build-envs` to prepare the environments, then `make autoresearch` to start a research session.
 
+### SLM inference
+
+[Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) is served
+by vLLM with Hermes tool calling through the OpenAI-compatible API and Python client.
+On a Linux NVIDIA GPU host, install the pinned serving dependencies and run the
+chat and tool-calling smoke test:
+
+```sh
+uv sync --only-group inference
+uv pip install --python .venv/bin/python vllm==0.10.2 transformers==4.55.2
+.venv/bin/python -m worldsmith.inference.smoke
+```
+
+The smoke test starts and stops its own server. Server diagnostics are in `vllm.log`.
+
+With the Colab CLI and R2 credentials configured as above, `make colab-slm-smoke`
+prepares, starts, tests, and releases a Colab session. Diagnostic logs are saved to
+`runs/colab/<session-name>/{slm-install.log,slm-smoke.log,vllm.log}`.
+
 ## Documentation
 
 - [Research workflow](autoresearch/RESEARCH.md): experiment process and comparison rules.
