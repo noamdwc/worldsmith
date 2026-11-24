@@ -86,14 +86,16 @@ class ColabSession:
                 if "TimeoutError: Timeout waiting for reply" in output:
                     raise ColabError(f"Colab exec timed out waiting for a reply from {self.name}")
             if action == "new":
-                raise ColabError("Colab L4 allocation failed. Check CLI authentication and L4 quota")
+                if "Service Unavailable" in output:
+                    raise ColabError("Colab GPU allocation failed: Colab returned Service Unavailable (HTTP 503). Retry later")
+                raise ColabError("Colab GPU allocation failed. See ~/.config/colab-cli/colab.log for the underlying error")
             raise ColabError(f"Colab {action} failed for {self.name}")
         return result.stdout
 
     def execute(self, code: str, *, timeout: int) -> str:
         return self._command("exec", "--timeout", str(timeout), timeout=timeout + 15, code=code)
 
-    def allocate(self):
+    def allocate(self, gpu: str = "L4"):
         # Let the CLI record the assignment before cleanup handles a signal.
         interrupted = None
 
@@ -107,7 +109,7 @@ class ColabSession:
             # Installing a handler returns the old one, which we restore below.
             previous[sig] = signal.signal(sig, remember)
         try:
-            self._command("new", "--gpu", "L4", timeout=180)
+            self._command("new", "--gpu", gpu, timeout=180)
         finally:
             for sig, handler in previous.items():
                 signal.signal(sig, handler)
@@ -179,13 +181,18 @@ def build_environments(selector: str) -> int:
         return 0 if cleaned else 1
 
 
-def start_session(selector: str = "all") -> ColabSession:
+def start_session(selector: str = "all", *, gpu: str = "L4") -> ColabSession:
+    # Only the CPU-based Pymunk cache is reused for the T4 inference smoke test.
+    # The other simulator caches are prepared and verified on L4.
+    if gpu not in {"L4", "T4"} or (gpu == "T4" and selector != "pymunk"):
+        raise ColabError("T4 is supported only with the pymunk environment; other environments require L4")
     with session_lock("lifecycle"):
         if tracked_session() is not None:
             raise ColabError("A Colab session is already tracked. Inspect it with make colab-status")
         storage = R2()
         storage.check()
         config, _ = plan_runtime(storage, selector, prepare=False, expires=SETUP_TIMEOUT * 2)
+        config["gpu"] = gpu
         session = ColabSession(f"worldsmith-{uuid4().hex[:12]}")
         with TemporaryDirectory() as temporary:
             archive = Path(temporary) / "bootstrap.tar.gz"
@@ -201,8 +208,8 @@ def start_session(selector: str = "all") -> ColabSession:
             package_bootstrap(config, archive)
             save_session(session.name, ready=False)
             try:
-                print(f"Starting Colab L4 session {session.name}", flush=True)
-                session.allocate()
+                print(f"Starting Colab {gpu} session {session.name}", flush=True)
+                session.allocate(gpu)
                 initialize(session, archive, marker="WORLDSMITH_COLAB_READY")
                 save_session(session.name, ready=True)
             except BaseException:
@@ -211,7 +218,7 @@ def start_session(selector: str = "all") -> ColabSession:
                 except (ColabError, OSError) as error:
                     print(f"{error}. Retry cleanup with make colab-stop.", file=sys.stderr)
                 raise
-        print(f"Colab session {session.name} is ready on NVIDIA L4", flush=True)
+        print(f"Colab session {session.name} is ready on NVIDIA {gpu}", flush=True)
         return session
 
 

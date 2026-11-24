@@ -1,6 +1,7 @@
 .PHONY: autoresearch autoresearch-maniskill autoresearch-libero autoresearch-robosuite clear-autoresearch colab-build-envs colab-status colab-stop colab-slm-smoke
 
 SIMULATOR ?= all
+COLAB_GPU ?= L4
 
 # Load local configuration when present; allow callers to choose another env file.
 export UV_ENV_FILE ?= $(wildcard $(CURDIR)/.env)
@@ -27,7 +28,7 @@ colab-build-envs:
 	@uv run --locked python -m worldsmith.colab build-envs "$(SIMULATOR)"
 
 colab-slm-smoke:
-	@uv run --locked python -m worldsmith.colab slm-smoke --new-session
+	@uv run --locked python -m worldsmith.colab slm-smoke --new-session --gpu "$(COLAB_GPU)"
 
 clear-autoresearch:
 	@archive_id=$$(uv run --locked python -m worldsmith.research_lifecycle archive) && \

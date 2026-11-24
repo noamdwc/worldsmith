@@ -109,7 +109,7 @@ def plan_runtime(storage, selector: str, *, prepare: bool, expires: int):
             if key in missing or version in versions
         }
 
-    config = {"mode": "prepare" if prepare else "research", "uv_version": UV_VERSION}
+    config = {"mode": "prepare" if prepare else "research", "uv_version": UV_VERSION, "gpu": "L4"}
     for family, entries in keys.items():
         config[family] = {}
         for name, key in entries.items():

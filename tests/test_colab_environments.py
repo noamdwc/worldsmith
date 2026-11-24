@@ -99,11 +99,11 @@ def test_owner_builds_selected_caches_and_releases_temporary_session(tmp_path, m
 
 
 @pytest.mark.parametrize("mode", ["prepare", "research"])
-@pytest.mark.parametrize("gpu", ["", "NVIDIA T4\n"])
-def test_colab_rejects_unsupported_gpu_before_environment_work(tmp_path, monkeypatch, mode, gpu):
+@pytest.mark.parametrize("expected_gpu, gpu", [("L4", ""), ("L4", "NVIDIA T4\n"), ("T4", "NVIDIA L4\n")])
+def test_colab_rejects_unsupported_gpu_before_environment_work(tmp_path, monkeypatch, mode, expected_gpu, gpu):
     main = runpy.run_path(str(environment_cache.ROOT / "scripts/setup-colab.py"))["main"]
     (tmp_path / "setup.json").write_text(json.dumps({
-        "mode": mode, "wheelhouses": {"pymunk": {"put": "cache"}},
+        "mode": mode, "gpu": expected_gpu, "wheelhouses": {"pymunk": {"put": "cache"}},
     }))
     globals_ = main.__globals__
     monkeypatch.setitem(globals_, "ROOT", tmp_path)
@@ -113,7 +113,7 @@ def test_colab_rejects_unsupported_gpu_before_environment_work(tmp_path, monkeyp
     monkeypatch.setitem(globals_, "stage", lambda *a: pytest.fail("started build commands before GPU check"))
     monkeypatch.setitem(globals_, "install_tools", lambda *a, **kw: pytest.fail("started installing tools"))
 
-    with pytest.raises(RuntimeError, match="Expected NVIDIA L4"):
+    with pytest.raises(RuntimeError, match=f"Expected NVIDIA {expected_gpu}"):
         main()
 
 
