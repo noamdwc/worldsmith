@@ -48,7 +48,24 @@ The other simulators use separate environments with their own setup instructions
 - [LIBERO-PRO](simulation_environments/libero/README.md)
 - [RoboSuite](simulation_environments/robosuite/README.md)
 
-AutoResearch requires an authenticated Google Colab CLI and configured Cloudflare R2 credentials. Run `make colab-build-envs` to prepare the environments, then `make autoresearch` to start a research session.
+AutoResearch requires an authenticated Google Colab CLI and configured Cloudflare R2 credentials.
+Copy `.env.example` to `.env` in the repository root and set your bucket name and
+the absolute path to your credentials file. Keep the credentials file outside
+the repository, with plain `KEY=value` lines:
+
+```dotenv
+R2_ACCOUNT_ID=your-32-character-account-id
+R2_ACCESS_KEY_ID=your-access-key
+R2_SECRET_ACCESS_KEY=your-secret-key
+```
+
+Make targets automatically load `.env` when it exists. Exported environment
+variables take precedence over its values. `.env` is ignored by Git; commit only
+the placeholder `.env.example`. For direct commands, use
+`uv run --env-file .env --locked python ...`.
+
+Run `make colab-build-envs` to prepare the environments, then `make autoresearch`
+to start a research session.
 
 ### SLM inference
 
