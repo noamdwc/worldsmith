@@ -10,6 +10,7 @@ from openai.types.chat import ChatCompletionMessage
 
 from worldsmith.api import Action
 from worldsmith.benchmark.adapters.pymunk_adapter import PymunkAdapter
+from worldsmith.benchmark.results import snapshot
 from worldsmith.benchmark.runner import ControllerError, run_episode
 from worldsmith.benchmark.tasks.navigation import Navigation
 from worldsmith.inference.controller import ACT_TOOL, SLMController, count_prompt_tokens, run_slm_episode
@@ -85,6 +86,50 @@ def test_repeat_horizon_and_immediate_termination(limit, success, expected):
     run_slm_episode(adapter, client, Tokenizer(), 1, task="navigation")
     assert len(client.requests[decisions]["messages"]) == 2
     assert "Current step: 0/" in client.requests[decisions]["messages"][-1]["content"]
+
+
+@pytest.mark.parametrize("options,limit,success,decision_steps,last_block", [
+    ({}, 12, False, list(range(12)), 1),
+    ({"action_repeat": 5}, 12, False, [0, 5, 10], 2),
+    ({"action_repeat": 5}, 3, True, [0], 3),
+])
+def test_shared_runner_decisions_trace_and_partial_feedback(options, limit, success, decision_steps, last_block):
+    class Task(ShortNavigation):
+        def succeeded(self, measurements):
+            return success and len(measurements) >= 4
+
+    observations, commands, feedback = [], [], []
+
+    def control(observation):
+        observations.append(snapshot(observation))
+        action = Action(heading=len(commands) * 0.1, throttle=0.5)
+        commands.append(action)
+        return action
+
+    adapter = PymunkAdapter(Task())
+    episode = run_episode(adapter, lambda: control, 0, action_result=feedback.append, **options)
+    assert episode["length"] == len(adapter.measurements) - 1 == limit
+    assert observations == [episode["steps"][step]["observation"] for step in decision_steps]
+    assert len(commands) == len(decision_steps)
+    for start, end, command in zip(decision_steps, [*decision_steps[1:], limit], commands, strict=True):
+        assert all(row["action"] == snapshot(command) for row in episode["steps"][start:end])
+    assert len(feedback) == len(decision_steps)
+    assert feedback[-1] == {
+        "current_step": limit, "executed_steps": last_block,
+        "terminated": success, "truncated": not success,
+    }
+
+    # Replay recorded commands to verify every input observation and resulting
+    # simulator state, including observations between model decisions.
+    replay = PymunkAdapter(Task())
+    observation, _ = replay.reset(0)
+    for row in episode["steps"]:
+        assert row["observation"] == snapshot(observation)
+        observation, _, terminated, truncated, info = replay.step(Action(**row["action"]))
+        assert row["info"] == snapshot(info)
+        assert (row["terminated"], row["truncated"]) == (terminated, truncated)
+    assert episode["final_observation"] == snapshot(observation)
+    assert adapter.world.ground_truth() == replay.world.ground_truth()
 
 
 def controller(client, **kwargs):

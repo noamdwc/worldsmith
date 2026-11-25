@@ -15,6 +15,14 @@ from worldsmith.colab.storage import R2
 from .config import MODEL, MODEL_FILES, MODEL_REVISION, OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT, VLLM_REQUIREMENT
 
 
+# Keep the SLM environment separate from simulator dependency groups. vLLM's
+# pinned numba requires NumPy <2.3; Pymunk 7.3.1 works with NumPy 2.2.6.
+SLM_REQUIREMENTS = (
+    VLLM_REQUIREMENT, OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT,
+    "numpy==2.2.6", "pymunk==7.3.1",
+)
+
+
 def run_session_smoke(*, gpu: str = "L4") -> int:
     status = build_environments("pymunk")
     if status:
@@ -58,9 +66,7 @@ def smoke_test():
             plan = Path(temporary) / "model-cache.json"
             plan.write_text(json.dumps(files))
             session._command("upload", str(plan), f"{REMOTE_PROJECT}/model-cache.json")
-        pins = dict(requirement.split("==") for requirement in (
-            VLLM_REQUIREMENT, OPENAI_REQUIREMENT, TRANSFORMERS_REQUIREMENT,
-        ))
+        pins = dict(requirement.split("==") for requirement in SLM_REQUIREMENTS)
         check_versions = dedent(f"""\
             import sys
             from importlib.metadata import PackageNotFoundError, version
@@ -68,8 +74,6 @@ def smoke_test():
             try:
                 ready = all(version(name) == expected for name, expected in {pins!r}.items())
                 version('worldsmith')
-                version('pymunk')
-                version('numpy')
             except PackageNotFoundError:
                 ready = False
             sys.exit(0 if ready else 1)
@@ -94,7 +98,7 @@ def smoke_test():
                 if versions.returncode:
                     subprocess.run(
                         [uv, 'pip', 'install', '--python', python,
-                         {VLLM_REQUIREMENT!r}, {OPENAI_REQUIREMENT!r}, {TRANSFORMERS_REQUIREMENT!r}, 'pymunk==7.3.1',
+                         *{SLM_REQUIREMENTS!r},
                          str(next((root / 'packages').glob('*.whl')))],
                         check=True, stdout=log, stderr=subprocess.STDOUT,
                     )
