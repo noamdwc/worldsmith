@@ -9,7 +9,7 @@ from worldsmith.benchmark.results import snapshot
 from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
 from worldsmith.inference.client import create_client
 from worldsmith.inference.config import MODEL, MODEL_REVISION
-from worldsmith.inference.controller import load_tokenizer, run_slm_episode
+from worldsmith.harness.controller import load_tokenizer, run_slm_episode
 
 
 def main():

@@ -195,7 +195,7 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
         elif "worldsmith.inference.model_cache" in command:
             restores.append(command)
             assert command[-1] == str(tmp_path / "model-cache.json")
-        elif "worldsmith.inference.robot_smoke" in command:
+        elif "worldsmith.harness.robot_smoke" in command:
             assert kwargs["env"]["HF_HUB_OFFLINE"] == "1"
             assert kwargs["env"]["HF_HUB_CACHE"] == str(tmp_path / "hf-cache")
             smokes.append(command)

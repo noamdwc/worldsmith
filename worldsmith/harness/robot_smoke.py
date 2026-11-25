@@ -4,9 +4,9 @@ import json
 
 from worldsmith.benchmark.adapters.pymunk_adapter import open_pymunk
 
-from .client import create_client
+from worldsmith.inference.client import create_client
 from .controller import load_tokenizer, run_slm_episode
-from .server import ModelServer
+from worldsmith.inference.server import ModelServer
 
 
 def main():

@@ -10,7 +10,7 @@ from worldsmith.benchmark.results import snapshot
 from worldsmith.benchmark.runner import run_episode
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
 
-from .config import MODEL, MODEL_REVISION
+from worldsmith.inference.config import MODEL, MODEL_REVISION
 from .prompts import QUERY_PROMPT, STARTING_PROMPT
 
 CONTEXT_WINDOW = 8192  # Matches the pinned vLLM server's max-model-len.

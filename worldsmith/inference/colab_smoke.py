@@ -108,7 +108,7 @@ def smoke_test():
                 )
             with (root / 'slm-smoke.log').open('w') as log:
                 subprocess.run(
-                    [python, '-m', 'worldsmith.inference.robot_smoke'], cwd=root,
+                    [python, '-m', 'worldsmith.harness.robot_smoke'], cwd=root,
                     env={{**os.environ, 'HF_HUB_CACHE': str(model_cache), 'HF_HUB_OFFLINE': '1'}},
                     check=True, stdout=log, stderr=subprocess.STDOUT,
                 )

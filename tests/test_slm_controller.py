@@ -13,7 +13,7 @@ from worldsmith.benchmark.adapters.pymunk_adapter import PymunkAdapter
 from worldsmith.benchmark.results import snapshot
 from worldsmith.benchmark.runner import ControllerError, run_episode
 from worldsmith.benchmark.tasks.navigation import Navigation
-from worldsmith.inference.controller import ACT_TOOL, SLMController, count_prompt_tokens, run_slm_episode
+from worldsmith.harness.controller import ACT_TOOL, SLMController, count_prompt_tokens, run_slm_episode
 
 
 class Tokenizer:
@@ -233,7 +233,7 @@ def test_repeat_requires_positive_integer(repeat):
 @pytest.mark.parametrize("size", [3, 4, 6, 7, 12, 14])
 def test_native_vector_dimensions_and_bounds(size):
     import numpy as np
-    from worldsmith.inference.action_tools import decode_vector_action, vector_tool
+    from worldsmith.harness.action_tools import decode_vector_action, vector_tool
 
     low, high = -np.ones(size), np.ones(size)
     tool = vector_tool(low, high, "Native control")
@@ -308,7 +308,7 @@ def test_native_observations_actions_time_and_shared_lifecycle(group, task, size
 
 def test_pymunk_evaluation_uses_owner_adapter_without_autoresearch(tmp_path, monkeypatch):
     from contextlib import nullcontext
-    from worldsmith.inference import evaluate
+    from worldsmith.harness import evaluate
 
     output = tmp_path / "navigation.json"
     monkeypatch.setattr(evaluate, "load_tokenizer", Tokenizer)
