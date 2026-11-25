@@ -153,9 +153,3 @@ def idle_controller(*, arms):
 
 def idle_wiper():
     return lambda observation: np.zeros(6)
-
-
-def evaluation_setup(task):
-    _, arms, _ = TASKS[task]
-    factory = idle_wiper if task == "wipe_table" else partial(idle_controller, arms=arms)
-    return partial(open_robosuite, task), factory

@@ -7,7 +7,6 @@ from functools import partial
 
 from worldsmith.api import Action
 from worldsmith.benchmark.results import snapshot
-from worldsmith.benchmark.runner import run_episode
 from worldsmith.benchmark.task_catalog import TASK_GROUPS
 
 from worldsmith.inference.config import MODEL, MODEL_REVISION
@@ -136,44 +135,33 @@ class SLMController:
         })
 
 
-def run_slm_episode(adapter, client, tokenizer, seed: int, *, task: str, action_repeat: int = 5):
-    """Use the shared runner and a fresh conversation for every episode."""
-    controller = None
+def make_controller(adapter, client, tokenizer, *, task: str, action_repeat: int = 5):
+    """Configure a fresh controller using the reset adapter's native contracts."""
+    metadata = adapter.metadata()
+    options = {}
+    group = next(group for group, tasks in TASK_GROUPS.items() if task in tasks)
+    if group != "pymunk":
+        import numpy as np
+        from .action_tools import action_description, decode_vector_action, vector_tool
+        from .task_descriptions import OBJECTIVES
 
-    def factory():
-        nonlocal controller
-        metadata = adapter.metadata()
-        options = {}
-        group = next(group for group, tasks in TASK_GROUPS.items() if task in tasks)
-        if group != "pymunk":
-            import numpy as np
-            from .action_tools import action_description, decode_vector_action, vector_tool
-            from .task_descriptions import OBJECTIVES
-
-            if group == "maniskill":
-                space = adapter.env.action_space
-                low, high, dtype = space.low, space.high, space.dtype
-                clock = lambda: float(adapter.env.unwrapped.elapsed_steps.item()) * adapter.env.unwrapped.control_timestep
-            else:
-                low, high, dtype = adapter.low, adapter.high, np.float64
-                clock = lambda: float(adapter.env.sim.data.time)
-            initial_time = clock()
-            options = {
-                "tool": vector_tool(low, high, action_description(group, metadata["action_mode"])),
-                "decode_action": partial(decode_vector_action, low=low, high=high, dtype=dtype),
-                "simulation_time": lambda: clock() - initial_time,
-            }
-            objective = OBJECTIVES[task]
+        if group == "maniskill":
+            space = adapter.env.action_space
+            low, high, dtype = space.low, space.high, space.dtype
+            clock = lambda: float(adapter.env.unwrapped.elapsed_steps.item()) * adapter.env.unwrapped.control_timestep
         else:
-            objective = metadata["objective"]
-        controller = SLMController(
-            client, tokenizer, task_description=objective,
-            max_steps=metadata["max_episode_steps"], action_repeat=action_repeat, **options,
-        )
-        return controller
-
-    episode = run_episode(
-        adapter, factory, seed, task=task, action_repeat=action_repeat,
-        action_result=lambda result: controller.record_result(result),
+            low, high, dtype = adapter.low, adapter.high, np.float64
+            clock = lambda: float(adapter.env.sim.data.time)
+        initial_time = clock()
+        options = {
+            "tool": vector_tool(low, high, action_description(group, metadata["action_mode"])),
+            "decode_action": partial(decode_vector_action, low=low, high=high, dtype=dtype),
+            "simulation_time": lambda: clock() - initial_time,
+        }
+        objective = OBJECTIVES[task]
+    else:
+        objective = metadata["objective"]
+    return SLMController(
+        client, tokenizer, task_description=objective,
+        max_steps=metadata["max_episode_steps"], action_repeat=action_repeat, **options,
     )
-    return episode, controller.decisions

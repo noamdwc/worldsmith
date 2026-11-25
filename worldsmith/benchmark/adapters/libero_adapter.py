@@ -2,7 +2,6 @@
 
 import os
 from contextlib import contextmanager
-from functools import partial
 from hashlib import sha256
 from importlib.metadata import version
 from io import BytesIO
@@ -155,7 +154,3 @@ def idle(observation):
 
 def idle_controller():
     return idle
-
-
-def evaluation_setup(task):
-    return partial(open_libero, task), idle_controller

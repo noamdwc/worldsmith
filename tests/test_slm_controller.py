@@ -1,6 +1,7 @@
 """Observable SLM conversation, action, and shared-runner behavior."""
 
 import json
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import replace
 from types import SimpleNamespace
@@ -13,7 +14,8 @@ from worldsmith.benchmark.adapters.pymunk_adapter import PymunkAdapter
 from worldsmith.benchmark.results import snapshot
 from worldsmith.benchmark.runner import ControllerError, run_episode
 from worldsmith.benchmark.tasks.navigation import Navigation
-from worldsmith.harness.controller import ACT_TOOL, SLMController, count_prompt_tokens, run_slm_episode
+from worldsmith.harness.controller import ACT_TOOL, SLMController, count_prompt_tokens
+from worldsmith.harness.evaluate import evaluate
 
 
 class Tokenizer:
@@ -53,7 +55,7 @@ class ShortNavigation(Navigation):
 
 
 @pytest.mark.parametrize("limit,success,expected", [(12, False, [5, 5, 2]), (3, True, [3])])
-def test_repeat_horizon_and_immediate_termination(limit, success, expected):
+def test_repeat_horizon_and_immediate_termination(tmp_path, limit, success, expected):
     class Task(ShortNavigation):
         step_limit = limit
 
@@ -62,7 +64,11 @@ def test_repeat_horizon_and_immediate_termination(limit, success, expected):
 
     client = Inference()
     adapter = PymunkAdapter(Task())
-    episode, decisions = run_slm_episode(adapter, client, Tokenizer(), 0, task="navigation")
+    output = tmp_path / "first"
+    summary = evaluate(lambda: nullcontext(adapter), client, Tokenizer(), output, task="navigation")
+    episode = json.loads((output / "episodes.jsonl").read_text())
+    decisions = len(client.requests)
+    assert summary["episodes"][0]["length"] == limit
     assert episode["length"] == limit
     assert decisions == len(expected)
     assert episode["steps"][-1]["terminated"] is success
@@ -83,7 +89,7 @@ def test_repeat_horizon_and_immediate_termination(limit, success, expected):
         assert "Current step: 5/12" in messages[-1]["content"]
         assert "Remaining steps: 7" in messages[-1]["content"]
         assert "Elapsed simulation time: 0.5" in messages[-1]["content"]
-    run_slm_episode(adapter, client, Tokenizer(), 1, task="navigation")
+    evaluate(lambda: nullcontext(adapter), client, Tokenizer(), tmp_path / "second", task="navigation", seed=1)
     assert len(client.requests[decisions]["messages"]) == 2
     assert "Current step: 0/" in client.requests[decisions]["messages"][-1]["content"]
 
@@ -192,7 +198,7 @@ def test_mandatory_context_exhaustion_never_calls_model():
 
 
 @pytest.mark.parametrize("mutation", ["missing", "multiple", "name", "id", "json", "extra", "bool", "nan", "bounds", "length"])
-def test_malformed_calls_fail_before_simulator_action(mutation):
+def test_malformed_calls_fail_before_simulator_action(tmp_path, mutation):
     client = Inference()
     message = ChatCompletionMessage(role="assistant", tool_calls=[{
         "id": "call-1", "type": "function",
@@ -218,8 +224,10 @@ def test_malformed_calls_fail_before_simulator_action(mutation):
     client.message = message
     adapter = PymunkAdapter(ShortNavigation())
     with pytest.raises(ControllerError):
-        run_slm_episode(adapter, client, Tokenizer(), 0, task="navigation")
+        evaluate(lambda: nullcontext(adapter), client, Tokenizer(), tmp_path / "evaluation", task="navigation")
     assert len(adapter.measurements) == 1
+    assert not (tmp_path / "evaluation/summary.json").exists()
+    assert (tmp_path / "evaluation/episodes.jsonl").read_text() == ""
 
 
 @pytest.mark.parametrize("repeat", [0, -1, 1.5, True])
@@ -250,7 +258,7 @@ def test_native_vector_dimensions_and_bounds(size):
     ("maniskill", "push_cube", 4), ("libero", "open_middle_drawer", 7),
     ("robosuite", "handover_hammer", 14), ("robosuite", "wipe_table", 6),
 ])
-def test_native_observations_actions_time_and_shared_lifecycle(group, task, size):
+def test_native_observations_actions_time_and_shared_lifecycle(tmp_path, group, task, size):
     import numpy as np
 
     class Adapter:
@@ -267,6 +275,12 @@ def test_native_observations_actions_time_and_shared_lifecycle(group, task, size
 
         def metadata(self):
             return {"max_episode_steps": 6, "action_mode": "pd_ee_delta_pos" if group == "maniskill" else "OSC_POSE"}
+
+        def score(self, episode):
+            return {"success": False}
+
+        def summarize(self, episodes):
+            return {"success_rate": 0.0}
 
         def reset(self, seed):
             self.steps = 0
@@ -299,24 +313,32 @@ def test_native_observations_actions_time_and_shared_lifecycle(group, task, size
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     tokenizer = SimpleNamespace(apply_chat_template=lambda *args, **kwargs: [0])
     adapter = Adapter()
-    episode, decisions = run_slm_episode(adapter, client, tokenizer, 0, task=task)
+    output = tmp_path / "evaluation"
+    evaluate(lambda: nullcontext(adapter), client, tokenizer, output, task=task)
+    episode = json.loads((output / "episodes.jsonl").read_text())
+    decisions = len(requests)
     assert episode["length"] == 6 and decisions == 2 and len(adapter.actions) == 6
     assert "Current step: 5/6" in requests[1]["messages"][-1]["content"]
     assert "Elapsed simulation time: 0.25" in requests[1]["messages"][-1]["content"]
     assert '"qpos": [[1.0' in requests[1]["messages"][-1]["content"]
 
 
-def test_pymunk_evaluation_uses_owner_adapter_without_autoresearch(tmp_path, monkeypatch):
-    from contextlib import nullcontext
-    from worldsmith.harness import evaluate
+def test_pymunk_evaluation_uses_shared_results_without_default_controller(tmp_path, monkeypatch):
+    from worldsmith.benchmark.task_catalog import DEFAULT_CONTROLLERS
+    from worldsmith.harness import evaluate as entrypoint
 
-    output = tmp_path / "navigation.json"
-    monkeypatch.setattr(evaluate, "load_tokenizer", Tokenizer)
-    monkeypatch.setattr(evaluate, "create_client", lambda: nullcontext(Inference()))
-    monkeypatch.setattr(evaluate, "TASK_CATALOG", {"navigation": lambda: pytest.fail("Loaded legacy controller")})
-    monkeypatch.setattr("sys.argv", ["evaluate", "--task", "navigation", "--output", str(output)])
-    assert evaluate.main() == 0
-    result = json.loads(output.read_text())
-    assert result["status"] == "completed"
-    assert result["environment_steps"] == 80
-    assert result["slm_decisions"] == result["model_requests"] == 16
+    output = tmp_path / "navigation"
+    client = Inference()
+    monkeypatch.setattr(entrypoint, "load_tokenizer", Tokenizer)
+    monkeypatch.setattr(entrypoint, "create_client", lambda: nullcontext(client))
+    monkeypatch.setitem(DEFAULT_CONTROLLERS, "navigation", lambda: pytest.fail("Loaded default controller"))
+    monkeypatch.setattr("sys.argv", ["evaluate", "--task", "navigation", "--episodes", "2", "--output", str(output)])
+    entrypoint.main()
+    summary = json.loads((output / "summary.json").read_text())
+    episodes = [json.loads(line) for line in (output / "episodes.jsonl").read_text().splitlines()]
+    assert summary["seeds"] == [0, 1]
+    assert [row["length"] for row in summary["episodes"]] == [80, 80]
+    assert summary["success_rate"] == sum(row["success"] for row in episodes) / 2
+    assert len(client.requests) == 32
+    assert len(client.requests[16]["messages"]) == 2
+    assert all(len(episode["steps"]) == 80 for episode in episodes)

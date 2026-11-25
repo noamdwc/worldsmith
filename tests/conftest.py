@@ -45,7 +45,7 @@ def check_episode_order():
     from worldsmith.research_baseline.controller import make_controller
 
     def check(task):
-        open_adapter, _ = TASK_CATALOG[task]()
+        open_adapter = TASK_CATALOG[task]
         factory = partial(make_controller, task=task)
         with open_adapter() as adapter:
             forward = {seed: run_scored_episode(adapter, factory, seed, task) for seed in (0, 1)}

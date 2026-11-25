@@ -1,10 +1,7 @@
 """ManiSkill PickCube with a top-down grasp and transport baseline."""
 
-from functools import partial
-
 import numpy as np
 
-from worldsmith.benchmark.adapters.maniskill_adapter import open_maniskill
 
 
 class PickController:
@@ -26,7 +23,3 @@ class PickController:
         return np.array([*np.clip((target - tcp) / 0.1, -0.5, 0.5), gripper], dtype=np.float32)
 
     __call__ = act
-
-
-def evaluation_setup():
-    return partial(open_maniskill, "PickCube-v1", "panda", "pd_ee_delta_pos"), PickController

@@ -15,7 +15,7 @@ from scipy.spatial.transform import Rotation
 from worldsmith.benchmark.evaluator import evaluate_to_directory
 from worldsmith.benchmark.results import snapshot
 from worldsmith.benchmark.runner import ControllerError, run_scored_episode
-from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEFAULT_CONTROLLERS, TASK_CATALOG, TASK_GROUPS
 from worldsmith.research_baseline.controller import make_controller
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -32,7 +32,7 @@ TASKS = [
 
 def test_pick_cube_reset_discards_previous_grasp_and_rollout():
     task = "pick_cube"
-    open_adapter, _ = TASK_CATALOG[task]()
+    open_adapter = TASK_CATALOG[task]
     factory = partial(make_controller, task=task)
     with open_adapter() as adapter:
         first, expected = run_scored_episode(adapter, factory, 1, task)
@@ -58,7 +58,8 @@ def test_pick_cube_parallel_artifacts(check_native_parallel_artifacts):
 def test_native_manipulation(
     task, task_id, robot, control_mode, action_size, limit, object_pose, native_metric, tmp_path
 ):
-    open_adapter, baseline = TASK_CATALOG[task]()
+    open_adapter = TASK_CATALOG[task]
+    baseline = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         env = adapter.env
         native = env.unwrapped
@@ -150,7 +151,7 @@ def test_native_manipulation(
 
 @pytest.mark.parametrize("task", TASK_GROUPS["maniskill"])
 def test_shared_starter_with_native_observations(task, tmp_path):
-    open_adapter, _ = TASK_CATALOG[task]()
+    open_adapter = TASK_CATALOG[task]
     output = tmp_path / "run"
     summary = evaluate_to_directory(
         open_adapter, partial(make_controller, task=task), 1, 0, output, task=task,
@@ -165,7 +166,7 @@ def test_shared_starter_with_native_observations(task, tmp_path):
 
 
 def test_invalid_shared_controller_action_fails_native_evaluation(tmp_path):
-    open_adapter, _ = TASK_CATALOG["push_cube"]()
+    open_adapter = TASK_CATALOG["push_cube"]
     with pytest.raises(ControllerError, match="push_cube, seed 0, step 1: Controller action"):
         evaluate_to_directory(
             open_adapter, lambda: lambda observation: np.full(4, np.nan, dtype=np.float32),
@@ -184,7 +185,7 @@ def test_invalid_shared_controller_action_fails_native_evaluation(tmp_path):
 def test_native_observation_and_delta_commands(
     task, pose_field, actor, check_episode_order, check_native_parallel_artifacts,
 ):
-    open_adapter, _ = TASK_CATALOG[task]()
+    open_adapter = TASK_CATALOG[task]
     with open_adapter() as adapter:
         positions = []
         fingers = []
@@ -234,7 +235,7 @@ def test_native_observation_and_delta_commands(
 
 @pytest.mark.parametrize("task", ["stack_cube", "peg_insertion_side", "pull_cube", "push_t"])
 def test_native_goal_states_terminate_with_success(task):
-    open_adapter, _ = TASK_CATALOG[task]()
+    open_adapter = TASK_CATALOG[task]
     with open_adapter() as adapter:
         def start_at_goal():
             native = adapter.env.unwrapped

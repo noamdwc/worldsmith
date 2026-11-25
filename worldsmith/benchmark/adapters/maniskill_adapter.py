@@ -10,6 +10,18 @@ import numpy as np
 from worldsmith.benchmark.runner import InvalidAction
 
 
+TASKS = {
+    "push_cube": ("PushCube-v1", "panda", "pd_ee_delta_pos"),
+    "pick_cube": ("PickCube-v1", "panda", "pd_ee_delta_pos"),
+    "stack_cube": ("StackCube-v1", "panda_wristcam", "pd_ee_delta_pos"),
+    "peg_insertion_side": ("PegInsertionSide-v1", "panda_wristcam", "pd_ee_delta_pose"),
+    "pull_cube": ("PullCube-v1", "panda", "pd_ee_delta_pos"),
+    "push_t": ("PushT-v1", "panda_stick", "pd_ee_delta_pos"),
+    "roll_ball": ("RollBall-v1", "panda", "pd_ee_delta_pos"),
+    "quadruped_reach": ("UnitreeGo2-Reach-v1", "unitree_go2_simplified_locomotion", "pd_joint_delta_pos"),
+}
+
+
 def make_env(task_id: str, robot: str, control_mode: str) -> gym.Env:
     return gym.make(
         task_id,

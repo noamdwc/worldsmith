@@ -37,8 +37,13 @@ class EvaluationAdapter(Simulator, Protocol):
     def summarize(self, episodes: list[dict]) -> dict: ...
 
 
-def run_scored_episode(adapter: EvaluationAdapter, factory: ControllerFactory, seed: int, task: str):
-    episode = run_episode(adapter, factory, seed, task=task)
+def run_scored_episode(
+    adapter: EvaluationAdapter, factory: ControllerFactory, seed: int, task: str, *,
+    action_repeat: int = 1, action_result: Callable[[dict], None] | None = None,
+):
+    episode = run_episode(
+        adapter, factory, seed, task=task, action_repeat=action_repeat, action_result=action_result,
+    )
     return episode, adapter.score(episode)
 
 

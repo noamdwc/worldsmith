@@ -4,43 +4,60 @@ from functools import partial
 from importlib import import_module
 
 
-def _load(module_name: str, *args):
-    return import_module(module_name).evaluation_setup(*args)
+def _open(module_name: str, opener: str, *args):
+    return getattr(import_module(module_name), opener)(*args)
+
+
+def _open_maniskill(task: str):
+    adapter = import_module("worldsmith.benchmark.adapters.maniskill_adapter")
+    return adapter.open_maniskill(*adapter.TASKS[task])
+
+
+def _controller(module_name: str, name: str, **kwargs):
+    factory = getattr(import_module(module_name), name)
+    return partial(factory, **kwargs) if kwargs else factory
 
 
 _PYMUNK = "worldsmith.benchmark.adapters.pymunk_adapter"
 _MANISKILL_TASKS = {
-    "push_cube": partial(_load, "worldsmith.benchmark.tasks.push_cube"),
-    "pick_cube": partial(_load, "worldsmith.benchmark.tasks.pick_cube"),
-    "stack_cube": partial(_load, "worldsmith.benchmark.tasks.stack_cube"),
-    "peg_insertion_side": partial(_load, "worldsmith.benchmark.tasks.peg_insertion_side"),
-    "pull_cube": partial(_load, "worldsmith.benchmark.tasks.pull_cube"),
-    "push_t": partial(_load, "worldsmith.benchmark.tasks.push_t"),
-    "roll_ball": partial(_load, "worldsmith.benchmark.tasks.roll_ball"),
-    "quadruped_reach": partial(_load, "worldsmith.benchmark.tasks.quadruped_reach"),
+    task: partial(_open_maniskill, task) for task in (
+        "push_cube", "pick_cube", "stack_cube", "peg_insertion_side",
+        "pull_cube", "push_t", "roll_ball", "quadruped_reach",
+    )
 }
 _PYMUNK_TASKS = {
-    "interception": partial(_load, _PYMUNK, "interception"),
-    "navigation": partial(_load, _PYMUNK, "navigation"),
-    "rendezvous": partial(_load, _PYMUNK, "rendezvous"),
-    "bouncing_interception": partial(_load, _PYMUNK, "bouncing_interception"),
-    "object_pushing": partial(_load, _PYMUNK, "object_pushing"),
+    task: partial(_open, _PYMUNK, "open_pymunk", task) for task in (
+        "interception", "navigation", "rendezvous", "bouncing_interception", "object_pushing",
+    )
 }
-
-_LIBERO = "worldsmith.benchmark.adapters.libero_adapter"
 _LIBERO_TASKS = {
-    "open_middle_drawer": partial(_load, _LIBERO, "open_middle_drawer"),
-    "place_bowl_on_plate": partial(_load, _LIBERO, "place_bowl_on_plate"),
-    "place_two_items_in_basket": partial(_load, _LIBERO, "place_two_items_in_basket"),
+    task: partial(_open, "worldsmith.benchmark.adapters.libero_adapter", "open_libero", task)
+    for task in ("open_middle_drawer", "place_bowl_on_plate", "place_two_items_in_basket")
+}
+_ROBOSUITE_TASKS = {
+    task: partial(_open, "worldsmith.benchmark.adapters.robosuite_adapter", "open_robosuite", task)
+    for task in ("open_latched_door", "assemble_nuts", "handover_hammer", "wipe_table")
 }
 
-_ROBOSUITE = "worldsmith.benchmark.adapters.robosuite_adapter"
-_ROBOSUITE_TASKS = {
-    "open_latched_door": partial(_load, _ROBOSUITE, "open_latched_door"),
-    "assemble_nuts": partial(_load, _ROBOSUITE, "assemble_nuts"),
-    "handover_hammer": partial(_load, _ROBOSUITE, "handover_hammer"),
-    "wipe_table": partial(_load, _ROBOSUITE, "wipe_table"),
+# Defaults are loaded only when explicitly selected, never to open a simulator.
+DEFAULT_CONTROLLERS = {
+    "interception": partial(_controller, "worldsmith.benchmark.tasks.interception", "Chase"),
+    **{task: partial(_controller, "autoresearch.controller", "make_controller") for task in (
+        "navigation", "rendezvous", "bouncing_interception", "object_pushing",
+    )},
+    **{task: partial(_controller, f"worldsmith.benchmark.tasks.{task}", name) for task, name in (
+        ("push_cube", "PushController"), ("pick_cube", "PickController"),
+        ("stack_cube", "StackController"), ("peg_insertion_side", "PegPickupController"),
+        ("pull_cube", "PullController"), ("push_t", "PushTController"),
+        ("roll_ball", "idle_controller"), ("quadruped_reach", "idle_controller"),
+    )},
+    **{task: partial(_controller, "worldsmith.benchmark.adapters.libero_adapter", "idle_controller")
+       for task in _LIBERO_TASKS},
+    **{task: partial(_controller, "worldsmith.benchmark.adapters.robosuite_adapter", "idle_controller", arms=arms)
+       for task, arms in (("open_latched_door", 1), ("assemble_nuts", 1), ("handover_hammer", 2))},
+    "wipe_table": partial(_controller, "worldsmith.benchmark.adapters.robosuite_adapter", "idle_wiper"),
 }
+
 
 # Load only the adapters available in each pinned Python environment.
 TASK_GROUPS = {

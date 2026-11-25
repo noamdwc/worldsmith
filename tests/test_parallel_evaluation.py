@@ -92,16 +92,29 @@ def make_partially_failing_controller():
     return fail_on_seed_eight
 
 
-def test_parallel_seed_order_scores_and_worker_reuse(tmp_path):
+def record_action_result(directory, result):
+    with (directory / f"{os.getpid()}.feedback").open("a") as file:
+        file.write(json.dumps(result) + "\n")
+
+
+@pytest.mark.parametrize("action_repeat", [1, 5])
+def test_parallel_seed_order_scores_and_worker_reuse(tmp_path, action_repeat):
     sequential, parallel = tmp_path / "sequential", tmp_path / "parallel"
     log = tmp_path / "workers"
     expected = evaluate_to_directory(
         partial(open_logged_adapter, tmp_path / "serial"), make_controller, 6, 7, sequential,
+        action_repeat=action_repeat, action_result=partial(record_action_result, tmp_path / "serial"),
     )
     actual = evaluate_to_directory(
         partial(open_logged_adapter, log, "out-of-order"), make_controller, 6, 7, parallel, workers=2,
+        action_repeat=action_repeat, action_result=partial(record_action_result, log),
     )
     assert actual == expected
+    for directory in (tmp_path / "serial", log):
+        feedback = [json.loads(line) for file in directory.glob("*.feedback") for line in file.read_text().splitlines()]
+        assert len(feedback) == 6
+        assert all(row["current_step"] == row["executed_steps"] == 1 for row in feedback)
+        assert sum(row["terminated"] for row in feedback) == sum(row["truncated"] for row in feedback) == 3
     assert actual["points_in_order"] == [21, 24, 27, 30, 33, 36]
     assert actual["last_seed"] == 12
     assert (parallel / "episodes.jsonl").read_bytes() == (sequential / "episodes.jsonl").read_bytes()
