@@ -1,13 +1,11 @@
 """Adapt V1 Pymunk scenes and task scoring to the common evaluation protocol."""
 
 from contextlib import nullcontext
-from functools import partial
 
-from worldsmith.api import INTERCEPTION_GOAL, Action
+from worldsmith.api import Action
 from worldsmith.benchmark.results import snapshot
 from worldsmith.benchmark.runner import InvalidAction
 from worldsmith.benchmark.tasks.constants import BENCHMARKS, TASKS
-from worldsmith.benchmark.tasks.interception import Chase
 from worldsmith.benchmark.tasks.task import Task
 
 
@@ -53,13 +51,3 @@ class PymunkAdapter:
 
 def open_pymunk(task_name: str):
     return nullcontext(PymunkAdapter(TASKS[task_name]()))
-
-
-def evaluation_setup(task_name: str):
-    open_adapter = partial(open_pymunk, task_name)
-    if task_name == INTERCEPTION_GOAL:
-        return open_adapter, Chase
-
-    from autoresearch.controller import make_controller
-
-    return open_adapter, make_controller

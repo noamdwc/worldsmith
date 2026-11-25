@@ -6,7 +6,7 @@ from scipy.spatial.transform import Rotation
 
 from worldsmith.benchmark.evaluator import evaluate_episodes
 from worldsmith.benchmark.runner import InvalidAction, run_scored_episode
-from worldsmith.benchmark.task_catalog import TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEFAULT_CONTROLLERS, TASK_GROUPS
 from worldsmith.research_feedback import public_episode
 
 
@@ -21,7 +21,8 @@ def test_parallel_native_artifacts(check_native_parallel_artifacts):
     ("wipe_table", "Wipe", "wipe_centroid", 6, 300),
 ])
 def test_native_episode(task, native_task, object_key, size, horizon):
-    open_adapter, factory = TASK_GROUPS["robosuite"][task]()
+    open_adapter = TASK_GROUPS["robosuite"][task]
+    factory = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         observation, reset_info = adapter.reset(0)
         assert reset_info == {"native_seed": 0}
@@ -71,7 +72,7 @@ def test_native_episode(task, native_task, object_key, size, horizon):
 
 def test_controller_opens_native_door():
     task = "open_latched_door"
-    open_adapter, _ = TASK_GROUPS["robosuite"][task]()
+    open_adapter = TASK_GROUPS["robosuite"][task]
 
     def factory():
         step = 0
@@ -180,7 +181,7 @@ def handover_controller():
 
 
 def test_controller_hands_over_native_hammer():
-    open_adapter, _ = TASK_GROUPS["robosuite"]["handover_hammer"]()
+    open_adapter = TASK_GROUPS["robosuite"]["handover_hammer"]
     with open_adapter() as adapter:
         observation, _ = adapter.reset(3)
         control = handover_controller()
@@ -212,7 +213,7 @@ def test_controller_hands_over_native_hammer():
 def test_native_observation_and_world_frame_actions(
     task, check_episode_order, check_native_parallel_artifacts,
 ):
-    open_adapter, _ = TASK_GROUPS["robosuite"][task]()
+    open_adapter = TASK_GROUPS["robosuite"][task]
     with open_adapter() as adapter:
         initial, _ = adapter.reset(0)
         env = adapter.env
@@ -281,7 +282,8 @@ def test_native_observation_and_world_frame_actions(
 
 def test_partial_nut_reward_does_not_end_episode():
     task = "assemble_nuts"
-    open_adapter, factory = TASK_GROUPS["robosuite"][task]()
+    open_adapter = TASK_GROUPS["robosuite"][task]
+    factory = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         def start_placing_nuts():
             env = adapter.env
@@ -315,7 +317,7 @@ def test_partial_nut_reward_does_not_end_episode():
 
 
 def test_wiping_contact_removes_native_markers():
-    open_adapter, _ = TASK_GROUPS["robosuite"]["wipe_table"]()
+    open_adapter = TASK_GROUPS["robosuite"]["wipe_table"]
     with open_adapter() as adapter:
         observation, _ = adapter.reset(0)
         env = adapter.env
@@ -349,7 +351,8 @@ def test_wiping_contact_removes_native_markers():
 
 def test_native_wipe_completion_and_timeout_aggregate():
     task = "wipe_table"
-    open_adapter, idle = TASK_GROUPS["robosuite"][task]()
+    open_adapter = TASK_GROUPS["robosuite"][task]
+    idle = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         complete = iter((True, False))
 
@@ -376,7 +379,8 @@ def test_native_wipe_completion_and_timeout_aggregate():
 
 def test_wipe_joint_limit_terminates_as_failure():
     task = "wipe_table"
-    open_adapter, idle = TASK_GROUPS["robosuite"][task]()
+    open_adapter = TASK_GROUPS["robosuite"][task]
+    idle = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         def start_at_joint_limit():
             env = adapter.env

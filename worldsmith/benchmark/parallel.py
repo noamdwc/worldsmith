@@ -24,7 +24,7 @@ def _exit_on_sigterm(signum, frame):
     raise SystemExit(128 + signum)
 
 
-def _run_worker(connection, open_adapter, factory, task):
+def _run_worker(connection, open_adapter, factory, task, action_repeat, action_result):
     # The parent owns interruption and shuts down all workers together.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     with connection, open_adapter() as adapter:
@@ -37,7 +37,9 @@ def _run_worker(connection, open_adapter, factory, task):
                 result = adapter.summarize(value), adapter.metadata()
             else:
                 try:
-                    result = run_scored_episode(adapter, factory, value, task)
+                    result = run_scored_episode(
+                        adapter, factory, value, task, action_repeat=action_repeat, action_result=action_result,
+                    )
                 except ControllerError as exc:
                     # Preserve the private traceback as well as the public message.
                     exc.add_note(format_exc())
@@ -86,7 +88,7 @@ def _stop_workers(processes, connections, *, grace_seconds):
     return failed
 
 
-def evaluate_parallel(open_adapter, factory, seeds, record, *, task, workers):
+def evaluate_parallel(open_adapter, factory, seeds, record, *, task, workers, action_repeat=1, action_result=None):
     context = get_context("spawn")
     count = min(workers, len(seeds))
     connections = []
@@ -105,7 +107,7 @@ def evaluate_parallel(open_adapter, factory, seeds, record, *, task, workers):
             connections.append(parent)
             with child:
                 process = context.Process(
-                    target=_run_worker, args=(child, open_adapter, factory, task),
+                    target=_run_worker, args=(child, open_adapter, factory, task, action_repeat, action_result),
                     name=f"evaluation worker {index + 1}",
                 )
                 try:

@@ -3,6 +3,7 @@ import subprocess
 import sys
 from contextlib import contextmanager, nullcontext
 from functools import partial
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,7 +11,7 @@ from autoresearch import controller as research_controller
 from worldsmith.evaluation import owner_evaluation
 from worldsmith.benchmark import evaluator
 from worldsmith.benchmark.evaluator import evaluate_to_directory, main
-from worldsmith.benchmark.task_catalog import DEV_TASK_GROUPS, TASK_CATALOG, TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEFAULT_CONTROLLERS, DEV_TASK_GROUPS, TASK_CATALOG, TASK_GROUPS
 from worldsmith.evaluation.evaluation_utils import evaluate_tasks
 
 
@@ -104,7 +105,7 @@ def test_task_group_uses_shared_factory_and_native_scores(tmp_path, monkeypatch)
         return lambda observation: [3]
 
     def counter_setup(adapter_type):
-        return partial(nullcontext, adapter_type()), None
+        return nullcontext(adapter_type())
 
     monkeypatch.setattr(research_controller, "make_controller", factory)
     monkeypatch.setitem(TASK_CATALOG, "double", partial(counter_setup, DoubleScoreAdapter))
@@ -132,18 +133,25 @@ def test_invalid_seed_sequence(episodes, seed, tmp_path):
     assert not output.exists()
 
 
-def test_cli_selects_adapter_and_default_controller_from_catalog(monkeypatch, tmp_path, capsys):
+@pytest.mark.parametrize("custom", [False, True])
+def test_cli_selects_adapter_and_controller_independently(monkeypatch, tmp_path, capsys, custom):
     def controller_factory():
         return lambda observation: [3]
 
     def load_counter():
-        return lambda: nullcontext(CounterAdapter()), controller_factory
+        return nullcontext(CounterAdapter())
 
     output = tmp_path / "evaluation"
     monkeypatch.setitem(TASK_CATALOG, "counter", load_counter)
+    monkeypatch.setitem(DEFAULT_CONTROLLERS, "counter", lambda: controller_factory)
+    flags = []
+    if custom:
+        monkeypatch.setitem(DEFAULT_CONTROLLERS, "counter", lambda: pytest.fail("Loaded default controller"))
+        monkeypatch.setattr(evaluator, "import_module", lambda name: SimpleNamespace(factory=controller_factory))
+        flags = ["--controller", "custom:factory"]
     monkeypatch.setattr(sys, "argv", [
         "evaluator", "--task", "counter", "--episodes", "1", "--seed", "7",
-        "--output", str(output),
+        "--output", str(output), *flags,
     ])
     main()
 
@@ -160,9 +168,10 @@ def test_cli_selects_adapter_and_default_controller_from_catalog(monkeypatch, tm
 def test_cli_worker_defaults_and_override(monkeypatch, tmp_path, group, default, override):
     task = next(iter(TASK_GROUPS[group]))
     def load():
-        return None, None
+        return None
 
     monkeypatch.setitem(TASK_CATALOG, task, load)
+    monkeypatch.setitem(DEFAULT_CONTROLLERS, task, lambda: None)
     monkeypatch.setitem(DEV_TASK_GROUPS, group, {task: load})
     counts = []
 
@@ -202,3 +211,21 @@ def test_cli_loads_lead_factory_and_writes_standard_artifacts(tmp_path):
     assert episode["length"] == len(episode["steps"])
     assert summary["captures"] == int(episode["captured"])
     assert summary["capture_rate"] == float(episode["captured"])
+
+
+def test_adapter_catalog_does_not_import_controllers_or_other_simulators():
+    script = """
+import builtins
+import sys
+from worldsmith.benchmark.task_catalog import TASK_CATALOG, TASK_GROUPS
+assert not any(name in sys.modules for name in ('mani_skill', 'sapien', 'mujoco', 'robosuite'))
+original_import = builtins.__import__
+def import_without_controllers(name, *args, **kwargs):
+    assert not name.startswith(('autoresearch', 'worldsmith.research_baseline', 'worldsmith.harness'))
+    return original_import(name, *args, **kwargs)
+builtins.__import__ = import_without_controllers
+for task in TASK_GROUPS['pymunk']:
+    with TASK_CATALOG[task]() as adapter:
+        adapter.reset(0)
+"""
+    subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True)

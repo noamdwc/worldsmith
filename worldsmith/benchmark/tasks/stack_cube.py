@@ -1,10 +1,7 @@
 """ManiSkill StackCube with a scripted grasp, transfer, and release."""
 
-from functools import partial
-
 import numpy as np
 
-from worldsmith.benchmark.adapters.maniskill_adapter import open_maniskill
 
 
 class StackController:
@@ -40,7 +37,3 @@ class StackController:
         return np.array([*np.clip(delta, -0.5, 0.5), gripper], dtype=np.float32)
 
     __call__ = act
-
-
-def evaluation_setup():
-    return partial(open_maniskill, "StackCube-v1", "panda_wristcam", "pd_ee_delta_pos"), StackController

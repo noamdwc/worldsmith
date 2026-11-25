@@ -37,14 +37,22 @@ class EvaluationAdapter(Simulator, Protocol):
     def summarize(self, episodes: list[dict]) -> dict: ...
 
 
-def run_scored_episode(adapter: EvaluationAdapter, factory: ControllerFactory, seed: int, task: str):
-    episode = run_episode(adapter, factory, seed, task=task)
+def run_scored_episode(
+    adapter: EvaluationAdapter, factory: ControllerFactory, seed: int, task: str, *,
+    action_repeat: int = 1, action_result: Callable[[dict], None] | None = None,
+):
+    episode = run_episode(
+        adapter, factory, seed, task=task, action_repeat=action_repeat, action_result=action_result,
+    )
     return episode, adapter.score(episode)
 
 
 def run_episode(
     simulator: Simulator, controller_factory: ControllerFactory, seed: int, *, task: str = "task",
+    action_repeat: int = 1, action_result: Callable[[dict], None] | None = None,
 ) -> dict:
+    if type(action_repeat) is not int or action_repeat < 1:
+        raise ValueError("action_repeat must be a positive integer")
     observation, reset_info = simulator.reset(seed)
     reset_info = snapshot(reset_info)
     try:
@@ -58,13 +66,14 @@ def run_episode(
     while True:
         controller_observation = snapshot(observation)
         location = f"{task}, seed {seed}, step {len(steps) + 1}"
-        try:
-            action = controller(observation)
-        except Exception as exc:
-            raise ControllerError(
-                f"{location}: {type(exc).__name__}: {exc}",
-                public_message=f"{location}: controller raised an exception",
-            ) from exc
+        if len(steps) % action_repeat == 0:
+            try:
+                action = controller(observation)
+            except Exception as exc:
+                raise ControllerError(
+                    f"{location}: {type(exc).__name__}: {exc}",
+                    public_message=f"{location}: controller raised an exception",
+                ) from exc
         try:
             controller_action = simulator.encode_action(action)
             observation, reward, terminated, truncated, info = simulator.step(action)
@@ -80,6 +89,18 @@ def run_episode(
             "truncated": truncated,
             "info": snapshot(info),
         })
+        if action_result is not None and (len(steps) % action_repeat == 0 or terminated or truncated):
+            try:
+                action_result({
+                    "current_step": len(steps),
+                    "executed_steps": (len(steps) - 1) % action_repeat + 1,
+                    "terminated": terminated, "truncated": truncated,
+                })
+            except Exception as exc:
+                raise ControllerError(
+                    f"{location}, action result: {type(exc).__name__}: {exc}",
+                    public_message=f"{location}: controller feedback raised an exception",
+                ) from exc
         if terminated or truncated:
             break
 

@@ -4,11 +4,9 @@ from functools import partial
 
 import numpy as np
 
-from worldsmith.benchmark.adapters.maniskill_adapter import make_env as make_maniskill_env, open_maniskill
+from worldsmith.benchmark.adapters.maniskill_adapter import TASKS, make_env as make_maniskill_env, open_maniskill
 
-TASK_ID = "PushCube-v1"
-ROBOT = "panda"
-ACTION_MODE = "pd_ee_delta_pos"
+TASK_ID, ROBOT, ACTION_MODE = TASKS["push_cube"]
 
 make_env = partial(make_maniskill_env, TASK_ID, ROBOT, ACTION_MODE)
 open_push_cube = partial(open_maniskill, TASK_ID, ROBOT, ACTION_MODE)
@@ -46,7 +44,3 @@ class PushController:
         return action
 
     __call__ = act
-
-
-def evaluation_setup():
-    return open_push_cube, PushController

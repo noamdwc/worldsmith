@@ -1,10 +1,7 @@
 """ManiSkill PushT with a translation-only stick push toward the target."""
 
-from functools import partial
-
 import numpy as np
 
-from worldsmith.benchmark.adapters.maniskill_adapter import open_maniskill
 
 
 class PushTController:
@@ -31,7 +28,3 @@ class PushTController:
         return np.clip(delta, -0.5, 0.5).astype(np.float32)
 
     __call__ = act
-
-
-def evaluation_setup():
-    return partial(open_maniskill, "PushT-v1", "panda_stick", "pd_ee_delta_pos"), PushTController

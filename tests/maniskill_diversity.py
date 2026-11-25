@@ -6,7 +6,7 @@ import sapien
 
 from worldsmith.benchmark.evaluator import evaluate_episodes
 from worldsmith.benchmark.runner import InvalidAction, run_scored_episode
-from worldsmith.benchmark.task_catalog import TASK_CATALOG
+from worldsmith.benchmark.task_catalog import DEFAULT_CONTROLLERS, TASK_CATALOG
 from worldsmith.research_feedback import public_episode
 
 
@@ -17,7 +17,8 @@ from worldsmith.research_feedback import public_episode
 def test_native_reset_timeout_and_parallel(
     task, goal_key, horizon, check_episode_order, check_native_parallel_artifacts,
 ):
-    open_adapter, idle = TASK_CATALOG[task]()
+    open_adapter = TASK_CATALOG[task]
+    idle = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         first, _ = adapter.reset(0)
         other, _ = adapter.reset(801)
@@ -36,7 +37,8 @@ def test_native_reset_timeout_and_parallel(
 
 
 def test_panda_impulse_rolls_ball_after_arm_stops():
-    open_adapter, idle = TASK_CATALOG["roll_ball"]()
+    open_adapter = TASK_CATALOG["roll_ball"]
+    idle = DEFAULT_CONTROLLERS["roll_ball"]()
     with open_adapter() as adapter:
         obs, _ = adapter.reset(0)
         native = adapter.env.unwrapped
@@ -77,7 +79,7 @@ def test_panda_impulse_rolls_ball_after_arm_stops():
 
 
 def test_quadruped_joint_target_and_proprioception():
-    open_adapter, _ = TASK_CATALOG["quadruped_reach"]()
+    open_adapter = TASK_CATALOG["quadruped_reach"]
     with open_adapter() as adapter:
         before, _ = adapter.reset(0)
         native = adapter.env.unwrapped
@@ -105,7 +107,8 @@ def test_quadruped_joint_target_and_proprioception():
 
 @pytest.mark.parametrize("task", ["roll_ball", "quadruped_reach"])
 def test_native_success_and_timeout_aggregate(task):
-    open_adapter, idle = TASK_CATALOG[task]()
+    open_adapter = TASK_CATALOG[task]
+    idle = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         set_goal_state = iter((True, False))
 
@@ -139,7 +142,8 @@ def test_native_success_and_timeout_aggregate(task):
 
 
 def test_quadruped_fall_terminates_as_failure():
-    open_adapter, idle = TASK_CATALOG["quadruped_reach"]()
+    open_adapter = TASK_CATALOG["quadruped_reach"]
+    idle = DEFAULT_CONTROLLERS["quadruped_reach"]()
     with open_adapter() as adapter:
         def start_upside_down():
             robot = adapter.env.unwrapped.agent.robot

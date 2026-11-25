@@ -32,7 +32,7 @@ def evaluate_tasks(task_seeds: dict[str, list[int]], output: Path, *, workers: i
 
         for task, seeds in task_seeds.items():
             (output / "task.txt").write_text(task, encoding="utf-8")
-            open_adapter, _ = TASK_CATALOG[task]()
+            open_adapter = TASK_CATALOG[task]
             factory = partial(make_controller, task=task) if "task" in parameters else make_controller
             evaluate_seeds_to_directory(
                 open_adapter, factory, seeds, output / task, task=task,

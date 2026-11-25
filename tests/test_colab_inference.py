@@ -136,13 +136,19 @@ def test_smoke_requires_ready_session(tmp_path, monkeypatch):
         colab_smoke.smoke_test()
 
 
-@pytest.mark.parametrize("environment", ["new", "matching", "outdated", "missing dependency", "missing owner wheel"])
+@pytest.mark.parametrize("environment", [
+    "new", "matching", "outdated", "missing dependency", "missing owner wheel",
+    "incompatible numpy", "different compatible numpy", "incompatible pymunk",
+])
 def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monkeypatch, environment, model_plan):
     import importlib.metadata
     import subprocess
     from contextlib import nullcontext
 
-    pins = {"vllm": "0.10.2", "openai": "1.99.9", "transformers": "4.55.2", "worldsmith": "0.1.0"}
+    pins = {
+        "vllm": "0.10.2", "openai": "1.99.9", "transformers": "4.55.2",
+        "worldsmith": "0.1.0", "pymunk": "7.3.1", "numpy": "2.2.6",
+    }
     installed = pins.copy()
     if environment == "new":
         installed.clear()
@@ -152,6 +158,12 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
         del installed["transformers"]
     elif environment == "missing owner wheel":
         del installed["worldsmith"]
+    elif environment == "incompatible numpy":
+        installed["numpy"] = "2.4.6"
+    elif environment == "different compatible numpy":
+        installed["numpy"] = "2.1.3"
+    elif environment == "incompatible pymunk":
+        installed["pymunk"] = "7.2.0"
     (tmp_path / "tools/3.12.13").mkdir(parents=True)
     (tmp_path / "packages").mkdir()
     (tmp_path / "packages/worldsmith.whl").touch()
@@ -183,7 +195,7 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
         elif "worldsmith.inference.model_cache" in command:
             restores.append(command)
             assert command[-1] == str(tmp_path / "model-cache.json")
-        elif "worldsmith.inference.smoke" in command:
+        elif "worldsmith.harness.robot_smoke" in command:
             assert kwargs["env"]["HF_HUB_OFFLINE"] == "1"
             assert kwargs["env"]["HF_HUB_CACHE"] == str(tmp_path / "hf-cache")
             smokes.append(command)
@@ -208,7 +220,10 @@ def test_smoke_installs_only_when_pinned_environment_is_not_ready(tmp_path, monk
     assert len(smokes) == 2
     assert len(restores) == 2
     if installs:
-        assert {"vllm==0.10.2", "openai==1.99.9", "transformers==4.55.2"} <= set(installs[0])
+        assert {
+            "vllm==0.10.2", "openai==1.99.9", "transformers==4.55.2",
+            "numpy==2.2.6", "pymunk==7.3.1",
+        } <= set(installs[0])
 
 
 @pytest.mark.parametrize("failure", [None, "smoke", "interrupt", "download"])

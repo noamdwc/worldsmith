@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation
 from worldsmith.benchmark.evaluator import evaluate_episodes
 from worldsmith.benchmark.adapters.libero_adapter import INSTALL, SOURCE, SOURCE_REVISION, idle
 from worldsmith.benchmark.runner import InvalidAction
-from worldsmith.benchmark.task_catalog import TASK_GROUPS
+from worldsmith.benchmark.task_catalog import DEFAULT_CONTROLLERS, TASK_GROUPS
 from worldsmith.research_feedback import public_episode
 
 
@@ -44,7 +44,8 @@ def test_pinned_source_checkout():
     ("place_two_items_in_basket", "basket_1_pos"),
 ])
 def test_native_episode(task, object_key):
-    open_adapter, factory = TASK_GROUPS["libero"][task]()
+    open_adapter = TASK_GROUPS["libero"][task]
+    factory = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         observation, reset_info = adapter.reset(0)
         assert observation["robot0_eef_pos"].shape == (3,)
@@ -85,7 +86,8 @@ def test_native_episode(task, object_key):
 
 def test_native_success_terminates_and_scores():
     task = "open_middle_drawer"
-    open_adapter, factory = TASK_GROUPS["libero"][task]()
+    open_adapter = TASK_GROUPS["libero"][task]
+    factory = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         def start_with_open_drawer():
             # A positive control for the native predicate, independent of controller skill.
@@ -115,7 +117,7 @@ def test_native_success_terminates_and_scores():
 def test_native_observation_and_osc_action(
     task, object_name, check_episode_order, check_native_parallel_artifacts,
 ):
-    open_adapter, _ = TASK_GROUPS["libero"][task]()
+    open_adapter = TASK_GROUPS["libero"][task]
     with open_adapter() as adapter:
         initial, _ = adapter.reset(0)
         env = adapter.env.env
@@ -164,7 +166,8 @@ def test_native_observation_and_osc_action(
 
 @pytest.mark.parametrize("task", ["place_bowl_on_plate", "place_two_items_in_basket"])
 def test_native_placement_success_stops_episode(task):
-    open_adapter, factory = TASK_GROUPS["libero"][task]()
+    open_adapter = TASK_GROUPS["libero"][task]
+    factory = DEFAULT_CONTROLLERS[task]()
     with open_adapter() as adapter:
         def start_near_goal():
             env = adapter.env.env

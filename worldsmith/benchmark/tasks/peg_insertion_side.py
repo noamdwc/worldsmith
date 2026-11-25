@@ -1,10 +1,7 @@
 """ManiSkill PegInsertionSide with a scripted pickup attempt."""
 
-from functools import partial
-
 import numpy as np
 
-from worldsmith.benchmark.adapters.maniskill_adapter import open_maniskill
 
 
 class PegPickupController:
@@ -31,9 +28,3 @@ class PegPickupController:
         return action
 
     __call__ = act
-
-
-def evaluation_setup():
-    return partial(
-        open_maniskill, "PegInsertionSide-v1", "panda_wristcam", "pd_ee_delta_pose"
-    ), PegPickupController

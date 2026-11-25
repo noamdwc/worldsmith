@@ -12,7 +12,7 @@ from worldsmith.benchmark.task_catalog import TASK_GROUPS
 
 @pytest.mark.parametrize("task", TASK_GROUPS["pymunk"])
 def test_planar_action_and_episode_replay(task, check_episode_order, check_native_parallel_artifacts):
-    open_adapter, _ = TASK_GROUPS["pymunk"][task]()
+    open_adapter = TASK_GROUPS["pymunk"][task]
     with open_adapter() as adapter:
         initial, _ = adapter.reset(0)
         body = adapter.world._bodies[initial.robot_id]
@@ -36,7 +36,7 @@ def test_planar_action_and_episode_replay(task, check_episode_order, check_nativ
 
 
 def test_numpy_real_actions_are_saved_as_numeric_commands(tmp_path):
-    open_adapter, _ = TASK_GROUPS["pymunk"]["interception"]()
+    open_adapter = TASK_GROUPS["pymunk"]["interception"]
     output = tmp_path / "evaluation"
     evaluate_to_directory(
         open_adapter, lambda: lambda observation: Action(np.float32(0.5), np.float32(0.5)),
@@ -48,7 +48,7 @@ def test_numpy_real_actions_are_saved_as_numeric_commands(tmp_path):
 
 @pytest.mark.parametrize("action", [Action("north"), Action(0, "full")])
 def test_malformed_action_uses_controller_error_contract(tmp_path, action):
-    open_adapter, _ = TASK_GROUPS["pymunk"]["interception"]()
+    open_adapter = TASK_GROUPS["pymunk"]["interception"]
     with pytest.raises(ControllerError) as error:
         evaluate_to_directory(
             open_adapter, lambda: lambda observation: action, 1, 0, tmp_path / "evaluation",
